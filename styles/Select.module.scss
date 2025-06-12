@@ -1,0 +1,120 @@
+// * {
+//     margin: 0;
+//     padding: 0;
+//     box-sizing: border-box;
+// }
+
+.select_menu {}
+
+.select_menu .select_btn {
+    display: flex;
+    min-height: 45px;
+    background: #fff;
+    padding: 10px;
+    height: max-content;
+    font-size: 14px;
+    font-weight: 400;
+    border-radius: 8px;
+    align-items: center;
+    cursor: pointer;
+    justify-content: space-between;
+    box-shadow: 0 0 5px rgba(0, 0, 0, 0.1);
+}
+
+.select_menu .options {
+    position: absolute;
+    width: 90%;
+    overflow-y: auto;
+    min-height: 150px;
+    max-height: 250px;
+    padding: 10px;
+    margin-top: 10px;
+    border-radius: 8px;
+    background: #fff;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+    animation-name: fadeInDown;
+    -webkit-animation-name: fadeInDown;
+    animation-duration: 0.35s;
+    animation-fill-mode: both;
+    -webkit-animation-duration: 0.35s;
+    -webkit-animation-fill-mode: both;
+
+    &::-webkit-scrollbar {
+        width: 5px;
+    }
+
+    /* Handle */
+    &::-webkit-scrollbar-thumb {
+        background: #d9d9d9;
+        border-radius: 20px;
+    }
+}
+
+.select_menu .options .option {
+    display: flex;
+    height: 35px;
+    cursor: pointer;
+    padding: 0 5px;
+    border-radius: 8px;
+    align-items: center;
+    background: #fff;
+}
+
+.select_menu .options .option:hover {
+    background: #f2f2f2;
+}
+
+.select_menu .options .option i {
+    font-size: 25px;
+    margin-right: 12px;
+}
+
+.select_menu .options .option .option_text {
+    font-size: 14px;
+    color: #7C7C7C;
+}
+
+.select_btn i {
+    font-size: 25px;
+    transition: 0.3s;
+}
+
+.select_menu.active .select_btn i {
+    transform: rotate(-180deg);
+}
+
+.select_menu.active .options {
+    display: block;
+    opacity: 0;
+    z-index: 10;
+    animation-name: fadeInUp;
+    -webkit-animation-name: fadeInUp;
+    animation-duration: 0.4s;
+    animation-fill-mode: both;
+    -webkit-animation-duration: 0.4s;
+    -webkit-animation-fill-mode: both;
+}
+
+@keyframes fadeInUp {
+    from {
+        transform: translate3d(0, 30px, 0);
+    }
+
+    to {
+        transform: translate3d(0, 0, 0);
+        opacity: 1;
+    }
+}
+
+@keyframes fadeInDown {
+    from {
+        transform: translate3d(0, 0, 0);
+        opacity: 1;
+    }
+
+    to {
+        transform: translate3d(0, 20px, 0);
+        opacity: 0;
+    }
+}
+

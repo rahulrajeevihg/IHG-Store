@@ -1,0 +1,253 @@
+@import './Variables.module.scss';
+
+.forms{
+    display: flex;
+    flex-direction: column;
+}
+
+.container_{
+    .box_1{
+        flex: 0 0 calc(70% - 5px);
+        .card_detail{
+
+        }
+    }
+    
+    .box_2{
+        flex: 0 0 calc(30% - 15px);
+    }
+}
+
+// .input_radio:checked {
+//   // background-color: $primary-color;
+//   padding: 3px;
+//   border: 1px solid $primary-color;
+//   accent-color: $primary-color;
+// }
+
+
+.input_radio {
+  // -webkit-appearance: none;
+  // -moz-appearance: none;
+  // appearance: none;
+  // display: inline-block;
+  width: 17px;
+  // height: 17px;
+  // margin: 1px;
+  /* padding: 1px; */
+  background-clip: content-box;
+  border: 1px solid #000;
+  background-color: #fff;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+
+
+
+.custom_input{
+    margin: 10px 0;
+    border-radius: 5px;
+    height: 45px;
+    padding: 0 10px 0 10px;
+    font-size: 14px;
+    border: 1px solid $border-color;
+}
+
+.custom_input1{
+  margin: 10px 0;
+  border-radius: 5px;
+  font-size: 14px;
+  height: 45px;  
+  font-size: 16px;
+  border: 1px solid $border-color;
+}
+
+.custom_input3{
+margin: 10px 0;
+border-radius: 5px;
+font-size: 14px;
+height: 38px;  
+font-size: 12px;
+border: 1px solid $border-color;
+}
+
+
+
+.custom_select:focus {
+  outline: none;
+}
+
+.flex_2{
+  flex: 0 0 calc(50% - 5px);
+}
+
+.flex_3{
+  // flex: 0 0 calc(33.33% - 7px);
+  width: calc(33.33% - 7px);
+}
+
+@media only screen and (min-width: 768px) {
+ 
+}
+
+@media only screen and (max-width: 768px) {
+  .container_{
+    // padding: 10px;
+    // flex-direction: column;
+  }
+
+  // .box_{
+  //   flex-direction: column;
+  // }
+}
+
+
+
+.card_detail{
+  align-items: unset !important;
+
+
+
+  .payment_sec{
+    gap: 10px;
+
+    .card_info{
+     width: 100%;
+    }
+
+    .sec_1{
+      flex: 0 0 calc(80% - 10px);
+    }
+    .sec_2{
+      flex: 1;
+    }
+
+    .sub_title,.span_cls{
+        font-size: 12px;
+        color: $secondary-color;
+    }
+    .span_cls::before{
+        content: "";
+        display: inline-block;
+        width: 4px;
+        height: 4px;
+        border-radius: 50%;
+        margin: 0 8px;
+        vertical-align: middle;
+        background-color: white;
+        transition: border-color 0.3s;
+        background: #ddd;
+    }
+  }
+}
+
+.react_selectselect__control {
+  border: none;
+  box-shadow: none;
+}
+
+.add_new{
+  border-color: $primary-color;
+  color: $primary-color;
+}
+
+.address_sec{
+  .edit_text{
+   color: #4fc716;
+  }
+  .delete_text{
+   color: #e84a50;
+  }
+}
+
+
+//BulletList
+.bulletList{
+    // border-bottom: 1px solid $border-color;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding-bottom: 15px;
+    margin-bottom: 15px;
+   
+    .bullet{
+        height: 7px;
+        width: 7px;
+        border: 1px solid red;
+        border-radius: 50%;
+        flex: 0 0 auto;
+    }
+
+}
+
+.bullet_none{
+    border-bottom: none !important;
+    padding-bottom: 0 !important;
+    margin-bottom: 0 !important;
+}
+
+// Login
+.input{
+    border: none;
+    // border-bottom: 1px solid $border-color;
+    padding: 5px 10px;
+    font-size: 14px;
+    // border-left: 1px solid $border-color;
+    width: 100%;
+    // height: 40px;
+    // border-radius: 5px;
+    // margin-top: 10px;
+    &:focus{
+        outline: none;
+    }
+}
+
+.input1{
+    border: 1px solid $border-color !important;
+    border-radius: 5px;
+    // height: 45px;
+    height: 40px;
+    margin-top: 5px;
+}
+
+.danger{
+    color: #e21b22;
+    font-weight: 600;
+    padding-top:3px;
+    font-size: 11px;
+}
+
+.checkBox{
+    height: 17px;
+    width: 17px;
+    color: #fff;
+    &:checked{
+        accent-color: #e21b22;
+                
+    }
+    &::after{
+        content: "";
+        color: #fff;
+    }
+}
+
+.loginBtn{
+    background: $primary-color;
+    color: $white-color;
+    width: 100%;
+    padding: 10px;
+    font-size: 15px;
+    border-radius: 5px;
+}
+
+.label{
+    font-size: 12px;
+}
+
+.input1::-webkit-outer-spin-button,
+.input1::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+  -moz-appearance: textfield;
+}
