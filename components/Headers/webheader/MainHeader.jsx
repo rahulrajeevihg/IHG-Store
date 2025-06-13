@@ -426,6 +426,7 @@ export default function MainHeader({ header_template, theme_settings, website_se
   }, [isLogout]);
 
   const clearSearchValue = () => {
+    setSearchType('All')
     setSearchValue('')
     dispatch(resetSetFilters())
     // dispatch(setAllFilter({...initialState}))

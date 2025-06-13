@@ -102,6 +102,7 @@ export default function MobileHeader({ home, back_btn, share, search, cart, clea
   },[router.asPath, router.query])
 
   const clearSearchValue = () => {
+    setSearchType('All')
       setSearchValue('')
       dispatch(resetSetFilters())
       // dispatch(setAllFilter({...initialState}))
