@@ -233,15 +233,20 @@ export default function MainHeader({ header_template, theme_settings, website_se
 
     if (inputText.length >= 3) {
       const queryParams = new URLSearchParams({
-        q: `${searchType == 'All' ? (inputText ? inputText : '*') : '*'}`,
-        query_by: "item_name,item_description,item_code",
+        // q: `${searchType == 'All' ? (inputText ? inputText : '*') : '*'}`,
+        q: `${searchType != 'item_code' ? `${inputText}` : inputText}`,
+        query_by: `${searchType == 'item_code' ? 'item_code' : "item_name,item_description,item_code"}`,
         page: "1",
         per_page: "20",
         // query_by_weights: "1,2,3",
         exhaustive_search: searchType == 'All' ? "true" : 'false',
         // filter_by: `${searchType != 'All' ? 'item_code:='${inputText} : ''}`
-        filter_by: `${searchType !== 'All' ? `item_code:='${inputText}'` : ''}`
+        // filter_by: `${searchType !== 'All' ? `item_code:='${inputText}'` : ''}`
       });
+
+      if (searchType == 'item_code') {
+      queryParams.set('max_candidates', '150');
+      }
 
       const data = await typesense_search_items(queryParams);
       const initialData = data.hits || [];

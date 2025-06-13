@@ -375,9 +375,9 @@ function List({ category, brand, search }) {
       filterParams.push(`rate:>=${price_range.min} && rate:<=${price_range.max}`);
     }
 
-    if(router.query['search'] && productFilter.search_type != 'All'){
-       filterParams.push(`item_code:=${router.query['search']}`)
-    }
+    // if(router.query['search'] && productFilter.search_type != 'All'){
+    //    filterParams.push(`item_code:=${router.query['search']}`)
+    // }
 
     // console.log(checkInitialValue(stock_range?.min,initialState.stock_range.min),"stock - min")
     // console.log(checkInitialValue(stock_range?.max,initialState.stock_range.max),"stock - max")
@@ -447,19 +447,24 @@ function List({ category, brand, search }) {
   const fetchResults = async (reset = false, initialPageNo) => {
     setError(null);
     // console.log("queryfilter", filters)
+    console.log('productFilter.search_type', productFilter.search_type)
     const perPage = window.innerWidth >= 1400 ? "15" : "12";
     const queryParams = new URLSearchParams({
-      q: filters.q !== '*' && productFilter.search_type == 'All' ? filters.q : filters.item_description ? `${filters.item_description}*` : '*',
-      query_by: filters.q ? 'item_name,item_code,item_description' : filters.item_description ? 'item_description,item_code,item_name' : '',
+      q: filters.q !== '*'  ? filters.q : filters.item_description ? `${filters.item_description}*` : '*',
+      query_by: productFilter.search_type == 'item_code' ? 'item_code' : filters.q ? 'item_name,item_code,item_description' : filters.item_description ? 'item_description,item_code,item_name' : '',
       page: initialPageNo ? 1 : pageNo,
       per_page: 15,
-      exhaustive_search: productFilter.search_type =='All' ? 'true' : "false",
+      exhaustive_search: productFilter.search_type =='item_code' ? 'false' : "true",
       // query_by_weights: "4,2",
       // query_by_weights: "1,2,3",
       filter_by: buildFilterQuery(),
       // ...buildFilterQuery() && { filter_by: buildFilterQuery() },
       sort_by: localStorage['sort_by'] ? localStorage['sort_by'] : filters.sort_by
     });
+
+   if (productFilter.search_type == 'item_code' && router.query['search']) {
+      queryParams.set('max_candidates', '150');
+   }
 
     if (initialPageNo) {
       setpageNo(1)
