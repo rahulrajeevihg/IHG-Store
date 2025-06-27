@@ -463,7 +463,7 @@ function List({ category, brand, search }) {
     });
 
    if (productFilter.search_type == 'item_code' && router.query['search']) {
-      queryParams.set('max_candidates', '150');
+      queryParams.set('infix', 'always');
    }
 
     if (initialPageNo) {

@@ -245,7 +245,7 @@ export default function MainHeader({ header_template, theme_settings, website_se
       });
 
       if (searchType == 'item_code') {
-      queryParams.set('max_candidates', '150');
+      queryParams.set('infix', 'always');
       }
 
       const data = await typesense_search_items(queryParams);
