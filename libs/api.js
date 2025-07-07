@@ -188,6 +188,22 @@ export async function postMethod(api, payload) {
         }
         const myHead = new Headers((apikey && secret) ? { "Authorization": 'token ' + apikey + ':' + secret, "Content-Type": "application/json" } : { "Content-Type": "application/json" })
         const response = await fetch(api, { method: 'POST', headers: myHead, body: JSON.stringify(payload) })
+         if (response && response.status && response.status === 401) {
+            if (typeof window !== 'undefined') {
+                let error = await response.json()
+                if (error && error.exc_type == "AuthenticationError") {
+                    localStorage.clear()
+                    document.cookie.split(';').forEach((cookie) => {
+                        const cookieName = cookie.split('=')[0].trim();
+                        document.cookie = `${cookieName}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;`;
+                    });
+                    setTimeout(() => {
+                        window.location.href = "/login"
+                    }, 500)
+                }
+            }
+
+        }
         const data = await response.json();
         return data
     }

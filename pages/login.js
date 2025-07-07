@@ -6,6 +6,7 @@ const AuthModal = dynamic(() => import("@/components/Auth/AuthModal"));
 
 import { useRouter } from 'next/router'
 import Image from 'next/image';
+import Cookies from "js-cookie";
 
 export default function login() {
 
@@ -14,9 +15,11 @@ export default function login() {
   useEffect(() => {
    
 
-    if (localStorage['api_key']) {
+    if (Cookies.get("api_key")) {
       setShow(false)
       hide()
+    }else{
+      localStorage.clear()
     }
   }, [router])
 
@@ -50,11 +53,12 @@ export async function getServerSideProps({ req }) {
   const token = req.cookies.api_key || null;
 
   // If the token exists and the user is on the login page, redirect to the home page or previous URL
-  if (token ) {
+  if (token) {
     return {
       redirect: {
-        destination: req.cookies.preurl ? req.cookies.preurl : '/',  // Redirect to previous URL or home
-        permanent: false, // Temporary redirect
+        // destination: req.cookies.preurl ? req.cookies.preurl : '/',
+        destination: '/',
+        permanent: false,
       },
     };
   }
