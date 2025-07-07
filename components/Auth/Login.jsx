@@ -66,9 +66,7 @@ export default function LogIn({ hide, checkModal }) {
             let val = await login(datas);
             if (val.message.message == 'Success') {
                 const dateNow = new Date();
-                // dateNow.setDate(dateNow.getDate() + 1);
-                dateNow.setMinutes(dateNow.getMinutes() + 2);
-                console.log('dateNow', dateNow) 
+                dateNow.setDate(dateNow.getDate() + 30);
                 Cookies.set('api_key',val.message.api_key, { expires: dateNow })
                 Cookies.set('api_secret',val.message.api_secret, { expires: dateNow })
                 localStorage['api_key'] = val.message.api_key
