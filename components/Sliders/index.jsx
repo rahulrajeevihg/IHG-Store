@@ -13,6 +13,7 @@ import Slider from "react-slick";
 export default function Sliders({ data, perView, imgClass, event, isMobile }) {
 
   const router = useRouter();
+<<<<<<< HEAD
   const viewAllProductsUrl = "https://products.ihgind.com/list";
 
   const goToAllProducts = (e) => {
@@ -20,6 +21,8 @@ export default function Sliders({ data, perView, imgClass, event, isMobile }) {
     window.location.href = viewAllProductsUrl;
   };
 
+=======
+>>>>>>> e4e0643b7f53e8b6c06657ac882610c03eedce54
   const responsive = {
     desktop: {
       breakpoint: { max: 3000, min: 1024 },
@@ -69,6 +72,7 @@ export default function Sliders({ data, perView, imgClass, event, isMobile }) {
                         {/* // : */}
 
                         <Image alt={''}  loading='lazy' src={check_Image(isMobile ? res.mobile_image1 : res.image ? res.image : res.web_image1 ? res.web_image1 : null)} height={isMobile ? 250 : 500} width={isMobile ? 500 : 1500} className={`${imgClass ? imgClass : 'h-[300px]'} your-element w-full `} />
+<<<<<<< HEAD
                         <div className="mt-[15px] flex justify-center">
                           <button
                             type="button"
@@ -78,6 +82,8 @@ export default function Sliders({ data, perView, imgClass, event, isMobile }) {
                             View All Products
                           </button>
                         </div>
+=======
+>>>>>>> e4e0643b7f53e8b6c06657ac882610c03eedce54
                       </div>
                     </div>
                   )
@@ -197,6 +203,7 @@ const CustomNextArrow = ({ onClick }) => (
 );
 
 const SliderCom = ({data, isMobile, perView, imgClass, event,}) => {
+<<<<<<< HEAD
   const router = useRouter();
   const viewAllProductsUrl = "https://products.ihgind.com/list";
 
@@ -205,6 +212,8 @@ const SliderCom = ({data, isMobile, perView, imgClass, event,}) => {
     window.location.href = viewAllProductsUrl;
   };
 
+=======
+>>>>>>> e4e0643b7f53e8b6c06657ac882610c03eedce54
   const settings = {
     dots: false,
     infinite: true,
@@ -235,6 +244,7 @@ const SliderCom = ({data, isMobile, perView, imgClass, event,}) => {
                         {/* // : */}
 
                         <Image alt={''}  loading='lazy' src={check_Image(isMobile ? res.mobile_image1 : res.image ? res.image : res.web_image1 ? res.web_image1 : null)} height={isMobile ? 250 : 500} width={isMobile ? 500 : 1500} className={`${'h-full w-full object-cover'} your-element w-full `} />
+<<<<<<< HEAD
                         <div className="mt-[15px] flex justify-center">
                           <button
                             type="button"
@@ -244,6 +254,8 @@ const SliderCom = ({data, isMobile, perView, imgClass, event,}) => {
                             View All Products
                           </button>
                         </div>
+=======
+>>>>>>> e4e0643b7f53e8b6c06657ac882610c03eedce54
                         {/* } */}
                       </div>
                     </div>
@@ -253,3 +265,7 @@ const SliderCom = ({data, isMobile, perView, imgClass, event,}) => {
     </div>
   );
 };
+<<<<<<< HEAD
+=======
+
+>>>>>>> e4e0643b7f53e8b6c06657ac882610c03eedce54

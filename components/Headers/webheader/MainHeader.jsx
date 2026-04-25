@@ -233,6 +233,7 @@ export default function MainHeader({ header_template, theme_settings, website_se
 
     if (inputText.length >= 3) {
       const queryParams = new URLSearchParams({
+<<<<<<< HEAD
         // q: `${searchType == 'All' ? (inputText ? inputText : '*') : '*'}`,
         q: `${searchType != 'item_code' ? `${inputText}` : inputText}`,
         query_by: `${searchType == 'item_code' ? 'item_code' : "item_name,item_description,item_code"}`,
@@ -248,6 +249,17 @@ export default function MainHeader({ header_template, theme_settings, website_se
       queryParams.set('infix', 'always');
       }
 
+=======
+        q: `${inputText ? inputText : '*'}`,
+        query_by: "item_name,item_description,item_code",
+        page: "1",
+        per_page: "20",
+        // query_by_weights: "1,2,3",
+        exhaustive_search: "true",
+        // filter_by: `item_code:${inputText}* || item_description:${inputText}*`
+      });
+
+>>>>>>> e4e0643b7f53e8b6c06657ac882610c03eedce54
       const data = await typesense_search_items(queryParams);
       const initialData = data.hits || [];
       setLoader(false)
@@ -286,8 +298,11 @@ export default function MainHeader({ header_template, theme_settings, website_se
     }, 600); // Adjust the debounce delay (in milliseconds) 
   };
 
+<<<<<<< HEAD
   const [searchType, setSearchType] = useState('')
 
+=======
+>>>>>>> e4e0643b7f53e8b6c06657ac882610c03eedce54
   async function handleKeyDown(event) {
     if (event.key === 'Enter') {
       if (searchValue && searchValue != '') {
@@ -296,6 +311,7 @@ export default function MainHeader({ header_template, theme_settings, website_se
     }
   }
 
+<<<<<<< HEAD
 
   const handleSearchType = (event)=>{
     setSearchType(event.target.value)
@@ -303,6 +319,8 @@ export default function MainHeader({ header_template, theme_settings, website_se
     dispatch(setAllFilter({'search_type': event.target.value}))
   }
 
+=======
+>>>>>>> e4e0643b7f53e8b6c06657ac882610c03eedce54
   function navigateToSearch(route) {
     router.push(route)
     // setSearchValue('')
@@ -313,8 +331,11 @@ export default function MainHeader({ header_template, theme_settings, website_se
     if (router.asPath === '/list') {
       setSearchValue('')
     }
+<<<<<<< HEAD
 
     dispatch(setAllFilter({'search_type': searchType}))
+=======
+>>>>>>> e4e0643b7f53e8b6c06657ac882610c03eedce54
   }, [router.asPath])
 
   const productFilter = useSelector((state) => state.FiltersList.filtersValue)
@@ -431,11 +452,17 @@ export default function MainHeader({ header_template, theme_settings, website_se
   }, [isLogout]);
 
   const clearSearchValue = () => {
+<<<<<<< HEAD
     setSearchType('All')
     setSearchValue('')
     dispatch(resetSetFilters())
     // dispatch(setAllFilter({...initialState}))
     dispatch(setAllFilter({'search_type': ''}))
+=======
+    setSearchValue('')
+    dispatch(resetSetFilters())
+    // dispatch(setAllFilter({...initialState}))
+>>>>>>> e4e0643b7f53e8b6c06657ac882610c03eedce54
     dispatch(resetFilters())
     localStorage.setItem('sort_by', 'stock:desc')
 
@@ -479,11 +506,15 @@ export default function MainHeader({ header_template, theme_settings, website_se
 
                 {(res.section_name == 'Header Menu' && res.section_type == 'Menu') &&
                   <div className={`flex-[0_0_calc(45%_-_0px)]`}>
+<<<<<<< HEAD
                     <div key={index} className={`${website_settings.enable_multi_store == 1 ? 'w-full' : 'w-full'} relative flex justify-end gap-3`}>
                       <select name="" id="" value={searchType} onChange={(e)=> handleSearchType(e)}  className="border border-gray-300 outline-none p-2 rounded-[30px] px-3">
                     <option value="All">All</option>
                     <option value="item_code">Item Code</option>
                   </select>
+=======
+                    <div key={index} className={`${website_settings.enable_multi_store == 1 ? 'w-full' : 'w-full'} relative flex justify-end`}>
+>>>>>>> e4e0643b7f53e8b6c06657ac882610c03eedce54
                       <div className="p-[5px_10px_5px_20px] h-[35px] flex items-center w-[69.5%]  border_color rounded-[30px]">
                         <input value={searchValue} autoComplete='off' id='search' spellCheck="false" onKeyDown={handleKeyDown} ref={searchRef} onChange={(eve) => { getSearchTxt(eve) }} onFocus={() => { setActiveSearch(true) }} onBlur={() => { setActiveSearch(true) }} className='w-[95%] text-[14px]' placeholder='Search Products' />
                         {searchValue && <Image onClick={() => clearSearchValue()} style={{ objectFit: 'contain' }} className='h-[18px] w-[15px] cursor-pointer mr-2' height={25} width={25} alt='vantage' src={'/Navbar/cancel.svg'}></Image>}

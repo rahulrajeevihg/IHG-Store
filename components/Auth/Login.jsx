@@ -8,7 +8,10 @@ import { setCustomerInfo } from '@/redux/slice/logInInfo'
 import { setDetail } from '@/redux/slice/customerInfo'
 import AlertUi from '../Common/AlertUi'
 import Cookies from 'js-cookie';
+<<<<<<< HEAD
 import { touchSessionActivity } from '@/libs/auth';
+=======
+>>>>>>> e4e0643b7f53e8b6c06657ac882610c03eedce54
 // import { GoogleLogin } from '@react-oauth/google';
 // import FacebookLogin from 'react-facebook-login';
 
@@ -72,7 +75,10 @@ export default function LogIn({ hide, checkModal }) {
                 Cookies.set('api_secret',val.message.api_secret, { expires: dateNow })
                 localStorage['api_key'] = val.message.api_key
                 localStorage['api_secret'] = val.message.api_secret
+<<<<<<< HEAD
                 touchSessionActivity();
+=======
+>>>>>>> e4e0643b7f53e8b6c06657ac882610c03eedce54
                 dispatch(setCustomerInfo(val));
                 dispatch(setDetail(val))
                 // getCustomerInfo({ email: data.email, guest_id: localStorage['customerRefId'] }, datas)
@@ -179,7 +185,10 @@ export default function LogIn({ hide, checkModal }) {
         if (resp.message && resp.message.message && resp.message.message == 'Logged In') {
             localStorage['api_key'] = resp.message.api_key
             localStorage['api_secret'] = resp.message.api_secret
+<<<<<<< HEAD
             touchSessionActivity();
+=======
+>>>>>>> e4e0643b7f53e8b6c06657ac882610c03eedce54
 
             // getCustomerInfo({ email: data.email, guest_id: localStorage['customerRefId'] }, datas)
             let mail = {
@@ -325,3 +334,7 @@ export default function LogIn({ hide, checkModal }) {
 
 
 
+<<<<<<< HEAD
+=======
+
+>>>>>>> e4e0643b7f53e8b6c06657ac882610c03eedce54

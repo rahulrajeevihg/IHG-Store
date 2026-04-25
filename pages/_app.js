@@ -25,7 +25,10 @@ import settig from '@/libs/websiteSettings'
 import ScrollToTopButton from '@/components/Common/ScrollToTop';
 import Image from 'next/image';
 const ProductDetail = dynamic(() => import('@/components/Detail/ProductDetail'))
+<<<<<<< HEAD
 import { enforceSessionTimeout, hasAuthSession, touchSessionActivity } from '@/libs/auth';
+=======
+>>>>>>> e4e0643b7f53e8b6c06657ac882610c03eedce54
 // console.log('setting', settig.message)
 
 // import { GoogleOAuthProvider } from '@react-oauth/google';
@@ -89,6 +92,7 @@ function App({ Component, pageProps }) {
   }, []);
 
   useEffect(() => {
+<<<<<<< HEAD
     if (typeof window === "undefined" || !("serviceWorker" in navigator)) {
       return;
     }
@@ -114,6 +118,10 @@ function App({ Component, pageProps }) {
     // nProgress.configure({ showSpinner: false })
     const handleStart = (e) => {
       touchSessionActivity();
+=======
+    // nProgress.configure({ showSpinner: false })
+    const handleStart = (e) => {
+>>>>>>> e4e0643b7f53e8b6c06657ac882610c03eedce54
       if (e == '/' && localStorage['api_key']) {
         getValue()
       }
@@ -129,7 +137,10 @@ function App({ Component, pageProps }) {
       // nProgress.start()
     };
     const handleComplete = (e) => {
+<<<<<<< HEAD
       touchSessionActivity();
+=======
+>>>>>>> e4e0643b7f53e8b6c06657ac882610c03eedce54
       setPageKey(Date.now());
       // nProgress.done()
     };
@@ -177,6 +188,7 @@ function App({ Component, pageProps }) {
 
   }, [])
 
+<<<<<<< HEAD
   useEffect(() => {
     if (typeof window === "undefined") {
       return;
@@ -217,6 +229,8 @@ function App({ Component, pageProps }) {
     };
   }, [])
 
+=======
+>>>>>>> e4e0643b7f53e8b6c06657ac882610c03eedce54
   // const loadScripts = () => {
   //   // let lightScipt = document.createElement('script')
   //   // lightScipt.src = "https://cdn.jsdelivr.net/npm/lightgallery@1.6.12/dist/js/lightgallery.min.js"
@@ -406,7 +420,11 @@ function App({ Component, pageProps }) {
 
                   </div>
                   <div className='border-t border-t-[#ddd] w-full text-center bg-[#F0F0F0] py-2'>
+<<<<<<< HEAD
                     © 2025 products.ihgind.com. All Rights Reserved.
+=======
+                    © 2025 ihg-sigma.vercel.app. All Rights Reserved.
+>>>>>>> e4e0643b7f53e8b6c06657ac882610c03eedce54
                   </div>
 
                 </>}
@@ -425,3 +443,7 @@ function App({ Component, pageProps }) {
 }
 
 export default memo(App)
+<<<<<<< HEAD
+=======
+
+>>>>>>> e4e0643b7f53e8b6c06657ac882610c03eedce54

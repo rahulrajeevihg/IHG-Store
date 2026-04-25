@@ -1,7 +1,11 @@
 import { toast } from "react-toastify";
 import 'react-toastify/dist/ReactToastify.css';
 import { domain, typesense_api_key, website } from "./config/siteConfig"
+<<<<<<< HEAD
 import { handleUnauthorizedResponse } from "./auth";
+=======
+import Cookies from "js-cookie";
+>>>>>>> e4e0643b7f53e8b6c06657ac882610c03eedce54
 
 // const methodUrl = `http://${domain}/api/method/`;
 const methodUrl = `https://${domain}/api/method/`;
@@ -188,9 +192,12 @@ export async function postMethod(api, payload) {
         }
         const myHead = new Headers((apikey && secret) ? { "Authorization": 'token ' + apikey + ':' + secret, "Content-Type": "application/json" } : { "Content-Type": "application/json" })
         const response = await fetch(api, { method: 'POST', headers: myHead, body: JSON.stringify(payload) })
+<<<<<<< HEAD
         if (handleUnauthorizedResponse(response)) {
             return;
         }
+=======
+>>>>>>> e4e0643b7f53e8b6c06657ac882610c03eedce54
         const data = await response.json();
         return data
     }
@@ -211,9 +218,12 @@ export async function get(api) {
 
     const myHead = new Headers((apikey && secret) ? { "Authorization": 'token ' + apikey + ':' + secret, "Content-Type": "application/json" } : { "Content-Type": "application/json" })
     const response = await fetch(api, { method: 'GET', headers: myHead })
+<<<<<<< HEAD
     if (handleUnauthorizedResponse(response)) {
         return;
     }
+=======
+>>>>>>> e4e0643b7f53e8b6c06657ac882610c03eedce54
     const data = await response.json();
     return data;
 }
@@ -539,11 +549,14 @@ export async function get_brand_based_products(data) {
     return await postMethod(api, data)
 }
 
+<<<<<<< HEAD
 export async function ai_product_search(data) {
     let api = methodUrl + 'igh_search.igh_search.api.ai_product_search';
     return await postMethod(api, data)
 }
 
+=======
+>>>>>>> e4e0643b7f53e8b6c06657ac882610c03eedce54
 export async function insert_email_subscription(data) {
     let api = methodUrl + apiUrl_api + 'insert_email_subscription';
     return await postMethod(api, data)
@@ -577,7 +590,11 @@ export async function typesense_search_items(queryParams) {
     // let api = `https://search-ihg.tridotstech.com/collections/product/documents/search?${queryParams.toString()}`
     let api = `https://search.ihgind.com/collections/product/documents/search?${queryParams.toString()}`
     const myHead = new Headers({ "Content-Type": "application/json", "x-typesense-api-key": `${typesense_api_key ? typesense_api_key : "xyz"}` })
+<<<<<<< HEAD
     // const myHead = new Headers({ "Content-Type": "application/json", "x-typesense-api-key": "qfqPMOHSbj9tRobC9YW126qgYzHsPyhLU2FMKxmzJCh7QO0T" })
+=======
+    // const myHead = new Headers({ "Content-Type": "application/json", "x-typesense-api-key": `${"xyz"}` })
+>>>>>>> e4e0643b7f53e8b6c06657ac882610c03eedce54
     const response = await fetch(api, { method: 'GET', headers: myHead, })
     return await response.json()
 }
@@ -592,8 +609,17 @@ export async function get_all_masters(router) {
     let api = `https://${domain}/api/method/igh_search.igh_search.api.get_all_masters`
     const myHead = new Headers((apikey && secret) ? { "Authorization": 'token ' + apikey + ':' + secret, "Content-Type": "application/json" } : { "Content-Type": "application/json" })
     const response = await fetch(api, { method: 'GET', headers: myHead, })
+<<<<<<< HEAD
     if (handleUnauthorizedResponse(response)) {
         return;
+=======
+    if(response && response.status === 401 && response.statusText === "UNAUTHORIZED"){
+        // console.log(response,"response")
+        localStorage.clear();
+        Cookies.remove('api_key')
+        Cookies.remove('api_secret')
+        router?.push('/login')
+>>>>>>> e4e0643b7f53e8b6c06657ac882610c03eedce54
     }
     return await response.json()
 }

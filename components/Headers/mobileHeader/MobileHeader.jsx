@@ -14,7 +14,11 @@ import { setCustomerInfo } from '@/redux/slice/logInInfo';
 import { setCartItems } from '@/redux/slice/cartSettings'
 import Cookies from 'js-cookie';
 import { resetSetFilters } from '@/redux/slice/ProductListFilters';
+<<<<<<< HEAD
 import { resetFilters, setAllFilter } from '@/redux/slice/filtersList';
+=======
+import { resetFilters } from '@/redux/slice/filtersList';
+>>>>>>> e4e0643b7f53e8b6c06657ac882610c03eedce54
 // import Modals from '@/components/Detail/Modals'
 
 export default function MobileHeader({ home, back_btn, share, search, cart, clear_cart, title, titleDropDown, titleClick, empty_div, navigateLink, theme_settings,detailModal }) {
@@ -102,7 +106,10 @@ export default function MobileHeader({ home, back_btn, share, search, cart, clea
   },[router.asPath, router.query])
 
   const clearSearchValue = () => {
+<<<<<<< HEAD
     setSearchType('All')
+=======
+>>>>>>> e4e0643b7f53e8b6c06657ac882610c03eedce54
       setSearchValue('')
       dispatch(resetSetFilters())
       // dispatch(setAllFilter({...initialState}))
@@ -114,6 +121,7 @@ export default function MobileHeader({ home, back_btn, share, search, cart, clea
       }
   
     }
+<<<<<<< HEAD
 
     const [searchType, setSearchType] = useState('')
 
@@ -122,6 +130,8 @@ export default function MobileHeader({ home, back_btn, share, search, cart, clea
         // setSearchType()
         dispatch(setAllFilter({'search_type': event.target.value}))
       }
+=======
+>>>>>>> e4e0643b7f53e8b6c06657ac882610c03eedce54
   // console.log('route', router.query.search)
 
   return (
@@ -170,6 +180,7 @@ export default function MobileHeader({ home, back_btn, share, search, cart, clea
             } */}
 
             {(search || (router.query.search)) &&
+<<<<<<< HEAD
               <div className={`flex items-center gap-[8px] transition-all ease-in duration-500 delay-100 ${showSearch ? 'w-[250px]' : ''}`}>
                 {search &&
                   <>
@@ -178,12 +189,21 @@ export default function MobileHeader({ home, back_btn, share, search, cart, clea
                     <option value="All">All</option>
                     <option value="item_code">Item Code</option>
                   </select>
+=======
+              <div className={`flex items-center gap-[8px] transition-all ease-in duration-500 delay-100 ${showSearch ? 'w-[180px]' : ''}`}>
+                {search &&
+                  <>
+                    {/* router.push('/search') */}
+>>>>>>> e4e0643b7f53e8b6c06657ac882610c03eedce54
                     {!showSearch && <div onClick={() => { setShowSearch(!showSearch) }} className='flex transition-all ease-in duration-500 delay-100 items-center justify-end'>
                       <Image onClick={() => { }} style={{ objectFit: 'contain' }} className='h-[20px] object-contain' height={40} width={40} alt='vantage' src={'/search.svg'}></Image>
                     </div>}
 
                     <div className={`transition-all ease-in duration-500 delay-100 ${!showSearch ? 'h-0 w-0 opacity-0' : 'opacity-100 p-[5px_10px] h-[30px] flex items-center w-full border_color rounded-[20px]'} `}>
+<<<<<<< HEAD
                       
+=======
+>>>>>>> e4e0643b7f53e8b6c06657ac882610c03eedce54
                       <input id='search' value={searchValue} spellcheck="false" onChange={(eve) => { getSearchTxt(eve) }} className='w-[95%] text-[14px]' placeholder='Search Products' />
                       {searchValue && <Image onClick={() => clearSearchValue()} style={{ objectFit: 'contain' }} className='h-[18px] w-[15px] cursor-pointer mr-2' height={25} width={25} alt='vantage' src={'/Navbar/cancel.svg'}></Image>}
                       <Image onClick={() => { searchValue == '' ? null : handleSearch() }} style={{ objectFit: 'contain' }} className='h-[18px] w-[15px] cursor-pointer' height={25} width={25} alt='vantage' src={'/search.svg'}></Image>
