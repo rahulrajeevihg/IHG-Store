@@ -8,6 +8,7 @@ import { setCustomerInfo } from '@/redux/slice/logInInfo'
 import { setDetail } from '@/redux/slice/customerInfo'
 import AlertUi from '../Common/AlertUi'
 import Cookies from 'js-cookie';
+import { touchSessionActivity } from '@/libs/auth';
 // import { GoogleLogin } from '@react-oauth/google';
 // import FacebookLogin from 'react-facebook-login';
 
@@ -71,6 +72,7 @@ export default function LogIn({ hide, checkModal }) {
                 Cookies.set('api_secret',val.message.api_secret, { expires: dateNow })
                 localStorage['api_key'] = val.message.api_key
                 localStorage['api_secret'] = val.message.api_secret
+                touchSessionActivity();
                 dispatch(setCustomerInfo(val));
                 dispatch(setDetail(val))
                 // getCustomerInfo({ email: data.email, guest_id: localStorage['customerRefId'] }, datas)
@@ -177,6 +179,7 @@ export default function LogIn({ hide, checkModal }) {
         if (resp.message && resp.message.message && resp.message.message == 'Logged In') {
             localStorage['api_key'] = resp.message.api_key
             localStorage['api_secret'] = resp.message.api_secret
+            touchSessionActivity();
 
             // getCustomerInfo({ email: data.email, guest_id: localStorage['customerRefId'] }, datas)
             let mail = {
@@ -316,7 +319,6 @@ export default function LogIn({ hide, checkModal }) {
         </>
     )
 }
-
 
 
 

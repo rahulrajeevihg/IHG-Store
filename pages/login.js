@@ -7,6 +7,8 @@ const AuthModal = dynamic(() => import("@/components/Auth/AuthModal"));
 import { useRouter } from 'next/router'
 import Image from 'next/image';
 import Cookies from "js-cookie";
+import { toast } from "react-toastify";
+import { SESSION_EXPIRED_FLAG } from "@/libs/auth";
 
 export default function login() {
 
@@ -14,6 +16,14 @@ export default function login() {
   const [show, setShow] = useState(true)
   useEffect(() => {
    
+    const sessionReason = sessionStorage.getItem(SESSION_EXPIRED_FLAG);
+    if (sessionReason === 'timeout') {
+      toast.info('Session timed out after 20 minutes of inactivity. Please log in again.');
+      sessionStorage.removeItem(SESSION_EXPIRED_FLAG);
+    } else if (sessionReason === 'expired') {
+      toast.info('Your session expired. Please log in again.');
+      sessionStorage.removeItem(SESSION_EXPIRED_FLAG);
+    }
 
     if (Cookies.get("api_key")) {
       setShow(false)

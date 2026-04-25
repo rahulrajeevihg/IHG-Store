@@ -25,6 +25,7 @@ import settig from '@/libs/websiteSettings'
 import ScrollToTopButton from '@/components/Common/ScrollToTop';
 import Image from 'next/image';
 const ProductDetail = dynamic(() => import('@/components/Detail/ProductDetail'))
+import { enforceSessionTimeout, hasAuthSession, touchSessionActivity } from '@/libs/auth';
 // console.log('setting', settig.message)
 
 // import { GoogleOAuthProvider } from '@react-oauth/google';
@@ -88,8 +89,31 @@ function App({ Component, pageProps }) {
   }, []);
 
   useEffect(() => {
+    if (typeof window === "undefined" || !("serviceWorker" in navigator)) {
+      return;
+    }
+
+    const clearStaleBrowserCaches = async () => {
+      try {
+        const registrations = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(registrations.map((registration) => registration.unregister()));
+
+        if ("caches" in window) {
+          const cacheNames = await window.caches.keys();
+          await Promise.all(cacheNames.map((cacheName) => window.caches.delete(cacheName)));
+        }
+      } catch (error) {
+        console.error("Failed to clear stale service workers or caches", error);
+      }
+    };
+
+    clearStaleBrowserCaches();
+  }, []);
+
+  useEffect(() => {
     // nProgress.configure({ showSpinner: false })
     const handleStart = (e) => {
+      touchSessionActivity();
       if (e == '/' && localStorage['api_key']) {
         getValue()
       }
@@ -105,6 +129,7 @@ function App({ Component, pageProps }) {
       // nProgress.start()
     };
     const handleComplete = (e) => {
+      touchSessionActivity();
       setPageKey(Date.now());
       // nProgress.done()
     };
@@ -150,6 +175,46 @@ function App({ Component, pageProps }) {
       getValue()
     }
 
+  }, [])
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const activityEvents = ['click', 'keydown', 'mousemove', 'scroll', 'touchstart'];
+    let lastWrite = 0;
+
+    const recordActivity = () => {
+      if (!hasAuthSession()) {
+        return;
+      }
+
+      const now = Date.now();
+      if (now - lastWrite < 15000) {
+        return;
+      }
+
+      lastWrite = now;
+      touchSessionActivity();
+    };
+
+    recordActivity();
+
+    const intervalId = window.setInterval(() => {
+      enforceSessionTimeout();
+    }, 30000);
+
+    activityEvents.forEach((eventName) => {
+      window.addEventListener(eventName, recordActivity, { passive: true });
+    });
+
+    return () => {
+      window.clearInterval(intervalId);
+      activityEvents.forEach((eventName) => {
+        window.removeEventListener(eventName, recordActivity);
+      });
+    };
   }, [])
 
   // const loadScripts = () => {
@@ -360,4 +425,3 @@ function App({ Component, pageProps }) {
 }
 
 export default memo(App)
-

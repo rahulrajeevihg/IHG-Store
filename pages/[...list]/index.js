@@ -1,6 +1,11 @@
 import { useState, useEffect, useMemo, useRef, useCallback, Fragment, memo } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
-import { seo_Image, getCurrentUrl, typesense_search_items, get_all_masters } from '@/libs/api';
+import { seo_Image, getCurrentUrl, typesense_search_items, get_all_masters, ai_product_search } from '@/libs/api';
+import {
+  buildFeatureFlagOverride,
+  getIsSystemManager,
+  probeSearchV2Availability,
+} from '@/libs/ighSearchV2';
 import dynamic from 'next/dynamic';
 const ProductBox = dynamic(() => import('@/components/Product/ProductBox'))
 const Filters = dynamic(() => import('@/components/Product/filters/Filters'))
@@ -17,11 +22,13 @@ import { resetSetFilters, setLoad } from '@/redux/slice/ProductListFilters'
 import { resetFilters, resetSwitch, setAllFilter, setBrand } from "@/redux/slice/filtersList";
 import { setFilter } from '@/redux/slice/homeFilter';
 import Head from 'next/head'
-import { Switch } from '@headlessui/react';
+import { Dialog, Switch, Transition } from '@headlessui/react';
 import clsx from 'clsx'
 import useTabView from '@/libs/hooks/useTabView';
 import { resetFilter } from '@/redux/slice/homeFilter';
 import { setProductDetail } from '@/redux/slice/productDetail';
+import { toast } from 'react-toastify';
+const V2SearchPage = dynamic(() => import('@/components/Search/v2/V2SearchPage'));
 // import ProductDetail from '@/components/Detail/ProductDetail';
 
 const initialState = {
@@ -58,11 +65,26 @@ const initialState = {
   search_type : ''
 }
 
+const HIGHEST_VALUE_SORT = 'inventory_value:desc'
+const AI_ARRAY_FILTER_KEYS = ["brand", "category_list", "product_type", "item_group", "ip_rate", "power", "color_temp_", "body_finish", "input", "mounting", "output_current", "output_voltage", "lamp_type", "lumen_output", "beam_angle", "material", "warranty_"]
+const AI_BOOLEAN_FILTER_KEYS = ["in_stock", "show_promotion", "hot_product", "has_variants", "custom_in_bundle_item"]
+const AI_RANGE_FILTER_KEYS = ["price_range", "stock_range"]
+const AI_SUGGESTED_PROMPTS = [
+  "Show me waterproof outdoor lights under 5000",
+  "Find warm white office panel lights in stock",
+  "Show high-value industrial lighting products",
+  "Find drivers with strong stock and low price"
+]
 
-function List({ category, brand, search }) {
+
+function LegacyList({ category, brand, search, fallbackMessage }) {
   const router = useRouter();
 
   const [foundValue, setFoundValue] = useState(0);
+  const [aiSearchValue, setAiSearchValue] = useState('');
+  const [aiSearchLoading, setAiSearchLoading] = useState(false);
+  const [aiExplanation, setAiExplanation] = useState('');
+  const [aiModalOpen, setAiModalOpen] = useState(false);
 
   // useEffect(() => {
   //   setResults(initialData)
@@ -341,9 +363,9 @@ function List({ category, brand, search }) {
 
   const label_classname = "text-[14px] md:text-[13px] font-semibold"
 
-  const buildFilterQuery = () => {
+  const buildFilterQuery = (activeFilters = filters) => {
     const filterParams = [];
-    const { price_range, stock_range, ...rest } = filters;
+    const { price_range, stock_range, ...rest } = activeFilters;
 
     // if (rest.item_code) filterParams.push(`item_code:${rest.item_code}*`);
     // if (rest.item_description) filterParams.push(`item_description:${rest.item_description}*`);
@@ -444,25 +466,27 @@ function List({ category, brand, search }) {
     }, 400);
   }
 
-  const fetchResults = async (reset = false, initialPageNo) => {
+  const fetchResults = async (reset = false, initialPageNo, activeFilters = filters) => {
     setError(null);
     // console.log("queryfilter", filters)
-    console.log('productFilter.search_type', productFilter.search_type)
+    const activeSearchType = typeof activeFilters.search_type === 'string' ? activeFilters.search_type : productFilter.search_type;
+    console.log('productFilter.search_type', activeSearchType)
+    const currentSortBy = localStorage['sort_by'] ? localStorage['sort_by'] : activeFilters.sort_by;
     const perPage = window.innerWidth >= 1400 ? "15" : "12";
     const queryParams = new URLSearchParams({
-      q: filters.q !== '*'  ? filters.q : filters.item_description ? `${filters.item_description}*` : '*',
-      query_by: productFilter.search_type == 'item_code' ? 'item_code' : filters.q ? 'item_name,item_code,item_description' : filters.item_description ? 'item_description,item_code,item_name' : '',
+      q: activeFilters.q !== '*'  ? activeFilters.q : activeFilters.item_description ? `${activeFilters.item_description}*` : '*',
+      query_by: activeSearchType == 'item_code' ? 'item_code' : activeFilters.q ? 'item_name,item_code,item_description' : activeFilters.item_description ? 'item_description,item_code,item_name' : '',
       page: initialPageNo ? 1 : pageNo,
       per_page: 15,
-      exhaustive_search: productFilter.search_type =='item_code' ? 'false' : "true",
+      exhaustive_search: activeSearchType =='item_code' ? 'false' : "true",
       // query_by_weights: "4,2",
       // query_by_weights: "1,2,3",
-      filter_by: buildFilterQuery(),
+      filter_by: buildFilterQuery(activeFilters),
       // ...buildFilterQuery() && { filter_by: buildFilterQuery() },
-      sort_by: localStorage['sort_by'] ? localStorage['sort_by'] : filters.sort_by
+      sort_by: currentSortBy
     });
 
-   if (productFilter.search_type == 'item_code' && router.query['search']) {
+   if (activeSearchType == 'item_code' && router.query['search']) {
       queryParams.set('infix', 'always');
    }
 
@@ -609,6 +633,85 @@ function List({ category, brand, search }) {
     });
   };
 
+  const applyAiIntent = (intent) => {
+    const safeIntent = intent || {};
+    const safeFilters = safeIntent.filters || {};
+    const nextFilters = {
+      ...initialState,
+      q: safeIntent.query && safeIntent.query.trim() !== '' ? safeIntent.query.trim() : '*',
+      item_description: '',
+      sort_by: typeof safeIntent.sort_by === 'string' ? safeIntent.sort_by : initialState.sort_by,
+      search_type: ''
+    };
+
+    AI_ARRAY_FILTER_KEYS.forEach((key) => {
+      nextFilters[key] = Array.isArray(safeFilters[key]) ? safeFilters[key].filter((value) => typeof value === 'string' && value.trim() !== '') : [];
+    });
+
+    AI_BOOLEAN_FILTER_KEYS.forEach((key) => {
+      nextFilters[key] = typeof safeFilters[key] === 'boolean' ? safeFilters[key] : false;
+    });
+
+    AI_RANGE_FILTER_KEYS.forEach((key) => {
+      const range = safeFilters[key];
+      if (range && typeof range === 'object') {
+        nextFilters[key] = {
+          min: Number.isFinite(Number(range.min)) ? Number(range.min) : initialState[key].min,
+          max: Number.isFinite(Number(range.max)) ? Number(range.max) : initialState[key].max
+        };
+      } else {
+        nextFilters[key] = { ...initialState[key] };
+      }
+    });
+
+    setAiExplanation(typeof safeIntent.explanation === 'string' ? safeIntent.explanation : '');
+    localStorage.setItem('sort_by', nextFilters.sort_by);
+    setResults([]);
+    setpageNo(1);
+    setFilters(nextFilters);
+    dispatch(setAllFilter({ ...nextFilters }));
+    fetchResults(true, true, nextFilters);
+    setAiModalOpen(false);
+    window.scrollTo({
+      top: 0,
+      behavior: "smooth",
+    });
+  }
+
+  const handleAiSearch = async () => {
+    const message = aiSearchValue.trim();
+    if (!message) {
+      toast.info('Enter a natural language search request first.');
+      return;
+    }
+
+    setAiSearchLoading(true);
+    try {
+      const response = await ai_product_search({
+        message,
+        page_context: {
+          route: router.pathname === '/[...list]' ? '/list' : router.asPath,
+          category: router.query['category'] ? String(router.query['category']) : "",
+          brand: router.query['brand'] ? String(router.query['brand']) : "",
+          search: router.query['search'] ? String(router.query['search']) : ""
+        }
+      });
+
+      const intent = response?.message?.data || response?.message || response;
+      if (!intent || (typeof intent !== 'object')) {
+        toast.error('AI search did not return a valid response.');
+        return;
+      }
+
+      applyAiIntent(intent);
+      toast.success('AI search applied.');
+    } catch (error) {
+      toast.error(error?.message || 'AI search failed. Please try again.');
+    } finally {
+      setAiSearchLoading(false);
+    }
+  }
+
   // onChnage filters
   useEffect(() => {
     if (initialLoad) {
@@ -710,6 +813,7 @@ function List({ category, brand, search }) {
     { text: 'Created Date', value: 'creation_on:desc' },
     { text: 'Price low to high', value: 'rate:asc' },
     { text: 'Price high to low', value: 'rate:desc' },
+    { text: 'Highest Value', value: HIGHEST_VALUE_SORT },
     { text: 'Mostly Sold', value: 'sold_last_30_days:desc' },
     { text: 'Least Sold', value: 'sold_last_30_days:asc' },
     { text: 'Discount high to low', value: 'discount_percentage:desc' },
@@ -787,6 +891,13 @@ function List({ category, brand, search }) {
   return (
 
     <>
+      {fallbackMessage && (
+        <div className="main-width pt-[12px]">
+          <div className="rounded-[12px] border border-[#f3d9a6] bg-[#fff7e8] px-[14px] py-[10px] text-[13px] font-medium text-[#9a6700]">
+            {fallbackMessage}
+          </div>
+        </div>
+      )}
 
       {/* <Head>
         <title>{filterInfo?.meta_info?.meta_title}</title>
@@ -803,6 +914,134 @@ function List({ category, brand, search }) {
       {visible && <ProductDetail visible={visible} product={currentProduct} hide={hide} />}
 
       {loadSpinner && <Backdrop />}
+      <Transition appear show={aiModalOpen} as={Fragment}>
+        <Dialog as="div" className="relative z-[9999]" onClose={() => setAiModalOpen(false)}>
+          <Transition.Child
+            as={Fragment}
+            enter="ease-out duration-200"
+            enterFrom="opacity-0"
+            enterTo="opacity-100"
+            leave="ease-in duration-150"
+            leaveFrom="opacity-100"
+            leaveTo="opacity-0"
+          >
+            <div className="fixed inset-0 bg-black/40" />
+          </Transition.Child>
+
+          <div className="fixed inset-0 overflow-y-auto">
+            <div className="flex min-h-full items-end justify-center p-4 text-center md:items-center">
+              <Transition.Child
+                as={Fragment}
+                enter="ease-out duration-200"
+                enterFrom="opacity-0 translate-y-4 scale-95"
+                enterTo="opacity-100 translate-y-0 scale-100"
+                leave="ease-in duration-150"
+                leaveFrom="opacity-100 translate-y-0 scale-100"
+                leaveTo="opacity-0 translate-y-4 scale-95"
+              >
+                <Dialog.Panel className="w-full max-w-[640px] transform overflow-hidden rounded-[18px] bg-white text-left align-middle shadow-xl transition-all">
+                  <div className="border-b border-[#eee] px-[20px] py-[16px]">
+                    <div className="flex items-start justify-between gap-[12px]">
+                      <div>
+                        <Dialog.Title as="h3" className="text-[20px] font-semibold text-[#111]">
+                          AI Analysis Search
+                        </Dialog.Title>
+                        <p className="mt-[4px] text-[13px] text-[#666]">
+                          Ask in plain English, or tap a ready-made prompt to search faster.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setAiModalOpen(false)}
+                        className="grid h-[36px] w-[36px] place-items-center rounded-full bg-[#f3f3f3] text-[18px] text-[#333]"
+                      >
+                        x
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="px-[20px] py-[18px]">
+                    <div className="flex flex-wrap gap-[10px]">
+                      {AI_SUGGESTED_PROMPTS.map((prompt) => (
+                        <button
+                          key={prompt}
+                          type="button"
+                          onClick={() => setAiSearchValue(prompt)}
+                          className="rounded-full border border-[#e1d7c8] bg-[#fbf5ea] px-[14px] py-[8px] text-[12px] font-medium text-[#6b5a3d]"
+                        >
+                          {prompt}
+                        </button>
+                      ))}
+                    </div>
+
+                    <div className="mt-[16px]">
+                      <label className="mb-[8px] block text-[13px] font-semibold text-[#333]">
+                        Enter your prompt
+                      </label>
+                      <textarea
+                        value={aiSearchValue}
+                        onChange={(e) => setAiSearchValue(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && !e.shiftKey) {
+                            e.preventDefault();
+                            handleAiSearch();
+                          }
+                        }}
+                        rows={5}
+                        className="w-full rounded-[12px] border border-[#ddd] bg-[#fcfcfc] px-[14px] py-[12px] text-[14px] outline-none"
+                        placeholder="Example: show me waterproof outdoor lights under 5000 with high stock"
+                      />
+                    </div>
+
+                    <div className="mt-[16px] rounded-[12px] bg-[#f8f8f8] p-[14px]">
+                      {aiSearchLoading ? (
+                        <div className="flex items-center gap-[12px]">
+                          <div className="h-[18px] w-[18px] animate-spin rounded-full border-2 border-[#ddd] border-t-[#111]"></div>
+                          <div>
+                            <p className="text-[14px] font-semibold text-[#222]">AI is analyzing your request...</p>
+                            <p className="text-[12px] text-[#666]">Building the best search query, filters, and sort for your catalog.</p>
+                          </div>
+                        </div>
+                      ) : aiExplanation ? (
+                        <div>
+                          <p className="text-[13px] font-semibold text-[#222]">Latest AI mapping</p>
+                          <p className="mt-[6px] text-[13px] text-[#666]">{aiExplanation}</p>
+                        </div>
+                      ) : (
+                        <div>
+                          <p className="text-[13px] font-semibold text-[#222]">What happens next</p>
+                          <p className="mt-[6px] text-[13px] text-[#666]">We will send your prompt to the AI endpoint, apply the returned search intent, and then show the matching products in the list behind this modal.</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-end gap-[10px] border-t border-[#eee] px-[20px] py-[16px]">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAiSearchValue('');
+                        setAiExplanation('');
+                      }}
+                      className="rounded-[10px] border border-[#ddd] px-[14px] py-[10px] text-[13px] font-medium text-[#444]"
+                    >
+                      Reset
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleAiSearch}
+                      disabled={aiSearchLoading}
+                      className="primary_bg rounded-[10px] px-[16px] py-[10px] text-[13px] font-semibold text-white disabled:opacity-[0.7]"
+                    >
+                      {aiSearchLoading ? 'Analyzing...' : 'Run AI Search'}
+                    </button>
+                  </div>
+                </Dialog.Panel>
+              </Transition.Child>
+            </div>
+          </div>
+        </Dialog>
+      </Transition>
       {isOpenCat && <div className='filtersPopup'>
         <Rodal visible={isOpenCat} enterAnimation='slideDown' animation='' onClose={closeModal}>
           <MobileCategoryFilter closeModal={closeModal} handleSortBy={handleSortBy} />
@@ -887,6 +1126,15 @@ function List({ category, brand, search }) {
         </div>
       </div>
 
+      <button
+        type="button"
+        onClick={() => setAiModalOpen(true)}
+        className="fixed bottom-[110px] right-[18px] z-[999] flex items-center gap-[10px] rounded-full bg-[#111] px-[16px] py-[12px] text-[13px] font-semibold text-white shadow-[0_10px_30px_rgba(0,0,0,0.18)] md:bottom-[90px]"
+      >
+        <span className="grid h-[28px] w-[28px] place-items-center rounded-full bg-white text-[13px] font-bold text-[#111]">AI</span>
+        <span>AI Search</span>
+      </button>
+
 
       {/* <div class={`md:mb-[60px] lg:flex tab:flex tab:flex-col lg:py-5 lg:gap-[17px] md:gap-[10px] transition-all duration-300 ease-in`}>
         {
@@ -937,7 +1185,116 @@ function List({ category, brand, search }) {
 
 }
 
-export default memo(List)
+function ListPageRouter(props) {
+  const router = useRouter();
+  const [mode, setMode] = useState(null);
+  const [fallbackMessage, setFallbackMessage] = useState('');
+
+  useEffect(() => {
+    if (!router.isReady) {
+      return;
+    }
+
+    const listPath = Array.isArray(router.query.list) ? `/${router.query.list.join('/')}` : '';
+    const currentPath = listPath || router.asPath.split('?')[0];
+    if (currentPath !== '/list') {
+      setMode('v1');
+      return;
+    }
+
+    const requestedV2 = router.query.search_v2 === '1';
+
+    if (!requestedV2) {
+      setFallbackMessage('');
+      setMode('v1');
+      return;
+    }
+
+    const isSystemManager = getIsSystemManager();
+    const cacheKey = isSystemManager ? 'igh_v2_enabled_override' : 'igh_v2_enabled_default';
+
+    if (typeof window !== 'undefined') {
+      const cachedMode = sessionStorage.getItem(cacheKey);
+      if (cachedMode === 'enabled') {
+        setMode('v2');
+        return;
+      }
+      if (cachedMode === 'disabled') {
+        setFallbackMessage('V2 unavailable, switched to V1');
+        setMode('v1');
+        return;
+      }
+    }
+
+    let active = true;
+    const controller = new AbortController();
+
+    const probeMode = async () => {
+      try {
+        await probeSearchV2Availability(buildFeatureFlagOverride(requestedV2), {
+          signal: controller.signal,
+        });
+
+        if (!active) {
+          return;
+        }
+
+        if (typeof window !== 'undefined') {
+          sessionStorage.setItem(cacheKey, 'enabled');
+        }
+        setMode('v2');
+      } catch (error) {
+        if (!active || error?.name === 'AbortError') {
+          return;
+        }
+
+        if (typeof window !== 'undefined') {
+          sessionStorage.setItem(cacheKey, 'disabled');
+        }
+
+        if (requestedV2) {
+          setFallbackMessage('V2 unavailable, switched to V1');
+        }
+        setMode('v1');
+      }
+    };
+
+    probeMode();
+
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [router.isReady, router.query.search_v2, router.query.list]);
+
+  if (mode === 'v2') {
+    return (
+      <V2SearchPage
+        searchRoute="list"
+        fallbackMessage={fallbackMessage}
+        onFallback={(message) => {
+          setFallbackMessage(message);
+          setMode('v1');
+        }}
+      />
+    );
+  }
+
+  if (mode === null) {
+    return (
+      <div className="main-width min-h-screen py-[40px]">
+        <div className="animate-pulse rounded-[14px] border border-[#ece6dc] bg-white p-[20px]">
+          <div className="mb-[12px] h-[24px] w-[180px] rounded-[8px] bg-[#f1eee8]"></div>
+          <div className="h-[18px] w-[320px] rounded-[8px] bg-[#f1eee8]"></div>
+        </div>
+      </div>
+    );
+  }
+
+  return <LegacyList {...props} fallbackMessage={fallbackMessage} />;
+}
+
+export default memo(ListPageRouter)
 
 const MobileFilters = ({ filtersList, ProductFilter, productBoxView, clearFilter, setFilters, handleSortBy, mastersData, filters, fetchResults, foundValue }) => {
 
@@ -1098,6 +1455,7 @@ const SortByFilter = ({ ProductFilter, closeModal, setFilters, handleSortBy, fil
     { text: 'Created Date', value: 'creation_on:desc' },
     { text: 'Price low to high', value: 'rate:asc' },
     { text: 'Price high to low', value: 'rate:desc' },
+    { text: 'Highest Value', value: HIGHEST_VALUE_SORT },
     { text: 'Mostly Sold', value: 'sold_last_30_days:desc' },
     { text: 'Least Sold', value: 'sold_last_30_days:asc' },
     { text: 'Discount high to low', value: 'discount_percentage:desc' },
