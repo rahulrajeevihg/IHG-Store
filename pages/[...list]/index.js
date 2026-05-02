@@ -1,15 +1,11 @@
 import { useState, useEffect, useMemo, useRef, useCallback, Fragment, memo } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
-<<<<<<< HEAD
 import { seo_Image, getCurrentUrl, typesense_search_items, get_all_masters, ai_product_search } from '@/libs/api';
 import {
   buildFeatureFlagOverride,
   getIsSystemManager,
   probeSearchV2Availability,
 } from '@/libs/ighSearchV2';
-=======
-import { seo_Image, getCurrentUrl, typesense_search_items, get_all_masters } from '@/libs/api';
->>>>>>> e4e0643b7f53e8b6c06657ac882610c03eedce54
 import dynamic from 'next/dynamic';
 const ProductBox = dynamic(() => import('@/components/Product/ProductBox'))
 const Filters = dynamic(() => import('@/components/Product/filters/Filters'))
@@ -26,20 +22,13 @@ import { resetSetFilters, setLoad } from '@/redux/slice/ProductListFilters'
 import { resetFilters, resetSwitch, setAllFilter, setBrand } from "@/redux/slice/filtersList";
 import { setFilter } from '@/redux/slice/homeFilter';
 import Head from 'next/head'
-<<<<<<< HEAD
 import { Dialog, Switch, Transition } from '@headlessui/react';
-=======
-import { Switch } from '@headlessui/react';
->>>>>>> e4e0643b7f53e8b6c06657ac882610c03eedce54
 import clsx from 'clsx'
 import useTabView from '@/libs/hooks/useTabView';
 import { resetFilter } from '@/redux/slice/homeFilter';
 import { setProductDetail } from '@/redux/slice/productDetail';
-<<<<<<< HEAD
 import { toast } from 'react-toastify';
 const V2SearchPage = dynamic(() => import('@/components/Search/v2/V2SearchPage'));
-=======
->>>>>>> e4e0643b7f53e8b6c06657ac882610c03eedce54
 // import ProductDetail from '@/components/Detail/ProductDetail';
 
 const initialState = {
@@ -72,7 +61,6 @@ const initialState = {
   warranty_: [],
   output_voltage: [],
   output_current: [],
-<<<<<<< HEAD
   color_temp_: [],
   search_type : ''
 }
@@ -97,16 +85,6 @@ function LegacyList({ category, brand, search, fallbackMessage }) {
   const [aiSearchLoading, setAiSearchLoading] = useState(false);
   const [aiExplanation, setAiExplanation] = useState('');
   const [aiModalOpen, setAiModalOpen] = useState(false);
-=======
-  color_temp_: []
-}
-
-
-function List({ category, brand, search }) {
-  const router = useRouter();
-
-  const [foundValue, setFoundValue] = useState(0);
->>>>>>> e4e0643b7f53e8b6c06657ac882610c03eedce54
 
   // useEffect(() => {
   //   setResults(initialData)
@@ -122,7 +100,7 @@ function List({ category, brand, search }) {
     const getMasterData = async () => {
       const mastersRes = await get_all_masters();
       // console.log('master', mastersRes)
-      if (mastersRes.message) {
+      if (mastersRes && mastersRes.message) {
         setMastersData(mastersRes.message)
       }
     }
@@ -385,15 +363,9 @@ function List({ category, brand, search }) {
 
   const label_classname = "text-[14px] md:text-[13px] font-semibold"
 
-<<<<<<< HEAD
   const buildFilterQuery = (activeFilters = filters) => {
     const filterParams = [];
     const { price_range, stock_range, ...rest } = activeFilters;
-=======
-  const buildFilterQuery = () => {
-    const filterParams = [];
-    const { price_range, stock_range, ...rest } = filters;
->>>>>>> e4e0643b7f53e8b6c06657ac882610c03eedce54
 
     // if (rest.item_code) filterParams.push(`item_code:${rest.item_code}*`);
     // if (rest.item_description) filterParams.push(`item_description:${rest.item_description}*`);
@@ -416,10 +388,7 @@ function List({ category, brand, search }) {
         filterParams.push(`${key}:=[${values}]`);
       }
     });
-<<<<<<< HEAD
     
-=======
->>>>>>> e4e0643b7f53e8b6c06657ac882610c03eedce54
 
     // console.log(checkInitialValue(price_range?.min,initialState.price_range.min),"price - min")
     // console.log(checkInitialValue(price_range?.max,initialState.price_range.max),"price - max")
@@ -428,13 +397,10 @@ function List({ category, brand, search }) {
       filterParams.push(`rate:>=${price_range.min} && rate:<=${price_range.max}`);
     }
 
-<<<<<<< HEAD
     // if(router.query['search'] && productFilter.search_type != 'All'){
     //    filterParams.push(`item_code:=${router.query['search']}`)
     // }
 
-=======
->>>>>>> e4e0643b7f53e8b6c06657ac882610c03eedce54
     // console.log(checkInitialValue(stock_range?.min,initialState.stock_range.min),"stock - min")
     // console.log(checkInitialValue(stock_range?.max,initialState.stock_range.max),"stock - max")
 
@@ -500,7 +466,6 @@ function List({ category, brand, search }) {
     }, 400);
   }
 
-<<<<<<< HEAD
   const fetchResults = async (reset = false, initialPageNo, activeFilters = filters) => {
     setError(null);
     // console.log("queryfilter", filters)
@@ -525,25 +490,6 @@ function List({ category, brand, search }) {
       queryParams.set('infix', 'always');
    }
 
-=======
-  const fetchResults = async (reset = false, initialPageNo) => {
-    setError(null);
-    // console.log("queryfilter", filters)
-    const perPage = window.innerWidth >= 1400 ? "15" : "12";
-    const queryParams = new URLSearchParams({
-      q: filters.q !== '*' ? filters.q : filters.item_description ? `${filters.item_description}*` : '*',
-      query_by: filters.q ? 'item_name,item_code,item_description' : filters.item_description ? 'item_description,item_code,item_name' : '',
-      page: initialPageNo ? 1 : pageNo,
-      per_page: 15,
-      exhaustive_search: "true",
-      // query_by_weights: "4,2",
-      // query_by_weights: "1,2,3",
-      filter_by: buildFilterQuery(),
-      // ...buildFilterQuery() && { filter_by: buildFilterQuery() },
-      sort_by: localStorage['sort_by'] ? localStorage['sort_by'] : filters.sort_by
-    });
-
->>>>>>> e4e0643b7f53e8b6c06657ac882610c03eedce54
     if (initialPageNo) {
       setpageNo(1)
       setResults([])
@@ -687,7 +633,6 @@ function List({ category, brand, search }) {
     });
   };
 
-<<<<<<< HEAD
   const applyAiIntent = (intent) => {
     const safeIntent = intent || {};
     const safeFilters = safeIntent.filters || {};
@@ -767,8 +712,6 @@ function List({ category, brand, search }) {
     }
   }
 
-=======
->>>>>>> e4e0643b7f53e8b6c06657ac882610c03eedce54
   // onChnage filters
   useEffect(() => {
     if (initialLoad) {
@@ -809,13 +752,9 @@ function List({ category, brand, search }) {
         stock_range: productFilter.stock_range,
         item_group: router.query['category'] ? (Array.isArray(router.query['category']) ? router.query['category'] : router.query['category'].split(",")) : productFilter.item_group.length > 0 ? productFilter.item_group : [],
         brand: router.query['brand'] ? (Array.isArray(router.query['brand']) ? router.query['brand'] : router.query['brand'].split(",")) : productFilter.brand.length > 0 ? productFilter.brand : [],
-<<<<<<< HEAD
         q: router.query['search'] ? router.query['search'] : "*",
         sort_by : router.query['search'] ? '' : "stock:desc",
         // item_code: router.query['search'] && productFilter.search_type != 'All' && router.query['search']
-=======
-        q: router.query['search'] ? router.query['search'] : "*"
->>>>>>> e4e0643b7f53e8b6c06657ac882610c03eedce54
       }
 
       window.scrollTo({
@@ -868,19 +807,13 @@ function List({ category, brand, search }) {
   // },[filters.sort_by, filters.hot_product, filters.brand, filters.item_group])
 
   let sortByOptions = [
-<<<<<<< HEAD
     { text: 'Relevance', value: '' },
-=======
->>>>>>> e4e0643b7f53e8b6c06657ac882610c03eedce54
     { text: 'Stock high to low', value: 'stock:desc' },
     { text: 'Stock low to high', value: 'stock:asc' },
     { text: 'Created Date', value: 'creation_on:desc' },
     { text: 'Price low to high', value: 'rate:asc' },
     { text: 'Price high to low', value: 'rate:desc' },
-<<<<<<< HEAD
     { text: 'Highest Value', value: HIGHEST_VALUE_SORT },
-=======
->>>>>>> e4e0643b7f53e8b6c06657ac882610c03eedce54
     { text: 'Mostly Sold', value: 'sold_last_30_days:desc' },
     { text: 'Least Sold', value: 'sold_last_30_days:asc' },
     { text: 'Discount high to low', value: 'discount_percentage:desc' },
@@ -958,7 +891,6 @@ function List({ category, brand, search }) {
   return (
 
     <>
-<<<<<<< HEAD
       {fallbackMessage && (
         <div className="main-width pt-[12px]">
           <div className="rounded-[12px] border border-[#f3d9a6] bg-[#fff7e8] px-[14px] py-[10px] text-[13px] font-medium text-[#9a6700]">
@@ -966,8 +898,6 @@ function List({ category, brand, search }) {
           </div>
         </div>
       )}
-=======
->>>>>>> e4e0643b7f53e8b6c06657ac882610c03eedce54
 
       {/* <Head>
         <title>{filterInfo?.meta_info?.meta_title}</title>
@@ -984,7 +914,6 @@ function List({ category, brand, search }) {
       {visible && <ProductDetail visible={visible} product={currentProduct} hide={hide} />}
 
       {loadSpinner && <Backdrop />}
-<<<<<<< HEAD
       <Transition appear show={aiModalOpen} as={Fragment}>
         <Dialog as="div" className="relative z-[9999]" onClose={() => setAiModalOpen(false)}>
           <Transition.Child
@@ -1113,8 +1042,6 @@ function List({ category, brand, search }) {
           </div>
         </Dialog>
       </Transition>
-=======
->>>>>>> e4e0643b7f53e8b6c06657ac882610c03eedce54
       {isOpenCat && <div className='filtersPopup'>
         <Rodal visible={isOpenCat} enterAnimation='slideDown' animation='' onClose={closeModal}>
           <MobileCategoryFilter closeModal={closeModal} handleSortBy={handleSortBy} />
@@ -1199,7 +1126,6 @@ function List({ category, brand, search }) {
         </div>
       </div>
 
-<<<<<<< HEAD
       <button
         type="button"
         onClick={() => setAiModalOpen(true)}
@@ -1209,8 +1135,6 @@ function List({ category, brand, search }) {
         <span>AI Search</span>
       </button>
 
-=======
->>>>>>> e4e0643b7f53e8b6c06657ac882610c03eedce54
 
       {/* <div class={`md:mb-[60px] lg:flex tab:flex tab:flex-col lg:py-5 lg:gap-[17px] md:gap-[10px] transition-all duration-300 ease-in`}>
         {
@@ -1261,7 +1185,6 @@ function List({ category, brand, search }) {
 
 }
 
-<<<<<<< HEAD
 function ListPageRouter(props) {
   const router = useRouter();
   const [mode, setMode] = useState(null);
@@ -1372,9 +1295,6 @@ function ListPageRouter(props) {
 }
 
 export default memo(ListPageRouter)
-=======
-export default memo(List)
->>>>>>> e4e0643b7f53e8b6c06657ac882610c03eedce54
 
 const MobileFilters = ({ filtersList, ProductFilter, productBoxView, clearFilter, setFilters, handleSortBy, mastersData, filters, fetchResults, foundValue }) => {
 
@@ -1529,19 +1449,13 @@ const TabFilters = ({ productBoxView, setFilters, handleSortBy, filters, setOpen
 const SortByFilter = ({ ProductFilter, closeModal, setFilters, handleSortBy, filters }) => {
 
   let sorting = [
-<<<<<<< HEAD
     { text: 'Relevance', value: '' },
-=======
->>>>>>> e4e0643b7f53e8b6c06657ac882610c03eedce54
     { text: 'Stock high to low', value: 'stock:desc' },
     { text: 'Stock low to high', value: 'stock:asc' },
     { text: 'Created Date', value: 'creation_on:desc' },
     { text: 'Price low to high', value: 'rate:asc' },
     { text: 'Price high to low', value: 'rate:desc' },
-<<<<<<< HEAD
     { text: 'Highest Value', value: HIGHEST_VALUE_SORT },
-=======
->>>>>>> e4e0643b7f53e8b6c06657ac882610c03eedce54
     { text: 'Mostly Sold', value: 'sold_last_30_days:desc' },
     { text: 'Least Sold', value: 'sold_last_30_days:asc' },
     { text: 'Discount high to low', value: 'discount_percentage:desc' },
@@ -1736,8 +1650,4 @@ export async function getServerSideProps(req) {
 //     props: { productRoute, list }
 //   }
 
-<<<<<<< HEAD
 // }
-=======
-// }
->>>>>>> e4e0643b7f53e8b6c06657ac882610c03eedce54

@@ -8,10 +8,7 @@ import { setCustomerInfo } from '@/redux/slice/logInInfo'
 import { setDetail } from '@/redux/slice/customerInfo'
 import AlertUi from '../Common/AlertUi'
 import Cookies from 'js-cookie';
-<<<<<<< HEAD
 import { touchSessionActivity } from '@/libs/auth';
-=======
->>>>>>> e4e0643b7f53e8b6c06657ac882610c03eedce54
 // import { GoogleLogin } from '@react-oauth/google';
 // import FacebookLogin from 'react-facebook-login';
 
@@ -61,35 +58,48 @@ export default function LogIn({ hide, checkModal }) {
     }
 
     async function log_in(data) {
-        // console.log(data)
-        if (data) {
+        // Fallback for missing data from form state
+        const email = data?.email || document.getElementById('emailId')?.value;
+        const password = data?.password || document.getElementById('password')?.value;
+
+        if (email && password) {
             let datas = {
-                email: data.email,
-                pwd: data.password
+                email: email,
+                pwd: password
             }
             let val = await login(datas);
-            if (val.message.message == 'Success') {
-                const dateNow = new Date();
-                dateNow.setDate(dateNow.getDate() + 30);
-                Cookies.set('api_key',val.message.api_key, { expires: dateNow })
-                Cookies.set('api_secret',val.message.api_secret, { expires: dateNow })
-                localStorage['api_key'] = val.message.api_key
-                localStorage['api_secret'] = val.message.api_secret
-<<<<<<< HEAD
+
+            // Handle network/proxy error flagged by our login() wrapper
+            if (val?._error) {
+                msg = { message: val?.message?.message || 'Login failed. Please try again.' }
+                setMsg(msg)
+                headerMsg = 'Alert'
+                setHeaderMsg(headerMsg)
+                setShowAlert(true)
+                return;
+            }
+
+            // Frappe standard login returns { message: "Logged In", full_name: "..." }
+            if (val && (val.message === 'Logged In' || val.message?.message === 'Logged In')) {
                 touchSessionActivity();
-=======
->>>>>>> e4e0643b7f53e8b6c06657ac882610c03eedce54
+
+                // Store only display data — no api_key/api_secret
+                localStorage['full_name'] = val.full_name || '';
+                if (val.message?.roles) {
+                    localStorage['roles'] = JSON.stringify(val.message.roles);
+                }
+
                 dispatch(setCustomerInfo(val));
                 dispatch(setDetail(val))
-                // getCustomerInfo({ email: data.email, guest_id: localStorage['customerRefId'] }, datas)
-                // localStorage['customerUser_id'] = val.message.user_id;
-                // localStorage['customer_id'] = val.message.customer_id;
-                localStorage['full_name'] = val.full_name;
-                localStorage['roles'] = JSON.stringify(val.message.roles);
+
+                // Fetch customer-specific profile info
+                await getCustomerInfo({ email: email, guest_id: localStorage['customerRefId'] }, { usr: email, pwd: password });
+
                 hide()
-            }
-            else {
-                msg = { message: val.message.message ? val.message.message : 'Something wen wrong try again later' }
+            } else {
+                // Surface the Frappe error message (e.g. "Incorrect password")
+                const errMsg = val?.message?.message || val?.message || 'Invalid credentials. Please try again.';
+                msg = { message: errMsg }
                 setMsg(msg)
                 headerMsg = 'Alert'
                 setHeaderMsg(headerMsg)
@@ -119,7 +129,7 @@ export default function LogIn({ hide, checkModal }) {
         const dateNow = new Date();
         dateNow.setDate(dateNow.getDate() + 14);
         const resp = await get_customer_info(mail);
-        if (resp.message && resp.message.length != 0) {
+        if (resp && resp.message && resp.message.length != 0) {
             storeCustomerInfo(resp);
             document.cookie = `customerRefId=${localStorage["customerRefId"]};expires=${dateNow}`; 
             dispatch(setCustomerInfo(resp.message[0]));
@@ -185,10 +195,7 @@ export default function LogIn({ hide, checkModal }) {
         if (resp.message && resp.message.message && resp.message.message == 'Logged In') {
             localStorage['api_key'] = resp.message.api_key
             localStorage['api_secret'] = resp.message.api_secret
-<<<<<<< HEAD
             touchSessionActivity();
-=======
->>>>>>> e4e0643b7f53e8b6c06657ac882610c03eedce54
 
             // getCustomerInfo({ email: data.email, guest_id: localStorage['customerRefId'] }, datas)
             let mail = {
@@ -196,7 +203,7 @@ export default function LogIn({ hide, checkModal }) {
                 guest_id: localStorage['customerRefId']
             }
             const res = await get_customer_info(mail);
-            if (res.message && res.message.length != 0) {
+            if (res && res.message && res.message.length != 0) {
                 storeCustomerInfo(res);
                 dispatch(setCustomerInfo(res.message[0]));
                 dispatch(setDetail(res.message[0]))
@@ -207,7 +214,7 @@ export default function LogIn({ hide, checkModal }) {
             localStorage['full_name'] = resp.full_name;
             hide()
         } else {
-            msg = { message: (val.message && val.message.message) ? val.message.message : 'Something wen wrong try again later' }
+            msg = { message: (resp && resp.message && resp.message.message) ? resp.message.message : 'Something went wrong try again later' }
             setMsg(msg)
             headerMsg = 'Alert'
             setHeaderMsg(headerMsg)
@@ -334,7 +341,4 @@ export default function LogIn({ hide, checkModal }) {
 
 
 
-<<<<<<< HEAD
-=======
 
->>>>>>> e4e0643b7f53e8b6c06657ac882610c03eedce54

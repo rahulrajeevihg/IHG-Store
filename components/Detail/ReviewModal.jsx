@@ -135,7 +135,7 @@ export default function ReviewModal({ product , type, setData}) {
         setStar(-1);
       }
 
-      if(localStorage['api_key']){
+      if(localStorage['full_name']){
         setVisible(true);
       }else{
         setVisibleLogin(true);

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { check_Image, clear_cartitem, get_cart_items } from '@/libs/api';
+import { check_Image, clear_cartitem, get_cart_items, logout } from '@/libs/api';
 import Image from 'next/image';
 import { useRouter } from 'next/router'
 import { useSelector, useDispatch } from 'react-redux';
@@ -12,13 +12,8 @@ const Modals = dynamic(() => import('@/components/Detail/Modals'), { ssr: false 
 import { toast } from 'react-toastify';
 import { setCustomerInfo } from '@/redux/slice/logInInfo';
 import { setCartItems } from '@/redux/slice/cartSettings'
-import Cookies from 'js-cookie';
 import { resetSetFilters } from '@/redux/slice/ProductListFilters';
-<<<<<<< HEAD
 import { resetFilters, setAllFilter } from '@/redux/slice/filtersList';
-=======
-import { resetFilters } from '@/redux/slice/filtersList';
->>>>>>> e4e0643b7f53e8b6c06657ac882610c03eedce54
 // import Modals from '@/components/Detail/Modals'
 
 export default function MobileHeader({ home, back_btn, share, search, cart, clear_cart, title, titleDropDown, titleClick, empty_div, navigateLink, theme_settings,detailModal }) {
@@ -35,16 +30,16 @@ export default function MobileHeader({ home, back_btn, share, search, cart, clea
     setAlertMsg({ message: 'Are you sure do you want to logout ?' });
   }
 
-  function logout(value) {
+  async function handle_logout(value) {
     if (value == 'Yes' && (alertMsg && alertMsg.alert == 'cart')) {
       ModalClose(value)
     } else if (value == 'Yes' && alertUi) {
       setAlertUi(false);
+      // Invalidate the Frappe session server-side (clears the sid HttpOnly cookie)
+      await logout();
       localStorage.clear();
       dispatch(setCustomerInfo({ logout: true }));
       toast.success("You have successfully logged out!")
-      Cookies.remove('api_key')
-      Cookies.remove('api_secret')
       router.push('/');
     } else {
       setAlertUi(false);
@@ -106,10 +101,7 @@ export default function MobileHeader({ home, back_btn, share, search, cart, clea
   },[router.asPath, router.query])
 
   const clearSearchValue = () => {
-<<<<<<< HEAD
     setSearchType('All')
-=======
->>>>>>> e4e0643b7f53e8b6c06657ac882610c03eedce54
       setSearchValue('')
       dispatch(resetSetFilters())
       // dispatch(setAllFilter({...initialState}))
@@ -121,7 +113,6 @@ export default function MobileHeader({ home, back_btn, share, search, cart, clea
       }
   
     }
-<<<<<<< HEAD
 
     const [searchType, setSearchType] = useState('')
 
@@ -130,8 +121,6 @@ export default function MobileHeader({ home, back_btn, share, search, cart, clea
         // setSearchType()
         dispatch(setAllFilter({'search_type': event.target.value}))
       }
-=======
->>>>>>> e4e0643b7f53e8b6c06657ac882610c03eedce54
   // console.log('route', router.query.search)
 
   return (
@@ -148,7 +137,7 @@ export default function MobileHeader({ home, back_btn, share, search, cart, clea
 
 
       {alertUi &&
-        <AlertUi isOpen={alertUi} closeModal={(value) => logout(value)} headerMsg={'Alert'} button_1={'No'} button_2={'Yes'} alertMsg={alertMsg} />
+        <AlertUi isOpen={alertUi} closeModal={(value) => handle_logout(value)} headerMsg={'Alert'} button_1={'No'} button_2={'Yes'} alertMsg={alertMsg} />
       }
 
       <div className='lg:hidden md:min-h-[45px] your-element border-b-[1px] border-b-slate-100 sticky top-0 z-[99] bg-white'>
@@ -166,9 +155,12 @@ export default function MobileHeader({ home, back_btn, share, search, cart, clea
 
             {
               !back_btn && (
-                <div className='flex items-center gap-5'>
-                <Image onClick={() => router.push('/')} className='w-auto h-[20px] object-contain' height={60} width={100} alt='logo' src={'/logo.png'}></Image>
-              </div>
+                <div className='flex items-center gap-4'>
+                  <div onClick={() => setSideMenu(true)} className="cursor-pointer">
+                    <Image src="/Navbar/menu.svg" height={24} width={24} alt="menu" />
+                  </div>
+                  <Image onClick={() => router.push('/')} className='w-auto h-[20px] object-contain' height={60} width={100} alt='logo' src={'/logo.png'}></Image>
+                </div>
               )
             }
 
@@ -180,7 +172,6 @@ export default function MobileHeader({ home, back_btn, share, search, cart, clea
             } */}
 
             {(search || (router.query.search)) &&
-<<<<<<< HEAD
               <div className={`flex items-center gap-[8px] transition-all ease-in duration-500 delay-100 ${showSearch ? 'w-[250px]' : ''}`}>
                 {search &&
                   <>
@@ -189,21 +180,12 @@ export default function MobileHeader({ home, back_btn, share, search, cart, clea
                     <option value="All">All</option>
                     <option value="item_code">Item Code</option>
                   </select>
-=======
-              <div className={`flex items-center gap-[8px] transition-all ease-in duration-500 delay-100 ${showSearch ? 'w-[180px]' : ''}`}>
-                {search &&
-                  <>
-                    {/* router.push('/search') */}
->>>>>>> e4e0643b7f53e8b6c06657ac882610c03eedce54
                     {!showSearch && <div onClick={() => { setShowSearch(!showSearch) }} className='flex transition-all ease-in duration-500 delay-100 items-center justify-end'>
                       <Image onClick={() => { }} style={{ objectFit: 'contain' }} className='h-[20px] object-contain' height={40} width={40} alt='vantage' src={'/search.svg'}></Image>
                     </div>}
 
                     <div className={`transition-all ease-in duration-500 delay-100 ${!showSearch ? 'h-0 w-0 opacity-0' : 'opacity-100 p-[5px_10px] h-[30px] flex items-center w-full border_color rounded-[20px]'} `}>
-<<<<<<< HEAD
                       
-=======
->>>>>>> e4e0643b7f53e8b6c06657ac882610c03eedce54
                       <input id='search' value={searchValue} spellcheck="false" onChange={(eve) => { getSearchTxt(eve) }} className='w-[95%] text-[14px]' placeholder='Search Products' />
                       {searchValue && <Image onClick={() => clearSearchValue()} style={{ objectFit: 'contain' }} className='h-[18px] w-[15px] cursor-pointer mr-2' height={25} width={25} alt='vantage' src={'/Navbar/cancel.svg'}></Image>}
                       <Image onClick={() => { searchValue == '' ? null : handleSearch() }} style={{ objectFit: 'contain' }} className='h-[18px] w-[15px] cursor-pointer' height={25} width={25} alt='vantage' src={'/search.svg'}></Image>

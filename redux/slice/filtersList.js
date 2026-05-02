@@ -121,12 +121,8 @@ const initialState = {
         warranty_: [],
         output_voltage: [],
         output_current: [],
-<<<<<<< HEAD
         color_temp_: [],
         search_type: ''
-=======
-        color_temp_: []
->>>>>>> e4e0643b7f53e8b6c06657ac882610c03eedce54
     }
 };
 
@@ -141,10 +137,7 @@ const FiltersList = createSlice({
 
         setAllFilter(state, action) {
             const payload = action.payload;
-<<<<<<< HEAD
-=======
-            console.log('pay', payload)
->>>>>>> e4e0643b7f53e8b6c06657ac882610c03eedce54
+
             Object.keys(payload).forEach(key => {
                 if (state.filtersValue.hasOwnProperty(key)) {
                     state.filtersValue[key] = payload[key];
@@ -189,12 +182,8 @@ const FiltersList = createSlice({
                 warranty_: [],
                 output_voltage: [],
                 output_current: [],
-<<<<<<< HEAD
                 color_temp_: [],
                 search_type: ''
-=======
-                color_temp_: []
->>>>>>> e4e0643b7f53e8b6c06657ac882610c03eedce54
             }
         },
     },

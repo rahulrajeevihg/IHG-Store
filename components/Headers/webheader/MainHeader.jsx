@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, useRef } from 'react'
 import Image from 'next/image';
 import { useRouter } from 'next/router'
-import { check_Image, currencyFormatter1, stored_customer_info, clear_cartitem, get_cart_items, move_all_tocart, get_search_products, typesense_search_items } from '@/libs/api';
+import { check_Image, currencyFormatter1, stored_customer_info, clear_cartitem, get_cart_items, move_all_tocart, get_search_products, typesense_search_items, logout } from '@/libs/api';
 import { useSelector, useDispatch } from 'react-redux';
 
 import AlertUi from '@/components/Common/AlertUi';
@@ -13,7 +13,7 @@ import { toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import Link from 'next/link';
 import SearchCom from '@/components/Search/SearchCom';
-import Cookies from 'js-cookie';
+
 import { resetFilters, setAllFilter } from '@/redux/slice/filtersList';
 import { resetSetFilters } from '@/redux/slice/ProductListFilters';
 import dynamic from 'next/dynamic';
@@ -175,12 +175,10 @@ export default function MainHeader({ header_template, theme_settings, website_se
   }
   const checkUser = () => {
 
-    if (localStorage && localStorage['api_key']) {
+    if (localStorage && localStorage['full_name']) {
       moveToProfile()
     } else {
       router.push('/login')
-      // visible = true
-      // setVisible(visible)
     }
   }
 
@@ -233,7 +231,6 @@ export default function MainHeader({ header_template, theme_settings, website_se
 
     if (inputText.length >= 3) {
       const queryParams = new URLSearchParams({
-<<<<<<< HEAD
         // q: `${searchType == 'All' ? (inputText ? inputText : '*') : '*'}`,
         q: `${searchType != 'item_code' ? `${inputText}` : inputText}`,
         query_by: `${searchType == 'item_code' ? 'item_code' : "item_name,item_description,item_code"}`,
@@ -249,17 +246,6 @@ export default function MainHeader({ header_template, theme_settings, website_se
       queryParams.set('infix', 'always');
       }
 
-=======
-        q: `${inputText ? inputText : '*'}`,
-        query_by: "item_name,item_description,item_code",
-        page: "1",
-        per_page: "20",
-        // query_by_weights: "1,2,3",
-        exhaustive_search: "true",
-        // filter_by: `item_code:${inputText}* || item_description:${inputText}*`
-      });
-
->>>>>>> e4e0643b7f53e8b6c06657ac882610c03eedce54
       const data = await typesense_search_items(queryParams);
       const initialData = data.hits || [];
       setLoader(false)
@@ -298,11 +284,8 @@ export default function MainHeader({ header_template, theme_settings, website_se
     }, 600); // Adjust the debounce delay (in milliseconds) 
   };
 
-<<<<<<< HEAD
   const [searchType, setSearchType] = useState('')
 
-=======
->>>>>>> e4e0643b7f53e8b6c06657ac882610c03eedce54
   async function handleKeyDown(event) {
     if (event.key === 'Enter') {
       if (searchValue && searchValue != '') {
@@ -311,7 +294,6 @@ export default function MainHeader({ header_template, theme_settings, website_se
     }
   }
 
-<<<<<<< HEAD
 
   const handleSearchType = (event)=>{
     setSearchType(event.target.value)
@@ -319,8 +301,6 @@ export default function MainHeader({ header_template, theme_settings, website_se
     dispatch(setAllFilter({'search_type': event.target.value}))
   }
 
-=======
->>>>>>> e4e0643b7f53e8b6c06657ac882610c03eedce54
   function navigateToSearch(route) {
     router.push(route)
     // setSearchValue('')
@@ -331,11 +311,8 @@ export default function MainHeader({ header_template, theme_settings, website_se
     if (router.asPath === '/list') {
       setSearchValue('')
     }
-<<<<<<< HEAD
 
     dispatch(setAllFilter({'search_type': searchType}))
-=======
->>>>>>> e4e0643b7f53e8b6c06657ac882610c03eedce54
   }, [router.asPath])
 
   const productFilter = useSelector((state) => state.FiltersList.filtersValue)
@@ -363,14 +340,14 @@ export default function MainHeader({ header_template, theme_settings, website_se
     setAlertMsg({ message: 'Are you sure do you want to logout ?' });
   }
 
-  function logout(value) {
+  async function handle_logout(value) {
     if (value == 'Yes' && alertUi) {
       setAlertUi(false);
+      // Invalidate the Frappe session server-side (clears the sid HttpOnly cookie)
+      await logout();
       localStorage.clear();
       dispatch(setCustomerInfo({ logout: true }));
       dispatch(resetCust({}));
-      Cookies.remove('api_key')
-      Cookies.remove('api_secret')
       toast.success("You have successfully logged out!")
       router.push('/login');
     } else {
@@ -452,17 +429,11 @@ export default function MainHeader({ header_template, theme_settings, website_se
   }, [isLogout]);
 
   const clearSearchValue = () => {
-<<<<<<< HEAD
     setSearchType('All')
     setSearchValue('')
     dispatch(resetSetFilters())
     // dispatch(setAllFilter({...initialState}))
     dispatch(setAllFilter({'search_type': ''}))
-=======
-    setSearchValue('')
-    dispatch(resetSetFilters())
-    // dispatch(setAllFilter({...initialState}))
->>>>>>> e4e0643b7f53e8b6c06657ac882610c03eedce54
     dispatch(resetFilters())
     localStorage.setItem('sort_by', 'stock:desc')
 
@@ -488,7 +459,7 @@ export default function MainHeader({ header_template, theme_settings, website_se
       }
 
       {alertUi &&
-        <AlertUi isOpen={alertUi} closeModal={(value) => logout(value)} headerMsg={'Alert'} button_1={'No'} button_2={'Yes'} alertMsg={alertMsg} />
+        <AlertUi isOpen={alertUi} closeModal={(value) => handle_logout(value)} headerMsg={'Alert'} button_1={'No'} button_2={'Yes'} alertMsg={alertMsg} />
       }
 
       <div className='flex items-center justify-between gap-[10px] w-[100%]'>
@@ -506,15 +477,11 @@ export default function MainHeader({ header_template, theme_settings, website_se
 
                 {(res.section_name == 'Header Menu' && res.section_type == 'Menu') &&
                   <div className={`flex-[0_0_calc(45%_-_0px)]`}>
-<<<<<<< HEAD
                     <div key={index} className={`${website_settings.enable_multi_store == 1 ? 'w-full' : 'w-full'} relative flex justify-end gap-3`}>
                       <select name="" id="" value={searchType} onChange={(e)=> handleSearchType(e)}  className="border border-gray-300 outline-none p-2 rounded-[30px] px-3">
                     <option value="All">All</option>
                     <option value="item_code">Item Code</option>
                   </select>
-=======
-                    <div key={index} className={`${website_settings.enable_multi_store == 1 ? 'w-full' : 'w-full'} relative flex justify-end`}>
->>>>>>> e4e0643b7f53e8b6c06657ac882610c03eedce54
                       <div className="p-[5px_10px_5px_20px] h-[35px] flex items-center w-[69.5%]  border_color rounded-[30px]">
                         <input value={searchValue} autoComplete='off' id='search' spellCheck="false" onKeyDown={handleKeyDown} ref={searchRef} onChange={(eve) => { getSearchTxt(eve) }} onFocus={() => { setActiveSearch(true) }} onBlur={() => { setActiveSearch(true) }} className='w-[95%] text-[14px]' placeholder='Search Products' />
                         {searchValue && <Image onClick={() => clearSearchValue()} style={{ objectFit: 'contain' }} className='h-[18px] w-[15px] cursor-pointer mr-2' height={25} width={25} alt='vantage' src={'/Navbar/cancel.svg'}></Image>}
@@ -546,9 +513,18 @@ export default function MainHeader({ header_template, theme_settings, website_se
 
                     </div> */}
 
+                    <Link href="/tabs/yourcart" className="relative headerBtbs">
+                      <Image style={{ objectFit: 'contain' }} className='h-[25px] w-[23px]' height={25} width={25} alt='cart' src={'/Navbar/Cart.svg'}></Image>
+                      {cartCount > 0 && (
+                        <span className="absolute -top-2 -right-2 bg-red-600 text-white text-[10px] font-bold rounded-full h-5 w-5 flex items-center justify-center">
+                          {cartCount}
+                        </span>
+                      )}
+                    </Link>
+
                     <div className="relative">
                       <button
-                        onClick={() => setIsLogout(true)}
+                        onClick={() => customerName ? setIsLogout(true) : router.push('/login')}
                         className="flex items-center justify-center"
                       >
                         <p className='text-[16px] font-bold text-center line-clamp-1 bottom-[-21px]'>{customerName ? (customerName) : 'Login'}</p>

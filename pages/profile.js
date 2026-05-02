@@ -2,7 +2,7 @@ import AlertUi from '@/components/Common/AlertUi'
 import MobileHeader from '@/components/Headers/mobileHeader/MobileHeader'
 import { resetCust } from '@/redux/slice/customerInfo'
 import { setCustomerInfo } from '@/redux/slice/logInInfo'
-import Cookies from 'js-cookie'
+import { logout } from '@/libs/api'
 import Image from 'next/image'
 import { useRouter } from 'next/router'
 import { useEffect, useState } from 'react'
@@ -28,15 +28,15 @@ const profile = () => {
         setAlertMsg({ message: 'Are you sure do you want to logout ?' });
     }
 
-    function logout(value) {
+    async function logout_user(value) {
         if (value == 'Yes' && alertUi) {
             setAlertUi(false);
+            // Invalidate the Frappe session server-side (clears the sid HttpOnly cookie)
+            await logout();
             localStorage.clear();
             dispatch(setCustomerInfo({ logout: true }));
             dispatch(resetCust({}));
             toast.success("You have successfully logged out!")
-            Cookies.remove('api_key')
-            Cookies.remove('api_secret')
             router.push('/login');
         } else {
             setAlertUi(false);
@@ -46,7 +46,7 @@ const profile = () => {
     return (
         <>
             {alertUi &&
-                <AlertUi isOpen={alertUi} closeModal={(value) => logout(value)} headerMsg={'Alert'} button_1={'No'} button_2={'Yes'} alertMsg={alertMsg} />
+                <AlertUi isOpen={alertUi} closeModal={(value) => logout_user(value)} headerMsg={'Alert'} button_1={'No'} button_2={'Yes'} alertMsg={alertMsg} />
             }
 
             <MobileHeader back_btn={true} />

@@ -526,7 +526,7 @@ function resolveImageSrc(raw) {
   if (!raw || typeof raw !== "string" || raw.trim() === "") return null;
   const trimmed = raw.trim();
   if (trimmed.startsWith("https://")) return trimmed;
-  if (trimmed.startsWith("http://")) return trimmed.replace("http://", "https://");
+  if (trimmed.startsWith("http://")) return trimmed;
   return check_Image(trimmed); // relative /files/... → prepends https://erp.ihgind.com
 }
 

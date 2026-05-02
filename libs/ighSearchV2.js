@@ -1,7 +1,10 @@
 import { domain } from "./config/siteConfig";
 import { handleUnauthorizedResponse } from "./auth";
 
-const apiBase = `https://${domain}/api/method/igh_search.igh_search.api.`;
+// Route all igh_search API calls through the ERP cookie-forwarding proxy
+// so the Frappe `sid` HttpOnly cookie is forwarded verbatim to the backend.
+// The proxy handler is at pages/api/erp/[...path].js → mounted at /api/erp/.
+const apiBase = `/api/erp/api/method/igh_search.igh_search.api.`;
 
 export const V2_SORT_OPTIONS = [
   { label: "Relevance", value: "" },
@@ -103,23 +106,9 @@ export const DEFAULT_V2_STATE = {
   },
 };
 
-const getAuthHeaders = () => {
-  if (typeof window === "undefined") {
-    return { "Content-Type": "application/json" };
-  }
-
-  const apiKey = localStorage.getItem("api_key");
-  const apiSecret = localStorage.getItem("api_secret");
-
-  if (apiKey && apiSecret) {
-    return {
-      Authorization: `token ${apiKey}:${apiSecret}`,
-      "Content-Type": "application/json",
-    };
-  }
-
-  return { "Content-Type": "application/json" };
-};
+const getAuthHeaders = () => ({
+  "Content-Type": "application/json",
+});
 
 const createRequestController = (externalSignal, timeoutMs) => {
   const controller = new AbortController();
@@ -189,6 +178,8 @@ const postApi = async (method, payload, options = {}) => {
       headers: getAuthHeaders(),
       body: JSON.stringify(payload || {}),
       signal,
+      credentials: 'include',
+      redirect: "error",
     });
 
     return parseJsonResponse(response);
@@ -213,6 +204,7 @@ const getApi = async (method, options = {}) => {
       method: "GET",
       headers: getAuthHeaders(),
       signal,
+      credentials: 'include',
     });
 
     return parseJsonResponse(response);

@@ -1,32 +1,30 @@
 import { toast } from "react-toastify";
 import 'react-toastify/dist/ReactToastify.css';
 import { domain, typesense_api_key, website } from "./config/siteConfig"
-<<<<<<< HEAD
 import { handleUnauthorizedResponse } from "./auth";
-=======
-import Cookies from "js-cookie";
->>>>>>> e4e0643b7f53e8b6c06657ac882610c03eedce54
 
-// const methodUrl = `http://${domain}/api/method/`;
-const methodUrl = `https://${domain}/api/method/`;
-const resourceUrl = `https://${domain}/api/resource/`;
+// All ERP calls go through our cookie-forwarding proxy.
+// The proxy handler is at pages/api/erp/[...path].js, mounted at /api/erp/.
+// It forwards req.headers.cookie verbatim to the ERP server so the 'sid'
+// session cookie is preserved and 'User None is disabled' errors are eliminated.
+const methodUrl = `/api/erp/api/method/`;
+const resourceUrl = `/api/erp/api/resource/`;
 const domainUrl = domain;
-let sitename = "ecommerce_business_store.ecommerce_business_store"
+let sitename = "igh_search.igh_search"
 // let sitename="go1_commerce.go1_commerce"
 
-const apiUrl_common = `${sitename}.v2.common.`
-// const apiUrl_common = 'ecommerce_business_store.ecommerce_business_store.v2.common.'
-const apiUrl_carts = `${sitename}.v2.cart.`
-const apiUrl_customer = `${sitename}.v2.customer.`
-const apiUrl_product = `${sitename}.v2.product.`
-const apiUrl_category = `${sitename}.v2.category.`
-const apiUrl_checkout = `${sitename}.v2.checkout.`
-const apiUrl_orders = `${sitename}.v2.orders.`
-const apiUrl_vendors = `${sitename}.v2.vendor.`
-const apiUrl_masters = `${sitename}.v2.masters.`
-const apiUrl_mobileapi = `${sitename}.mobileapi.`
+const apiUrl_common = `${sitename}.api.`
+const apiUrl_carts = `${sitename}.api.`
+const apiUrl_customer = `${sitename}.api.`
+const apiUrl_product = `${sitename}.api.`
+const apiUrl_category = `${sitename}.api.`
+const apiUrl_checkout = `${sitename}.api.`
+const apiUrl_orders = `${sitename}.api.`
+const apiUrl_vendors = `${sitename}.api.`
+const apiUrl_masters = `${sitename}.api.`
+const apiUrl_mobileapi = `${sitename}.api.`
 const apiUrl_api = `${sitename}.api.`
-const apiUrl_api_url = `${sitename}.v2.customer`
+const apiUrl_api_url = `${sitename}.api`
 
 
 export const checkMobile = () => {
@@ -116,7 +114,7 @@ export function storeCustomerInfo(resp) {
 }
 
 export const check_Image = (Image) => {
-    let baseUrl = `https://${domain}`
+    let baseUrl = `http://${domain}`
     if (Image && Image != '') {
         if (Image.indexOf('https') == -1) {
             return baseUrl + Image;
@@ -129,7 +127,7 @@ export const check_Image = (Image) => {
 }
 
 export const seo_Image = (Image) => {
-    let baseUrl = `https://${domain}`
+    let baseUrl = `http://${domain}`
     if (Image) {
         if (Image.indexOf('https') == -1) {
             return baseUrl + Image;
@@ -182,50 +180,117 @@ export async function checkCart(id, array) {
     return cnt;
 }
 
+/**
+ * postMethod — sends a POST request through the ERP cookie-forwarding proxy.
+ *
+ * Authentication strategy:
+ *   Relies entirely on the HttpOnly `sid` session cookie set by the Frappe
+ *   server after login. The proxy forwards req.headers.cookie verbatim so the
+ *   ERP sees the valid session. No Authorization header is used here.
+ */
 export async function postMethod(api, payload) {
     try {
-        let apikey;
-        let secret;
-        if (typeof window !== 'undefined') {
-            apikey = localStorage['api_key'] ? localStorage['api_key'] : undefined;
-            secret = localStorage['api_secret'] ? localStorage['api_secret'] : undefined;
+        if (!api || typeof api !== 'string') {
+            throw new Error('Invalid API endpoint');
         }
-        const myHead = new Headers((apikey && secret) ? { "Authorization": 'token ' + apikey + ':' + secret, "Content-Type": "application/json" } : { "Content-Type": "application/json" })
-        const response = await fetch(api, { method: 'POST', headers: myHead, body: JSON.stringify(payload) })
-<<<<<<< HEAD
+
+        // Hard guard: cart update is write-only and must never be called as query-string GET style.
+        if (api.includes('update_cartitem') && api.includes('?')) {
+            throw new Error('update_cartitem must be called via POST body, not query params');
+        }
+
+        const body = (typeof payload === 'object') ? JSON.stringify(payload) : payload;
+
+        const headers = {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+        };
+
+        // Frappe requires X-Frappe-CSRF-Token for all non-GET requests.
+        // Read it directly from document.cookie so we always send the current value.
+        const csrfCookie = document.cookie.split(';').find(c => c.trim().startsWith('csrf_token='));
+        if (csrfCookie) {
+            headers['X-Frappe-CSRF-Token'] = decodeURIComponent(csrfCookie.split('=').slice(1).join('=').trim());
+        }
+
+        const response = await fetch(api, {
+            method: 'POST',
+            headers,
+            body,
+            credentials: 'include',
+            redirect: 'error',
+        });
+
+        if (api.includes('update_cartitem')) {
+            console.info('[postMethod] update_cartitem request sent as POST', { api });
+        }
+
         if (handleUnauthorizedResponse(response)) {
             return;
         }
-=======
->>>>>>> e4e0643b7f53e8b6c06657ac882610c03eedce54
+
+        // Guard against HTML error pages (auth/proxy failures)
+        const contentType = response.headers.get('content-type') || '';
+        if (!contentType.includes('application/json')) {
+            const rawText = await response.text();
+            console.error('[postMethod] Non-JSON response:', rawText.slice(0, 500));
+            toast.error('Unexpected server response. Please try again.');
+            return { message: { status: 'error', message: 'Non-JSON response from server.' } };
+        }
+
         const data = await response.json();
-        return data
-    }
-    catch (error) {
-        // return error.message
-        toast.error(error.message)
+        return data;
+    } catch (error) {
+        console.error('API Error:', error);
+        const rawMessage = error?.message || 'Unknown API error';
+        const message = /redirect/i.test(rawMessage)
+            ? 'Request was redirected before reaching ERP. Please verify API URL/proxy settings.'
+            : rawMessage;
+        toast.error(message);
+        return { message: { status: 'error', message } };
     }
 }
 
 
+/**
+ * get — sends a GET request through the ERP cookie-forwarding proxy.
+ * The browser's sid cookie is forwarded by the proxy; no Authorization header needed.
+ */
 export async function get(api) {
-    let apikey;
-    let secret;
-    if (typeof window !== 'undefined') {
-        apikey = localStorage['api_key'] ? localStorage['api_key'] : undefined;
-        secret = localStorage['api_secret'] ? localStorage['api_secret'] : undefined;
-    }
-
-    const myHead = new Headers((apikey && secret) ? { "Authorization": 'token ' + apikey + ':' + secret, "Content-Type": "application/json" } : { "Content-Type": "application/json" })
-    const response = await fetch(api, { method: 'GET', headers: myHead })
-<<<<<<< HEAD
+    const response = await fetch(api, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        credentials: 'include',
+    });
     if (handleUnauthorizedResponse(response)) {
         return;
     }
-=======
->>>>>>> e4e0643b7f53e8b6c06657ac882610c03eedce54
+    // Guard against HTML error pages
+    const contentType = response.headers.get('content-type') || '';
+    if (!contentType.includes('application/json')) {
+        const rawText = await response.text();
+        console.error('[get] Non-JSON response:', rawText.slice(0, 500));
+        return null;
+    }
     const data = await response.json();
     return data;
+}
+
+async function parseJsonResponseSafe(response, contextLabel = 'api') {
+    const contentType = response.headers.get('content-type') || '';
+    const rawText = await response.text();
+
+    if (!contentType.includes('application/json')) {
+        console.error(`[${contextLabel}] Non-JSON response:`, rawText.slice(0, 500));
+        return null;
+    }
+
+    try {
+        return JSON.parse(rawText);
+    } catch (error) {
+        console.error(`[${contextLabel}] Invalid JSON response:`, error?.message, rawText.slice(0, 500));
+        return null;
+    }
 }
 
 
@@ -305,10 +370,10 @@ export async function get_product_enquiries(data) {
 
 
 export async function get_cart_items() {
-    let data = { "customer_id": localStorage['customerRefId'] }
-    let api = methodUrl + apiUrl_carts + 'get_cart_items';
-    return await postMethod(api, data)
-    // return await get(api)
+    const customerId = localStorage['customerRefId'];
+    const base = methodUrl + apiUrl_carts + 'get_cart_items';
+    const api = customerId ? `${base}?customer_id=${encodeURIComponent(customerId)}` : base;
+    return await get(api);
 }
 
 export async function insert_cart_items(data) {
@@ -445,9 +510,75 @@ export async function get_wallet_details() {
     return await get(api)
 }
 
+/**
+ * login — Frappe standard session login.
+ *
+ * POSTs form-encoded credentials to /api/method/login.
+ * On success, Frappe sets an HttpOnly `sid` cookie — we do NOT parse or store it.
+ * All subsequent API calls rely on credentials:'include' + the proxy forwarding cookies.
+ *
+ * Returns the parsed JSON body on success, or { _error: true, _raw: <text> } on
+ * non-JSON responses (e.g. HTML error pages from a misconfigured proxy).
+ */
 export async function login(data) {
-    let api = methodUrl + "igh_search.igh_search.api.get_user_credentials";
-    return await postMethod(api, data)
+    const usr = data?.email || '';
+    const pwd = data?.pwd || '';
+
+    const api = `${methodUrl}login`;
+
+    // Frappe login endpoint requires application/x-www-form-urlencoded
+    const body = new URLSearchParams({ usr, pwd }).toString();
+
+    try {
+        const response = await fetch(api, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'Accept': 'application/json',
+            },
+            body,
+            credentials: 'include',
+        });
+
+        const contentType = response.headers.get('content-type') || '';
+        const rawText = await response.text();
+        if (!contentType.includes('application/json')) {
+            console.error('[login] Non-JSON response (auth/proxy failure):', rawText.slice(0, 500));
+            return { _error: true, _raw: rawText, message: { message: 'Login failed: unexpected server response.' } };
+        }
+
+        try {
+            return JSON.parse(rawText);
+        } catch (parseError) {
+            console.error('[login] Invalid JSON payload:', parseError?.message, rawText.slice(0, 500));
+            return {
+                _error: true,
+                _raw: rawText,
+                message: { message: 'Login failed: invalid server response.' }
+            };
+        }
+    } catch (error) {
+        console.error('[login] Network error:', error);
+        return { _error: true, message: { message: error.message } };
+    }
+}
+
+/**
+ * logout — Frappe standard session logout.
+ *
+ * POSTs to /api/method/logout so the server invalidates the `sid` cookie.
+ * The browser's HttpOnly cookie is automatically cleared by the server's Set-Cookie header.
+ */
+export async function logout() {
+    try {
+        await fetch(`${methodUrl}logout`, {
+            method: 'POST',
+            headers: { 'Accept': 'application/json' },
+            credentials: 'include',
+        });
+    } catch (error) {
+        console.error('[logout] Error calling logout endpoint:', error);
+    }
 }
 
 export async function social_login(data) {
@@ -549,14 +680,11 @@ export async function get_brand_based_products(data) {
     return await postMethod(api, data)
 }
 
-<<<<<<< HEAD
 export async function ai_product_search(data) {
     let api = methodUrl + 'igh_search.igh_search.api.ai_product_search';
     return await postMethod(api, data)
 }
 
-=======
->>>>>>> e4e0643b7f53e8b6c06657ac882610c03eedce54
 export async function insert_email_subscription(data) {
     let api = methodUrl + apiUrl_api + 'insert_email_subscription';
     return await postMethod(api, data)
@@ -587,82 +715,72 @@ export async function typesense_search_items(queryParams) {
     }
     // https://search-ihg.tridotstech.com
     // let api = `http://178.128.108.196:8108/collections/product/documents/search?${queryParams.toString()}`
-    // let api = `https://search-ihg.tridotstech.com/collections/product/documents/search?${queryParams.toString()}`
-    let api = `https://search.ihgind.com/collections/product/documents/search?${queryParams.toString()}`
-    const myHead = new Headers({ "Content-Type": "application/json", "x-typesense-api-key": `${typesense_api_key ? typesense_api_key : "xyz"}` })
-<<<<<<< HEAD
+    // let api = `https://search.ihgind.com/collections/product/documents/search?${queryParams.toString()}`
+    let api = `/search-api/collections/product/documents/search?${queryParams.toString()}`
+    const myHead = new Headers({ "Content-Type": "application/json", "x-typesense-api-key": "gjbRIS6NQkArF5lJx08U7bVJgg8beTIFFvQVBf7xdKiIWNb8" })
     // const myHead = new Headers({ "Content-Type": "application/json", "x-typesense-api-key": "qfqPMOHSbj9tRobC9YW126qgYzHsPyhLU2FMKxmzJCh7QO0T" })
-=======
-    // const myHead = new Headers({ "Content-Type": "application/json", "x-typesense-api-key": `${"xyz"}` })
->>>>>>> e4e0643b7f53e8b6c06657ac882610c03eedce54
-    const response = await fetch(api, { method: 'GET', headers: myHead, })
-    return await response.json()
+    const response = await fetch(api, { method: 'GET', headers: myHead })
+    return await parseJsonResponseSafe(response, 'typesense_search_items')
 }
 
 export async function get_all_masters(router) {
-    let apikey;
-    let secret;
-    if (typeof window !== 'undefined') {
-        apikey = localStorage['api_key'] ? localStorage['api_key'] : undefined;
-        secret = localStorage['api_secret'] ? localStorage['api_secret'] : undefined;
-    }
-    let api = `https://${domain}/api/method/igh_search.igh_search.api.get_all_masters`
-    const myHead = new Headers((apikey && secret) ? { "Authorization": 'token ' + apikey + ':' + secret, "Content-Type": "application/json" } : { "Content-Type": "application/json" })
-    const response = await fetch(api, { method: 'GET', headers: myHead, })
-<<<<<<< HEAD
+    const api = `/api/erp/api/method/igh_search.igh_search.api.get_all_masters`;
+    const response = await fetch(api, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        credentials: 'include',
+    });
     if (handleUnauthorizedResponse(response)) {
         return;
-=======
-    if(response && response.status === 401 && response.statusText === "UNAUTHORIZED"){
-        // console.log(response,"response")
-        localStorage.clear();
-        Cookies.remove('api_key')
-        Cookies.remove('api_secret')
-        router?.push('/login')
->>>>>>> e4e0643b7f53e8b6c06657ac882610c03eedce54
     }
-    return await response.json()
+    return await parseJsonResponseSafe(response, 'get_all_masters');
 }
 
 
 export async function get_all_category() {
-    let apikey;
-    let secret;
-    if (typeof window !== 'undefined') {
-        apikey = localStorage['api_key'] ? localStorage['api_key'] : undefined;
-        secret = localStorage['api_secret'] ? localStorage['api_secret'] : undefined;
-    }
-    let api = `https://${domain}/api/resource/Item%20Group?filters=[[%22name%22,%22!=%22,%22All%20Item%20Groups%22]]`
-    const myHead = new Headers((apikey && secret) ? { "Authorization": 'token ' + apikey + ':' + secret, "Content-Type": "application/json" } : { "Content-Type": "application/json" })
-    const response = await fetch(api, { method: 'GET', headers: myHead, })
-    return await response.json()
+    const api = `/api/erp/api/resource/Item%20Group?filters=[[%22name%22,%22!=%22,%22All%20Item%20Groups%22]]`;
+    const response = await fetch(api, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        credentials: 'include',
+    });
+    return await parseJsonResponseSafe(response, 'get_all_category');
 }
 
 
 export async function get_product_details(code) {
-    let apikey;
-    let secret;
-    if (typeof window !== 'undefined') {
-        apikey = localStorage['api_key'] ? localStorage['api_key'] : undefined;
-        secret = localStorage['api_secret'] ? localStorage['api_secret'] : undefined;
-    }
-    let api = `https://${domain}/api/method/igh_search.igh_search.api.get_product_info`
-    const myHead = new Headers({ "Authorization": `token ${apikey}:${secret}`, "Content-Type": "application/json","x-typesense-api-key": "xyz" })
-    const response = await fetch(api, { method: 'POST', headers: myHead, body: JSON.stringify({"item_code": code}) })
-    return await response.json()
+    const api = `/api/erp/api/method/igh_search.igh_search.api.get_product_info`;
+    const response = await fetch(api, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify({ item_code: code }),
+        credentials: 'include',
+    });
+    return await parseJsonResponseSafe(response, 'get_product_details');
 }
 
-export async function get_brands_list(keys,data) {
-    let apikey;
-    let secret;
-    if (typeof window !== 'undefined') {
-        apikey = localStorage['api_key'] ? localStorage['api_key'] : undefined;
-        secret = localStorage['api_secret'] ? localStorage['api_secret'] : undefined;
-    }
-    let api = `https://${domain}/api/method/get_brands`
+export async function get_brands_list(keys, data) {
+    const api = `/api/erp/api/method/get_brands`;
+    const response = await fetch(api, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify(data),
+        credentials: 'include',
+    });
+    return await parseJsonResponseSafe(response, 'get_brands_list');
+}
+export async function get_user_opportunities() {
+    let api = methodUrl + 'igh_search.api.get_user_opportunities';
+    return await get(api);
+}
 
-    const token = keys ? keys : (apikey && secret) ? `token ${apikey}:${secret}` : null
-    const myHead = new Headers(token ? { "Authorization": token, "Content-Type": "application/json" } : { "Content-Type": "application/json" })
-    const response = await fetch(api, { method: 'POST', headers: myHead,body:JSON.stringify(data) })
-    return await response.json()
+export async function search_opportunities(search, customer_id) {
+    let api = methodUrl + 'igh_search.igh_search.api.search_opportunities';
+    return await postMethod(api, { search, customer_id: customer_id || '' });
+}
+
+export async function create_quotation_from_portal(payload) {
+    let api = methodUrl + 'igh_search.api.create_quotation_from_portal';
+    const resp = await postMethod(api, payload);
+    return resp;
 }

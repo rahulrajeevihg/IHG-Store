@@ -174,11 +174,7 @@ export default function Filters({ mastersData, filtersList, ProductFilter, close
           <RangeSlider MIN={0} MAX={350} ranges={priceRange} setRanges={setPriceRange} label={'Price'} label_classname={label_classname} />
         </div> */}
         <div className='py-4 md:py-2'>
-<<<<<<< HEAD
           <RangeSlider MIN={0} MAX={100000} ranges={filters.price_range} setRanges={(ranges) => { console.log(ranges);
-=======
-          <RangeSlider MIN={0} MAX={100000} ranges={filters.price_range} setRanges={(ranges) => {
->>>>>>> e4e0643b7f53e8b6c06657ac882610c03eedce54
             setFilters({ ...filters, price_range: { ...ranges } });
           }
           } label={'Price'} label_classname={label_classname} />

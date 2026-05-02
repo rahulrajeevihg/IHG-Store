@@ -155,16 +155,11 @@ export default function WebPageSection({ data, i, isLast,openDetail }) {
   ]
 
   const changeCategory = (item) => {
-<<<<<<< HEAD
     // const val = item.redirect_url.split("=")[1]
     // router.push(`/list?category=${val}`)
     if(item.redirect_url){
       router.push(item.redirect_url)
     }
-=======
-    const val = item.redirect_url.split("=")[1]
-    router.push(`/list?category=${val}`)
->>>>>>> e4e0643b7f53e8b6c06657ac882610c03eedce54
     // router.push("/" + item.redirect_url)
     // dispatch(setFilter({ item_group: [val] }));
     // dispatch(setBrand([]))

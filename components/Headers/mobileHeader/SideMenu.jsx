@@ -22,24 +22,24 @@ export default function SideMenu({ sideMenu, setSideMenu, logout }) {
       icon: '/Sidemenu/category.svg',
       enable: 1
     },
-    // {
-    //   title: 'Wishlist',
-    //   route: '/tabs/wishlist',
-    //   icon: '/Sidemenu/heart.svg',
-    //   enable: 1
-    // },
-    // {
-    //   title: 'MyCart',
-    //   route: '/tabs/yourcart',
-    //   icon: '/Sidemenu/mycart.svg',
-    //   enable: 1
-    // },
-    // {
-    //   title: 'Orders',
-    //   route: '/tabs/my-orders',
-    //   icon: '/Sidemenu/cart.svg',
-    //   enable: 1
-    // },
+    {
+      title: 'Wishlist',
+      route: '/tabs/wishlist',
+      icon: '/Sidemenu/heart.svg',
+      enable: 1
+    },
+    {
+      title: 'MyCart',
+      route: '/tabs/yourcart',
+      icon: '/Sidemenu/mycart.svg',
+      enable: 1
+    },
+    {
+      title: 'Orders',
+      route: '/tabs/my-orders',
+      icon: '/Sidemenu/cart.svg',
+      enable: 1
+    },
     {
       title: 'Profile',
       route: '/profile?my_account=',

@@ -2,12 +2,19 @@ export const SESSION_TIMEOUT_MS = 20 * 60 * 1000;
 export const SESSION_LAST_ACTIVITY_KEY = "session_last_activity";
 export const SESSION_EXPIRED_FLAG = "session_expired";
 
+/**
+ * hasAuthSession — returns true if the user has an active session.
+ *
+ * We use `localStorage['full_name']` as the logged-in signal because the
+ * Frappe `sid` session cookie is HttpOnly and cannot be read by JavaScript.
+ * `full_name` is written on successful login and cleared on logout.
+ */
 export function hasAuthSession() {
   if (typeof window === "undefined") {
     return false;
   }
 
-  return Boolean(localStorage.getItem("api_key") && localStorage.getItem("api_secret"));
+  return Boolean(localStorage.getItem("full_name"));
 }
 
 export function touchSessionActivity() {
@@ -38,13 +45,10 @@ export function clearAuthSession() {
     return;
   }
 
+  // Clear all frontend state. Do NOT attempt to manually delete the `sid`
+  // HttpOnly cookie — it is cleared automatically by the server via
+  // Set-Cookie on the /api/method/logout response.
   localStorage.clear();
-  document.cookie.split(";").forEach((cookie) => {
-    const cookieName = cookie.split("=")[0]?.trim();
-    if (cookieName) {
-      document.cookie = `${cookieName}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;`;
-    }
-  });
 }
 
 export function redirectToLogin(reason = "expired") {
@@ -66,8 +70,13 @@ export function handleUnauthorizedResponse(response) {
     return false;
   }
 
-  logoutAndRedirect("expired");
-  return true;
+  // Only redirect if we were previously logged in
+  if (hasAuthSession()) {
+    logoutAndRedirect("expired");
+    return true;
+  }
+
+  return false;
 }
 
 export function enforceSessionTimeout() {

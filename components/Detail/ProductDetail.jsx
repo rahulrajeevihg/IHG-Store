@@ -9,6 +9,7 @@ import ImageSlider from './ImageSlider';
 import ProductBox from '../Product/ProductBox';
 import { useSelector } from 'react-redux';
 import { useDispatch } from 'react-redux';
+import CardButton from '../Product/CardButton';
 import { setProductDetail } from '@/redux/slice/productDetail';
 // import 'rodal/lib/rodal.css';
 const ProductDetail = ({ hide, visible, productData }) => {
@@ -410,6 +411,10 @@ const ProductDetail = ({ hide, visible, productData }) => {
                                                                         OUT OF STOCK
                                                                     </p>
                                                                 )}
+
+                                                                <div className="mt-6 flex gap-4 items-center">
+                                                                    <CardButton item={data} index={0} text_btn={true} is_big={true} />
+                                                                </div>
                                                             </>
                                                         ) : (
                                                             <>

@@ -25,10 +25,7 @@ import settig from '@/libs/websiteSettings'
 import ScrollToTopButton from '@/components/Common/ScrollToTop';
 import Image from 'next/image';
 const ProductDetail = dynamic(() => import('@/components/Detail/ProductDetail'))
-<<<<<<< HEAD
 import { enforceSessionTimeout, hasAuthSession, touchSessionActivity } from '@/libs/auth';
-=======
->>>>>>> e4e0643b7f53e8b6c06657ac882610c03eedce54
 // console.log('setting', settig.message)
 
 // import { GoogleOAuthProvider } from '@react-oauth/google';
@@ -54,21 +51,6 @@ function App({ Component, pageProps }) {
   const [pageKey, setPageKey] = useState(Date.now()); // A unique key for each page
   useEffect(() => {
 
-    // if (navigator && typeof window != 'undefined') {
-    //   if ('serviceWorker' in navigator) {
-    //     window.addEventListener('load', () => {
-    //       // console.log('service work')
-    //       navigator.serviceWorker.register('/service-worker.js')
-    //         .then(registration => {
-    //           // console.log('Service Worker registered: ', registration);
-    //         })
-    //         .catch(error => {
-    //           // console.log('Service Worker registration failed: ', error);
-    //         });
-    //     });
-    //   }
-    // }
-
     // let cls = 0;
     // new PerformanceObserver((entryList) => {
     //   for (const entry of entryList.getEntries()) {
@@ -92,7 +74,6 @@ function App({ Component, pageProps }) {
   }, []);
 
   useEffect(() => {
-<<<<<<< HEAD
     if (typeof window === "undefined" || !("serviceWorker" in navigator)) {
       return;
     }
@@ -100,7 +81,18 @@ function App({ Component, pageProps }) {
     const clearStaleBrowserCaches = async () => {
       try {
         const registrations = await navigator.serviceWorker.getRegistrations();
-        await Promise.all(registrations.map((registration) => registration.unregister()));
+
+        if (registrations.length > 0) {
+          await Promise.all(registrations.map((r) => r.unregister()));
+
+          // Always reload after unregistering any SW. The old SW stays alive and
+          // keeps intercepting fetches (including converting POST→GET) until the
+          // page fully reloads. navigator.serviceWorker.controller is unreliable
+          // right after unregister() in some browsers, so don't gate on it.
+          // After the reload there are no registrations, so this only fires once.
+          window.location.reload();
+          return;
+        }
 
         if ("caches" in window) {
           const cacheNames = await window.caches.keys();
@@ -118,11 +110,7 @@ function App({ Component, pageProps }) {
     // nProgress.configure({ showSpinner: false })
     const handleStart = (e) => {
       touchSessionActivity();
-=======
-    // nProgress.configure({ showSpinner: false })
-    const handleStart = (e) => {
->>>>>>> e4e0643b7f53e8b6c06657ac882610c03eedce54
-      if (e == '/' && localStorage['api_key']) {
+      if (e == '/' && localStorage['full_name']) {
         getValue()
       }
       document.body.style.overflow = "unset"
@@ -130,17 +118,20 @@ function App({ Component, pageProps }) {
       // console.log(e,'e')
       if (!e.includes('pr')) {
         const detail = localStorage['product_detail'];
-        if (detail && JSON.parse(detail)) {
-          localStorage.removeItem('product_detail')
+        if (detail) {
+          try {
+            JSON.parse(detail);
+            localStorage.removeItem('product_detail')
+          } catch (error) {
+            // If stale/corrupted data exists (e.g. HTML string), clear it silently.
+            localStorage.removeItem('product_detail')
+          }
         }
       }
       // nProgress.start()
     };
     const handleComplete = (e) => {
-<<<<<<< HEAD
       touchSessionActivity();
-=======
->>>>>>> e4e0643b7f53e8b6c06657ac882610c03eedce54
       setPageKey(Date.now());
       // nProgress.done()
     };
@@ -182,13 +173,12 @@ function App({ Component, pageProps }) {
 
   useEffect(() => {
     // getCategoryList()
-    if (typeof window !== "undefined" && localStorage['api_key']) {
+    if (typeof window !== "undefined" && localStorage['full_name']) {
       getValue()
     }
 
   }, [])
 
-<<<<<<< HEAD
   useEffect(() => {
     if (typeof window === "undefined") {
       return;
@@ -229,8 +219,6 @@ function App({ Component, pageProps }) {
     };
   }, [])
 
-=======
->>>>>>> e4e0643b7f53e8b6c06657ac882610c03eedce54
   // const loadScripts = () => {
   //   // let lightScipt = document.createElement('script')
   //   // lightScipt.src = "https://cdn.jsdelivr.net/npm/lightgallery@1.6.12/dist/js/lightgallery.min.js"
@@ -288,6 +276,15 @@ function App({ Component, pageProps }) {
       icon: '/Tabs/list.svg',
       active_icon: '/Tabs/list-filled.svg',
       tab: 'list',
+      enable: 1
+    },
+    {
+      menu_label: 'Cart',
+      alt_menu_label: 'Shopping Cart',
+      redirect_url: '/tabs/yourcart',
+      icon: '/Tabs/Cart-1.svg',
+      active_icon: '/Tabs/Cart-fill.svg',
+      tab: 'yourcart',
       enable: 1
     },
     {
@@ -420,11 +417,7 @@ function App({ Component, pageProps }) {
 
                   </div>
                   <div className='border-t border-t-[#ddd] w-full text-center bg-[#F0F0F0] py-2'>
-<<<<<<< HEAD
                     © 2025 products.ihgind.com. All Rights Reserved.
-=======
-                    © 2025 ihg-sigma.vercel.app. All Rights Reserved.
->>>>>>> e4e0643b7f53e8b6c06657ac882610c03eedce54
                   </div>
 
                 </>}
@@ -443,7 +436,3 @@ function App({ Component, pageProps }) {
 }
 
 export default memo(App)
-<<<<<<< HEAD
-=======
-
->>>>>>> e4e0643b7f53e8b6c06657ac882610c03eedce54

@@ -26,15 +26,14 @@ export default function index() {
   }
 
   const getBrandList = async () => {
-    const apikey = localStorage['api_key'];
-    const apisecret = localStorage['api_secret'];
-    const token = (apikey && apisecret) ? `token ${apikey}:${apisecret}` : null;
     const params = {
       page_no: page,
       page_size: 48
     }
-    const data = await get_brands_list(token, params);
-    if (data.message && data.message.length > 0) {
+    // Auth is handled via the sid cookie forwarded by the ERP proxy.
+    // No api_key/api_secret token needed.
+    const data = await get_brands_list(null, params);
+    if (data && data.message && data.message.length > 0) {
       setDetails(page == 1 ? data.message : [...details, ...data.message])
       setNoProducts(false)
     } else {

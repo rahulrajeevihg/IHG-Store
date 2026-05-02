@@ -7,6 +7,7 @@ import { check_Image, checkMobile } from '@/libs/api';
 // import Link from 'next/link'
 import { useRouter } from 'next/router';
 const ProductDetail = dynamic(()=> import('../Detail/ProductDetail'))
+import CardButton from './CardButton';
 // import ProductDetail from '../Detail/ProductDetail';
 
 export default function ProductBox({ productList, size, rowCount, leftHorizontalImage, scroll_button, scroll_id, productBoxView, home, remove_bg, openFilter, tabView, pagination,openDetail }) {
@@ -148,6 +149,9 @@ export default function ProductBox({ productList, size, rowCount, leftHorizontal
                       <Image src={'/brand.svg'} height={13} width={13} alt='brand' />
                       <p onClick={() => navigateDetail(item)} className={`line-clamp-2 cursor-pointer !lg:text-[9px] md:text-[12px] font-semibold md:leading-[2.1] lg:leading-[25px] openSens gray_color`}><span className='text-[9px] 2xl:text-[11px] md:text-[10px] font-semibold'>{item.document.brand}</span></p>
                     </div>}
+                  </div>
+                  <div className="mt-3">
+                    <CardButton item={item.document} index={index} text_btn={true} is_big={true} />
                   </div>
                 </div>
               </li>

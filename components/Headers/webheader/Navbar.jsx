@@ -171,7 +171,7 @@ export default function Navbar({ all_categories, categoryData }) {
 
 
             {/* {all_categories.slice(0, 5).map((item, index) => { */}
-            {categoryData.slice(0, tabView ? 6 : 10).map((item, index) => {
+            {(categoryData || []).slice(0, tabView ? 6 : 10).map((item, index) => {
               return (
                 // onMouseLeave={() => enbleDropdown('leave', index)} 
                 // (dropdown == index) || 
@@ -245,7 +245,7 @@ export default function Navbar({ all_categories, categoryData }) {
 
 
 
-            {categoryData.length > 10 &&
+            {(categoryData || []).length > 10 &&
               <div className={`relative  cursor-pointer hoverMenuSec ${moreMenu == 1 ? 'active_parent' : ''}`} onClick={()=> { enbleDropdownMore('enter'), setDropdown(-1) }} onMouseEnter={() => { enbleDropdownMore('enter'), setDropdown(-1) }} onMouseLeave={() => enbleDropdownMore('leave')}>
                 <span className='flex item-center mb-[0] gap-[5px] '>
                   <a className={`text-left font-normal navigation_c lg:text-[13px] tracking-wide uppercase`}>More</a>

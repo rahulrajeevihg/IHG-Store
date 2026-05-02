@@ -6,12 +6,8 @@ const AuthModal = dynamic(() => import("@/components/Auth/AuthModal"));
 
 import { useRouter } from 'next/router'
 import Image from 'next/image';
-<<<<<<< HEAD
-import Cookies from "js-cookie";
 import { toast } from "react-toastify";
 import { SESSION_EXPIRED_FLAG } from "@/libs/auth";
-=======
->>>>>>> e4e0643b7f53e8b6c06657ac882610c03eedce54
 
 export default function login() {
 
@@ -19,7 +15,6 @@ export default function login() {
   const [show, setShow] = useState(true)
   useEffect(() => {
    
-<<<<<<< HEAD
     const sessionReason = sessionStorage.getItem(SESSION_EXPIRED_FLAG);
     if (sessionReason === 'timeout') {
       toast.info('Session timed out after 20 minutes of inactivity. Please log in again.');
@@ -29,17 +24,12 @@ export default function login() {
       sessionStorage.removeItem(SESSION_EXPIRED_FLAG);
     }
 
-    if (Cookies.get("api_key")) {
+    // Use full_name as the logged-in signal (sid is HttpOnly, not readable here)
+    if (typeof window !== 'undefined' && localStorage.getItem('full_name')) {
       setShow(false)
       hide()
-    }else{
+    } else {
       localStorage.clear()
-=======
-
-    if (localStorage['api_key']) {
-      setShow(false)
-      hide()
->>>>>>> e4e0643b7f53e8b6c06657ac882610c03eedce54
     }
   }, [router])
 
@@ -69,34 +59,8 @@ export default function login() {
   );
 }
 
-export async function getServerSideProps({ req }) {
-  const token = req.cookies.api_key || null;
-
-  // If the token exists and the user is on the login page, redirect to the home page or previous URL
-<<<<<<< HEAD
-  if (token) {
-    return {
-      redirect: {
-        // destination: req.cookies.preurl ? req.cookies.preurl : '/',
-        destination: '/',
-        permanent: false,
-=======
-  if (token ) {
-    return {
-      redirect: {
-        destination: req.cookies.preurl ? req.cookies.preurl : '/',  // Redirect to previous URL or home
-        permanent: false, // Temporary redirect
->>>>>>> e4e0643b7f53e8b6c06657ac882610c03eedce54
-      },
-    };
-  }
-
-  // If no token, continue rendering the login page
-  return {
-    props: {}, // Return props for the login page
-  };
-<<<<<<< HEAD
+// No server-side redirect — the Frappe sid cookie is HttpOnly and cannot be
+// read by getServerSideProps. Auth guard is handled client-side in useEffect.
+export async function getServerSideProps() {
+  return { props: {} };
 }
-=======
-}
->>>>>>> e4e0643b7f53e8b6c06657ac882610c03eedce54

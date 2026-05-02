@@ -3,12 +3,9 @@ import React, { useEffect, useState } from "react";
 
 const Tabs = ({ stockDetails, productDetails }) => {
   const [activeTab, setActiveTab] = useState(0);
-<<<<<<< HEAD
   const filteredStockDetails = Array.isArray(stockDetails)
     ? stockDetails.filter((item) => Number(item?.actual_qty) > 0)
     : [];
-=======
->>>>>>> e4e0643b7f53e8b6c06657ac882610c03eedce54
 
   // const productDetails = {
   //   "Barcode": "/barcode.png",
@@ -113,11 +110,7 @@ const Tabs = ({ stockDetails, productDetails }) => {
     } else if (activeTab === 1) {
       return (
         <div className="space-y-2">
-<<<<<<< HEAD
           {filteredStockDetails.length > 0 ? <>
-=======
-          {stockDetails && stockDetails.length > 0 ? <>
->>>>>>> e4e0643b7f53e8b6c06657ac882610c03eedce54
             <table className="w-full border-collapse border border-gray-300">
               <thead>
                 <tr className="bg-gray-100">
@@ -127,11 +120,7 @@ const Tabs = ({ stockDetails, productDetails }) => {
                 </tr>
               </thead>
               <tbody>
-<<<<<<< HEAD
                 {filteredStockDetails.map((res, index) => (
-=======
-                {stockDetails.map((res, index) => (
->>>>>>> e4e0643b7f53e8b6c06657ac882610c03eedce54
                   <tr key={res.warehouse} className="text-gray-700 text-center">
                     <td className="border  border-gray-300 px-4 py-2">{index + 1}</td>
                     <td className="border  border-gray-300 px-4 py-2 text-start md:text-[12px]">{res.warehouse}</td>
