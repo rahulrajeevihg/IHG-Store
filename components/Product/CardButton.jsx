@@ -83,7 +83,7 @@ export default function CardButton({ item, index, variantOpen, text_btn, quickVi
     }
 
     if (type == 'dec' && (currentCount <= 1 || (minimumQty > 0 && minimumQty == currentCount))) {
-      let param = { name: cartRowId, customer_id: localStorage['customerRefId'] }
+      let param = { cart_id: cartRowId, customer_id: localStorage['customerRefId'] }
       const resp = await delete_cart_items(param);
       setTimeout(() => { setLoader(-1) }, 500)
       if (resp && resp.message && resp.message.status == 'success') {
@@ -105,7 +105,7 @@ export default function CardButton({ item, index, variantOpen, text_btn, quickVi
     }
 
     let param = {
-      name: cartRowId,
+      item_code: dataValue.item_code,
       qty: type == 'inc' ? (currentCount + 1) : (currentCount - 1),
       "business": dataValue.business ? dataValue.business : '',
       qty_type: ""

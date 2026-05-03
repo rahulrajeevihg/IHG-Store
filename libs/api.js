@@ -406,6 +406,11 @@ export async function clear_cartitem(data) {
     return await postMethod(api, data)
 }
 
+export async function clear_cart() {
+    let api = methodUrl + 'igh_search.api.clear_cart';
+    return await postMethod(api, {})
+}
+
 export async function validate_attributes_stock(data) {
     let api = methodUrl + apiUrl_orders + 'validate_attributes_stock_mob';
     return await postMethod(api, data)

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import Image from 'next/image';
 import { useRouter } from 'next/router';
-import { get_cart_items, check_Image, search_opportunities, create_quotation_from_portal } from '@/libs/api';
+import { get_cart_items, check_Image, search_opportunities, create_quotation_from_portal, clear_cart } from '@/libs/api';
 import { setCartItems, resetCart } from '@/redux/slice/cartSettings';
 import { toast } from 'react-toastify';
 import CardButton from './CardButton';
@@ -121,13 +121,14 @@ const CartView = () => {
                 items: cartItems.map(item => ({
                     item_code: item.item_code,
                     qty: item.quantity,
-                    rate: item.amount
+                    rate: item.rate
                 }))
             };
 
             const resp = await create_quotation_from_portal(payload);
             if (resp && resp.message && resp.message.status === 'success') {
-                toast.success(`Quotation ${resp.message.quotation_name} created successfully!`);
+                toast.success(`Quotation ${resp.message.quotation} created successfully!`);
+                try { await clear_cart(); } catch (_) {}
                 dispatch(resetCart());
                 router.push('/tabs/my-orders');
             } else {
