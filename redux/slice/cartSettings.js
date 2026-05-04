@@ -8,7 +8,9 @@ export const cartSettings = createSlice({
     cartCount:0,
     wishlistCount:0,
     cartValue:{},
-    you_may_like:[]
+    you_may_like:[],
+    selectedOpportunity: null,  // { name, customer, customer_name, title }
+    itemNotes: {},              // { [item_code]: string }
   },
 
   reducers: {
@@ -58,18 +60,51 @@ export const cartSettings = createSlice({
       const { item_code } = action.payload;
       state.cartItems = state.cartItems.filter(i => i.item_code !== item_code);
       state.cartCount = state.cartItems.length;
+      delete state.itemNotes[item_code];
     },
 
-    resetCart:(state,action) => {
-      state.cartItems = [],
-      state.wishlistItems = [],
-      state.cartCount = 0,
-      state.wishlistCount = 0,
+    resetCart:(state) => {
+      state.cartItems = []
+      state.wishlistItems = []
+      state.cartCount = 0
+      state.wishlistCount = 0
       state.cartValue = {}
+      state.selectedOpportunity = null
+      state.itemNotes = {}
+    },
+
+    setSelectedOpportunity:(state, action) => {
+      state.selectedOpportunity = action.payload;
+    },
+
+    clearSelectedOpportunity:(state) => {
+      state.selectedOpportunity = null;
+    },
+
+    setItemNote:(state, action) => {
+      const { item_code, note } = action.payload;
+      if (note) {
+        state.itemNotes[item_code] = note;
+      } else {
+        delete state.itemNotes[item_code];
+      }
+    },
+
+    clearItemNotes:(state) => {
+      state.itemNotes = {};
     },
   },
 })
 
-export const { setCartItems, resetCart, updateItemQty, removeItem } = cartSettings.actions
+export const {
+  setCartItems,
+  resetCart,
+  updateItemQty,
+  removeItem,
+  setSelectedOpportunity,
+  clearSelectedOpportunity,
+  setItemNote,
+  clearItemNotes,
+} = cartSettings.actions
 
 export default cartSettings.reducer
