@@ -45,6 +45,7 @@ import EmptyState from "./components/EmptyState";
 import ErrorState from "./components/ErrorState";
 import AiSearchDialog from "./components/AiSearchDialog";
 import DiagnosticsDialog from "./components/DiagnosticsDialog";
+import AiStatusBanner from "@/components/Sales/AiStatusBanner";
 
 const DENSITY_STORAGE_KEY = "v2:density";
 const DEV_MODE = process.env.NODE_ENV !== "production";
@@ -54,6 +55,10 @@ const AI_DISPLAY_CONTRACT_ERROR =
 export default function V2SearchPage({
   onFallback,
   fallbackMessage,
+  // Sales workspace props
+  salesMode = false,
+  onAddToCart,
+  rightPanel,
 }) {
   const router = useRouter();
   const cartItems = useSelector((state) => state.cartSettings.cartItems);
@@ -617,7 +622,16 @@ export default function V2SearchPage({
     wishlistItems.some((item) => item.product === document.item_code);
 
   const isShortlisted = (document) =>
-    cartItems.some((item) => item.product === document.item_code);
+    cartItems.some((item) =>
+      salesMode
+        ? item.item_code === document.item_code
+        : item.product === document.item_code
+    );
+
+  const getCartQty = (document) => {
+    const found = cartItems.find((item) => item.item_code === document.item_code);
+    return found ? (found.count || found.quantity || 0) : 0;
+  };
 
   const addToWishlist = async (document) => {
     try {
@@ -892,8 +906,11 @@ export default function V2SearchPage({
     }
   };
 
-  const gridClass =
-    density === "compact"
+  const gridClass = salesMode
+    ? density === "compact"
+      ? "grid grid-cols-2 gap-[12px] sm:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4"
+      : "grid grid-cols-2 gap-[12px] sm:grid-cols-3 lg:grid-cols-3 xl:grid-cols-3"
+    : density === "compact"
       ? "grid grid-cols-2 gap-[12px] sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6"
       : "grid grid-cols-2 gap-[12px] sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-4 2xl:grid-cols-5";
 
@@ -920,8 +937,12 @@ export default function V2SearchPage({
         aiExplanation={aiExplanation}
       />
 
-      <div className="mx-auto max-w-[1520px] px-[24px]">
-        <div className="grid gap-[20px] py-[20px] lg:grid-cols-[290px_minmax(0,1fr)] xl:grid-cols-[310px_minmax(0,1fr)]">
+      <div className="mx-auto max-w-[1700px] px-[24px]">
+        <div className={`grid gap-[20px] py-[20px] ${
+          salesMode && rightPanel
+            ? "lg:grid-cols-[270px_minmax(0,1fr)_380px]"
+            : "lg:grid-cols-[290px_minmax(0,1fr)] xl:grid-cols-[310px_minmax(0,1fr)]"
+        }`}>
           <aside className="hidden lg:block">
             <div className="sticky top-[20px]">
               <FilterPanel
@@ -974,6 +995,10 @@ export default function V2SearchPage({
               onClearAll={isAiMode ? clearAiSearch : clearFilters}
             />
 
+            {salesMode && (
+              <AiStatusBanner aiSession={aiSession} onClear={clearAiSession} />
+            )}
+
             {loading ? (
               <ResultsSkeleton count={density === "compact" ? 18 : 15} />
             ) : error ? (
@@ -1006,6 +1031,9 @@ export default function V2SearchPage({
                       isShortlisted={isShortlisted(document)}
                       includeInactive={searchState.include_inactive}
                       dense={density === "compact"}
+                      salesMode={salesMode}
+                      cartQty={salesMode ? getCartQty(document) : 0}
+                      onAddToCart={salesMode ? onAddToCart : undefined}
                     />
                   );
                 })}
@@ -1019,6 +1047,14 @@ export default function V2SearchPage({
               onPageChange={(page) => updateState((current) => ({ ...current, page }))}
             />
           </section>
+
+          {salesMode && rightPanel && (
+            <aside className="hidden lg:block">
+              <div className="sticky top-[20px]">
+                {rightPanel}
+              </div>
+            </aside>
+          )}
         </div>
       </div>
 

@@ -789,3 +789,9 @@ export async function create_quotation_from_portal(payload) {
     const resp = await postMethod(api, payload);
     return resp;
 }
+
+export async function get_recent_quotations() {
+    let api = methodUrl + 'igh_search.api.get_recent_quotations';
+    const resp = await postMethod(api, {});
+    return resp;
+}
