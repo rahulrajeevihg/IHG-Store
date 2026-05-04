@@ -406,6 +406,11 @@ export async function clear_cartitem(data) {
     return await postMethod(api, data)
 }
 
+export async function clear_cart() {
+    let api = methodUrl + 'igh_search.api.clear_cart';
+    return await postMethod(api, {})
+}
+
 export async function validate_attributes_stock(data) {
     let api = methodUrl + apiUrl_orders + 'validate_attributes_stock_mob';
     return await postMethod(api, data)
@@ -782,5 +787,11 @@ export async function search_opportunities(search, customer_id) {
 export async function create_quotation_from_portal(payload) {
     let api = methodUrl + 'igh_search.api.create_quotation_from_portal';
     const resp = await postMethod(api, payload);
+    return resp;
+}
+
+export async function get_recent_quotations() {
+    let api = methodUrl + 'igh_search.api.get_recent_quotations';
+    const resp = await postMethod(api, {});
     return resp;
 }

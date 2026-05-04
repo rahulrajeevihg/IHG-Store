@@ -14,6 +14,10 @@ export default function ProductCard({
   isShortlisted,
   includeInactive,
   dense = false,
+  // Sales mode props
+  salesMode = false,
+  cartQty = 0,
+  onAddToCart,
 }) {
   const [copied, setCopied] = useState(false);
 
@@ -161,17 +165,47 @@ export default function ProductCard({
         </div>
 
         {/* ADD BUTTON */}
-        <button
-          type="button"
-          onClick={(e) => { e.stopPropagation(); onShortlist(document); }}
-          className={`mt-auto w-full py-[10px] text-[11px] font-bold uppercase tracking-[0.1em] transition-colors duration-150 ${
-            isShortlisted
-              ? "bg-[#1b6dff] text-white"
-              : "bg-[#111] text-white hover:bg-[#333]"
-          }`}
-        >
-          {isShortlisted ? "✓ Added" : "Add"}
-        </button>
+        {salesMode ? (
+          cartQty > 0 ? (
+            <div className="mt-auto flex items-center border border-[#e5e7eb]">
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); onAddToCart && onAddToCart(document, cartQty - 1); }}
+                className="flex h-[36px] w-[36px] shrink-0 items-center justify-center text-[16px] font-bold text-[#111] hover:bg-[#f3f4f6] transition-colors"
+              >
+                −
+              </button>
+              <span className="flex-1 text-center text-[12px] font-bold text-[#111]">{cartQty}</span>
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); onAddToCart && onAddToCart(document, cartQty + 1); }}
+                className="flex h-[36px] w-[36px] shrink-0 items-center justify-center text-[16px] font-bold text-[#111] hover:bg-[#f3f4f6] transition-colors"
+              >
+                +
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onAddToCart && onAddToCart(document, 1); }}
+              className="mt-auto w-full py-[10px] text-[11px] font-bold uppercase tracking-[0.1em] bg-[#111] text-white hover:bg-[#333] transition-colors duration-150"
+            >
+              Add to Cart
+            </button>
+          )
+        ) : (
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onShortlist(document); }}
+            className={`mt-auto w-full py-[10px] text-[11px] font-bold uppercase tracking-[0.1em] transition-colors duration-150 ${
+              isShortlisted
+                ? "bg-[#1b6dff] text-white"
+                : "bg-[#111] text-white hover:bg-[#333]"
+            }`}
+          >
+            {isShortlisted ? "✓ Added" : "Add"}
+          </button>
+        )}
       </div>
     </article>
   );
