@@ -49,7 +49,7 @@ export default function login() {
               <div className={`h-[35px] w-[35px] z-10 bg-[#fff] text-black border-[1px]  border-slate-100 rounded-full flex items-center justify-center  cursor-pointer md:hidden`}> <Image className='h-[12px] object-contain' alt="Prev" src={'/rightArrow.svg'} width={35} height={35} /></div>
               <span>Go Home</span>
             </div> */}
-            <AuthModal cssClass={'h-[calc(100vh_-_68px)] lg:w-[90%] lg:m-[0_auto] md:p-[20px] lg:p-[50px]'} page={true} hide={hide} />
+            <AuthModal cssClass={'min-h-screen'} page={true} hide={hide} />
 
           </>
 

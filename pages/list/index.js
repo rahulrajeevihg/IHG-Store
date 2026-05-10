@@ -5,7 +5,6 @@ import Head from "next/head";
 import { get_cart_items, insert_cart_items } from "@/libs/api";
 import { setCartItems } from "@/redux/slice/cartSettings";
 import V2SearchPage from "@/components/Search/v2/V2SearchPage";
-import CartSidebar from "@/components/Sales/CartSidebar";
 
 export default function SalesWorkspace() {
   const dispatch = useDispatch();
@@ -58,7 +57,6 @@ export default function SalesWorkspace() {
       <V2SearchPage
         salesMode
         onAddToCart={handleAddToCart}
-        rightPanel={<CartSidebar />}
       />
     </>
   );

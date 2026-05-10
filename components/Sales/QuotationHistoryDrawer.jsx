@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { getErpDeskQuotationUrl } from '@/libs/api';
 
 export default function QuotationHistoryDrawer({ open, onClose, quotations, loading, onRefresh }) {
   // Close on Escape key
@@ -8,10 +9,6 @@ export default function QuotationHistoryDrawer({ open, onClose, quotations, load
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
   }, [open, onClose]);
-
-  const erpHost = typeof window !== 'undefined'
-    ? window.location.hostname.replace(/:\d+$/, '')
-    : '';
 
   return (
     <>
@@ -70,7 +67,7 @@ export default function QuotationHistoryDrawer({ open, onClose, quotations, load
               {quotations.map((q) => (
                 <li key={q.name}>
                   <a
-                    href={`http://${erpHost}:8000/app/quotation/${q.name}`}
+                    href={getErpDeskQuotationUrl(q.name)}
                     target="_blank"
                     rel="noreferrer"
                     className="flex items-start justify-between gap-[10px] px-[20px] py-[14px] hover:bg-[#f9fafb] transition-colors group"

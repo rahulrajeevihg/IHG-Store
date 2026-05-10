@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import dynamic from "next/dynamic";
+const ProductDetail = dynamic(() => import("@/components/Detail/ProductDetail"), { ssr: false });
 import { useRouter } from "next/router";
 import { useSelector } from "react-redux";
 import { toast } from "react-toastify";
@@ -10,8 +12,10 @@ import {
   buildMasterOptions,
   DEFAULT_V2_STATE,
   getIsSystemManager,
+  isSearchV2DisabledError,
   normalizeSearchHit,
   queryFromState,
+  reportSearchV2DisabledOnce,
   sanitizeV2FiltersForRequest,
   searchProductsV2,
   stateFromQuery,
@@ -23,10 +27,20 @@ import {
 import { getV2Events, logV2Event } from "@/libs/ighSearchV2Metrics";
 import {
   delete_cart_items,
+  continueGuidedAiSearch,
   get_all_masters,
   get_product_details,
   insert_cart_items,
+  startGuidedAiSearch,
 } from "@/libs/api";
+import {
+  buildGuidedSessionFromResponse,
+  buildV2StateFromGuidedResponse,
+  deriveV2SuggestedAnswers,
+  isGuidedSkipAnswer,
+  mergeGuidedSuggestedAnswers,
+  normalizeGuidedAiResponse,
+} from "@/libs/aiGuidedSearch";
 import V2QuickViewDrawer from "./V2QuickViewDrawer";
 import { VISIBLE_FILTERS } from "./constants";
 import {
@@ -43,12 +57,19 @@ import Pagination from "./components/Pagination";
 import ResultsSkeleton from "./components/ResultsSkeleton";
 import EmptyState from "./components/EmptyState";
 import ErrorState from "./components/ErrorState";
+import SearchUnavailableState from "./components/SearchUnavailableState";
 import AiSearchDialog from "./components/AiSearchDialog";
 import DiagnosticsDialog from "./components/DiagnosticsDialog";
 import AiStatusBanner from "@/components/Sales/AiStatusBanner";
+import SalesAddToCartModal from "@/components/Sales/SalesAddToCartModal";
+import CartModal from "@/components/Sales/CartModal";
+import IssueReportModal from "@/components/ProductDataIssues/IssueReportModal";
+import AiGuidedAssistantLauncher from "@/components/AiGuidedAssistant/AiGuidedAssistantLauncher";
+import AiGuidedAssistantDialog from "@/components/AiGuidedAssistant/AiGuidedAssistantDialog";
 
 const DENSITY_STORAGE_KEY = "v2:density";
 const DEV_MODE = process.env.NODE_ENV !== "production";
+const LIVE_SEARCH_DEBOUNCE_MS = 320;
 const AI_DISPLAY_CONTRACT_ERROR =
   "AI search response is missing display metadata. Please refresh after the backend update or use standard search.";
 
@@ -81,6 +102,10 @@ export default function V2SearchPage({
   const [aiPrompt, setAiPrompt] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
   const [aiExplanation, setAiExplanation] = useState("");
+  const [guidedAssistantOpen, setGuidedAssistantOpen] = useState(false);
+  const [guidedAssistantLoading, setGuidedAssistantLoading] = useState(false);
+  const [guidedAssistantInput, setGuidedAssistantInput] = useState("");
+  const [guidedAssistantSession, setGuidedAssistantSession] = useState(null);
   const [suggestions, setSuggestions] = useState([]);
   const [suggestionsLoading, setSuggestionsLoading] = useState(false);
   const [suggestionsOpen, setSuggestionsOpen] = useState(false);
@@ -92,9 +117,16 @@ export default function V2SearchPage({
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
   const [searchLatencyMs, setSearchLatencyMs] = useState(null);
   const [suggestLatencyMs, setSuggestLatencyMs] = useState(null);
+  const [searchDisabled, setSearchDisabled] = useState(false);
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
   const [density, setDensity] = useState("comfortable");
   const [aiSession, setAiSession] = useState(null);
+  const [addModalProduct, setAddModalProduct] = useState(null);
+  const [cartModalOpen, setCartModalOpen] = useState(false);
+  const [detailModalOpen, setDetailModalOpen] = useState(false);
+  const [detailModalProduct, setDetailModalProduct] = useState(null);
+  const [issueModalOpen, setIssueModalOpen] = useState(false);
+  const [issueModalProduct, setIssueModalProduct] = useState(null);
 
   const initializedRef = useRef(false);
   const syncUrlRef = useRef(false);
@@ -104,6 +136,7 @@ export default function V2SearchPage({
   const activeSuggestController = useRef(null);
   const detailCacheRef = useRef({});
   const suggestionsContainerRef = useRef(null);
+  const guidedAutoQuestionKeyRef = useRef("");
 
   const searchV2Requested = searchState.search_v2 || router.query.search_v2 === "1";
   const diagnosticsEnabled = isSystemManager && router.query.debug_v2 === "1";
@@ -194,6 +227,15 @@ export default function V2SearchPage({
   const clearAiSession = () => {
     setAiSession(null);
     setAiExplanation("");
+  };
+
+  const resetGuidedAssistant = (resetFilters = true) => {
+    setGuidedAssistantInput("");
+    setGuidedAssistantSession(null);
+    guidedAutoQuestionKeyRef.current = "";
+    if (resetFilters) {
+      clearAiSearch();
+    }
   };
 
   const exitAiMode = () => {
@@ -347,6 +389,25 @@ export default function V2SearchPage({
       }
     } catch (err) {
       if (err?.name === "AbortError") return;
+      if (isSearchV2DisabledError(err)) {
+        reportSearchV2DisabledOnce({
+          source: isAiSearch ? "ai_search_products_v2" : "search_products_v2",
+          query:
+            requestPayload.query ||
+            requestPayload.item_code_hint ||
+            requestPayload.message ||
+            "",
+        });
+        if (isAiSearch) clearAiSession();
+        setSearchDisabled(true);
+        setError("");
+        setResults([]);
+        setFound(0);
+        setFacetMap({});
+        setQueryDebug(null);
+        setSearchLatencyMs(Math.round(performance.now() - startedAt));
+        return;
+      }
       if (DEV_MODE) {
         console.error("[V2 search] failed", {
           requestPayload,
@@ -394,11 +455,23 @@ export default function V2SearchPage({
       skipNextSearchRef.current = false;
       return;
     }
+    if (searchDisabled) {
+      // Feature flag is off; don't keep hitting the server with the same call.
+      // Filters, nav, and cart remain interactive — only result fetches are gated.
+      setLoading(false);
+      return;
+    }
     executeSearch(searchState);
-  }, [searchState, hydrated, isSystemManager]);
+  }, [searchState, hydrated, isSystemManager, searchDisabled]);
 
   useEffect(() => {
     if (!hydrated) return;
+    if (searchDisabled) {
+      setSuggestions([]);
+      setSuggestionsOpen(false);
+      setSuggestionsLoading(false);
+      return;
+    }
     if (!searchInput || searchInput.trim().length < 2) {
       setSuggestions([]);
       setSuggestionsOpen(false);
@@ -431,19 +504,42 @@ export default function V2SearchPage({
           latency_ms: latency,
         });
       } catch (err) {
-        if (err?.name !== "AbortError") {
-          setSuggestions([]);
-          logV2Event("suggestions_failed", {
+        if (err?.name === "AbortError") return;
+        if (isSearchV2DisabledError(err)) {
+          // Once-per-session report; do NOT log per keystroke.
+          reportSearchV2DisabledOnce({
+            source: "suggest_products_v2",
             query: searchInput.trim(),
-            message: err?.message || "Suggestion request failed.",
           });
+          setSearchDisabled(true);
+          setSuggestions([]);
+          setSuggestionsOpen(false);
+          return;
         }
+        setSuggestions([]);
+        logV2Event("suggestions_failed", {
+          query: searchInput.trim(),
+          message: err?.message || "Suggestion request failed.",
+        });
       } finally {
         setSuggestionsLoading(false);
       }
     }, 220);
     return () => window.clearTimeout(timer);
-  }, [searchInput, hydrated, featureFlagOverride]);
+  }, [searchInput, hydrated, featureFlagOverride, searchDisabled]);
+
+  useEffect(() => {
+    if (!hydrated || searchDisabled) return;
+    const nextQuery = typeof searchInput === "string" ? searchInput.trim() : "";
+    const currentQuery = typeof searchState.q === "string" ? searchState.q.trim() : "";
+    if (nextQuery === currentQuery) return;
+
+    const timer = window.setTimeout(() => {
+      handleSubmitSearch(nextQuery);
+    }, LIVE_SEARCH_DEBOUNCE_MS);
+
+    return () => window.clearTimeout(timer);
+  }, [searchInput, hydrated, searchDisabled, searchState.q]);
 
   const updateState = (updater) => {
     setSearchState((current) => {
@@ -724,8 +820,17 @@ export default function V2SearchPage({
     }
   };
 
-  const handleNavigate = (document) => {
-    const itemCode = document?.item_code || document?.name;
+  const handleOpenCartModal = (productDoc) => {
+    setAddModalProduct(productDoc);
+  };
+
+  const handleOpenIssueModal = (productDoc) => {
+    setIssueModalProduct(productDoc);
+    setIssueModalOpen(true);
+  };
+
+  const handleNavigate = (productDoc) => {
+    const itemCode = productDoc?.item_code || productDoc?.name;
     if (!itemCode) return;
     if (aiSession?.search_event_id) {
       fireAndForgetAiTracking(
@@ -737,10 +842,9 @@ export default function V2SearchPage({
         "ai_search_click_tracked"
       );
     }
-    if (selectedDetail) {
-      localStorage.setItem("product_detail", JSON.stringify(selectedDetail));
-    }
-    router.push(`/pr/${itemCode}`);
+    setDetailModalProduct(productDoc);
+    setDetailModalOpen(true);
+    window.document.body.style.overflow = "hidden";
   };
 
   const handleAiSearch = async () => {
@@ -760,81 +864,6 @@ export default function V2SearchPage({
           },
           "ai_search_reformulation_tracked"
         );
-      }
-
-      const deterministicSearch = applyPromptDerivedSpecFilters(
-        {
-          ...DEFAULT_V2_STATE,
-          search_v2: searchState.search_v2,
-          page: 1,
-          page_length: searchState.page_length,
-          include_inactive: searchState.include_inactive,
-        },
-        message
-      );
-      const hasDerivedPowerConstraint = deterministicSearch.displayFilters.some(
-        (filter) => filter.key === "power_value_range"
-      );
-
-      if (hasDerivedPowerConstraint) {
-        const response = await searchProductsV2({
-          query: deterministicSearch.state.q || "",
-          filters: sanitizeV2FiltersForRequest(deterministicSearch.state.filters),
-          sort_by: "",
-          page: 1,
-          page_length: searchState.page_length,
-          include_inactive: searchState.include_inactive,
-          feature_flag_override: featureFlagOverride,
-        });
-        const explanation = "Deterministic parsing extracted SKU/spec/sort signals.";
-
-        setAiExplanation(explanation);
-        setAiSession({
-          mode: "ai",
-          message,
-          display_query: deterministicSearch.state.q || "",
-          display_filters: deterministicSearch.displayFilters,
-          search_event_id: "",
-          resolved_intent: {
-            intent_class: "spec_match",
-            provider: "deterministic",
-            llm_used: false,
-          },
-          applied_filters: deterministicSearch.state.filters,
-          applied_sort: "",
-          applied_relaxations: [],
-          quality_signals: {
-            deterministic_only: true,
-          },
-          explanation,
-          found: Number(response?.found) || 0,
-        });
-        setSearchInput(message);
-        setResults(Array.isArray(response?.hits) ? response.hits : []);
-        setFound(Number(response?.found) || 0);
-        setFacetMap(adaptFacetCounts(response?.facet_counts));
-        setQueryDebug(response?.query_debug || null);
-        setError("");
-        setLoading(false);
-        skipNextSearchRef.current = true;
-        syncUrlRef.current = true;
-        setSearchState((current) => ({
-          ...DEFAULT_V2_STATE,
-          search_v2: current.search_v2,
-          page: 1,
-          page_length: current.page_length,
-          include_inactive: current.include_inactive,
-        }));
-        setAiModalOpen(false);
-        toast.success("AI search applied.");
-        logV2Event("ai_search_applied", {
-          prompt: message,
-          found: Number(response?.found) || 0,
-          applied_sort: "",
-          display_query: deterministicSearch.state.q || "",
-          display_filters: deterministicSearch.displayFilters,
-        });
-        return;
       }
 
       const response = await aiSearchProductsV2({
@@ -890,6 +919,22 @@ export default function V2SearchPage({
         display_filters: response.display_filters,
       });
     } catch (err) {
+      if (isSearchV2DisabledError(err)) {
+        reportSearchV2DisabledOnce({
+          source: "ai_search_products_v2",
+          prompt: aiPrompt.trim(),
+        });
+        clearAiSession();
+        setSearchDisabled(true);
+        setError("");
+        setResults([]);
+        setFound(0);
+        setFacetMap({});
+        setQueryDebug(null);
+        setLoading(false);
+        setAiModalOpen(false);
+        return;
+      }
       const message = getSearchErrorMessage(err?.message);
       clearAiSession();
       setError(message);
@@ -906,13 +951,175 @@ export default function V2SearchPage({
     }
   };
 
-  const gridClass = salesMode
-    ? density === "compact"
-      ? "grid grid-cols-2 gap-[12px] sm:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4"
-      : "grid grid-cols-2 gap-[12px] sm:grid-cols-3 lg:grid-cols-3 xl:grid-cols-3"
-    : density === "compact"
-      ? "grid grid-cols-2 gap-[12px] sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6"
-      : "grid grid-cols-2 gap-[12px] sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-4 2xl:grid-cols-5";
+  const applyGuidedAssistantResponse = (payload, userMessage = "") => {
+    const normalized = normalizeGuidedAiResponse(payload);
+    if (!normalized) {
+      throw new Error("Guided assistant did not return a valid response.");
+    }
+
+    const suggestedAnswers = mergeGuidedSuggestedAnswers(
+      normalized.suggested_answers,
+      deriveV2SuggestedAnswers(
+        normalized.question_key,
+        visibleFilterOptions,
+        normalized.suggested_answers
+      )
+    );
+
+    const nextSession = buildGuidedSessionFromResponse(
+      {
+        ...normalized,
+        suggested_answers: suggestedAnswers,
+        result_count:
+          normalized.result_count !== null && normalized.result_count !== undefined
+            ? normalized.result_count
+            : found,
+      },
+      guidedAssistantSession,
+      userMessage
+    );
+
+    setGuidedAssistantSession(nextSession);
+    setGuidedAssistantInput("");
+    setGuidedAssistantOpen(true);
+    clearAiSession();
+
+    const nextState = buildV2StateFromGuidedResponse(normalized, searchState);
+    syncUrlRef.current = true;
+    setSearchInput(normalized.applied_query || "");
+    updateState(nextState);
+
+    if (normalized.done) {
+      toast.success("Guided assistant applied the latest filters.");
+    }
+  };
+
+  const submitGuidedAssistant = async (overrideValue) => {
+    const message = String(overrideValue ?? guidedAssistantInput).trim();
+    if (!message) {
+      toast.info("Tell the assistant what you need first.");
+      return;
+    }
+    if (guidedAssistantSession?.question_key && isGuidedSkipAnswer(message)) {
+      await skipGuidedAssistantQuestion();
+      return;
+    }
+
+    setGuidedAssistantLoading(true);
+    try {
+      const isContinuation = Boolean(guidedAssistantSession?.messages?.length);
+      const response = isContinuation
+        ? await continueGuidedAiSearch({
+            session_id: guidedAssistantSession?.session_id || "",
+            source_message: (guidedAssistantSession?.messages || [])
+              .filter((entry) => entry?.role === "user")
+              .map((entry) => entry?.content || "")
+              .join(" "),
+            applied_query: guidedAssistantSession?.current_query || "",
+            current_intent: guidedAssistantSession?.current_intent || {},
+            resolved_intent: guidedAssistantSession?.resolved_intent || null,
+            question_key: guidedAssistantSession?.question_key || "",
+            answer: message,
+            page_context: { route: router.pathname, search: searchState.q || "" },
+            feature_flag_override: featureFlagOverride,
+          })
+        : await startGuidedAiSearch({
+            message,
+            page_context: { route: router.pathname, search: searchState.q || "" },
+            feature_flag_override: featureFlagOverride,
+          });
+
+      applyGuidedAssistantResponse(response, message);
+    } catch (err) {
+      toast.error(err?.message || "Guided assistant failed. Please try again.");
+    } finally {
+      setGuidedAssistantLoading(false);
+    }
+  };
+
+  const skipGuidedAssistantQuestion = async () => {
+    if (!guidedAssistantSession?.question_key) return;
+    setGuidedAssistantLoading(true);
+    try {
+      const response = await continueGuidedAiSearch({
+        session_id: guidedAssistantSession?.session_id || "",
+        source_message: (guidedAssistantSession?.messages || [])
+          .filter((entry) => entry?.role === "user")
+          .map((entry) => entry?.content || "")
+          .join(" "),
+        applied_query: guidedAssistantSession?.current_query || "",
+        current_intent: guidedAssistantSession?.current_intent || {},
+        resolved_intent: guidedAssistantSession?.resolved_intent || null,
+        question_key: guidedAssistantSession?.question_key || "",
+        skip: 1,
+        page_context: { route: router.pathname, search: searchState.q || "" },
+        feature_flag_override: featureFlagOverride,
+      });
+      applyGuidedAssistantResponse(response);
+    } catch (err) {
+      toast.error(err?.message || "Unable to skip this question right now.");
+    } finally {
+      setGuidedAssistantLoading(false);
+    }
+  };
+
+  const openGuidedAssistant = () => {
+    setGuidedAssistantOpen(true);
+  };
+
+  const closeGuidedAssistant = () => {
+    setGuidedAssistantOpen(false);
+  };
+
+  useEffect(() => {
+    if (!guidedAssistantSession?.question_key) return;
+
+    const fallbackSuggestions = deriveV2SuggestedAnswers(
+      guidedAssistantSession.question_key,
+      visibleFilterOptions,
+      guidedAssistantSession.suggested_answers
+    );
+    const nextSuggestions = mergeGuidedSuggestedAnswers(
+      guidedAssistantSession.suggested_answers,
+      fallbackSuggestions
+    );
+
+    setGuidedAssistantSession((current) => {
+      if (!current?.question_key) return current;
+      const sameSuggestions =
+        JSON.stringify(current.suggested_answers || []) === JSON.stringify(nextSuggestions);
+      const sameCount = Number(current.result_count || 0) === Number(found || 0);
+      if (sameSuggestions && sameCount) return current;
+      return {
+        ...current,
+        suggested_answers: nextSuggestions,
+        result_count: Number(found || 0),
+      };
+    });
+  }, [visibleFilterOptions, found, guidedAssistantSession?.question_key]);
+
+  useEffect(() => {
+    if (!guidedAssistantSession?.question_key) {
+      guidedAutoQuestionKeyRef.current = "";
+      return;
+    }
+    if ((guidedAssistantSession?.suggested_answers || []).length !== 1) {
+      guidedAutoQuestionKeyRef.current = "";
+      return;
+    }
+    if (guidedAutoQuestionKeyRef.current === guidedAssistantSession.question_key) {
+      return;
+    }
+
+    const onlySuggestion = guidedAssistantSession.suggested_answers[0];
+    if (!onlySuggestion?.value || guidedAssistantLoading) return;
+
+    guidedAutoQuestionKeyRef.current = guidedAssistantSession.question_key;
+    submitGuidedAssistant(onlySuggestion.value);
+  }, [guidedAssistantSession, guidedAssistantLoading]);
+
+  const gridClass =
+    "grid grid-cols-2 gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 min-[1920px]:grid-cols-6";
 
   return (
     <div className="min-h-screen bg-white text-[#111] antialiased">
@@ -937,14 +1144,14 @@ export default function V2SearchPage({
         aiExplanation={aiExplanation}
       />
 
-      <div className="mx-auto max-w-[1700px] px-[24px]">
-        <div className={`grid gap-[20px] py-[20px] ${
+      <div className="mx-auto max-w-[1700px] px-[12px]">
+        <div className={`grid gap-[8px] py-4 ${
           salesMode && rightPanel
-            ? "lg:grid-cols-[270px_minmax(0,1fr)_380px]"
-            : "lg:grid-cols-[290px_minmax(0,1fr)] xl:grid-cols-[310px_minmax(0,1fr)]"
+            ? "lg:grid-cols-[240px_minmax(0,1fr)_360px]"
+            : "lg:grid-cols-[230px_minmax(0,1fr)]"
         }`}>
           <aside className="hidden lg:block">
-            <div className="sticky top-[20px]">
+            <div className="sticky top-[12px] rounded-[10px] border border-[#e9edf2] bg-white">
               <FilterPanel
                 filters={searchState.filters}
                 visibleFilterOptions={visibleFilterOptions}
@@ -999,7 +1206,9 @@ export default function V2SearchPage({
               <AiStatusBanner aiSession={aiSession} onClear={clearAiSession} />
             )}
 
-            {loading ? (
+            {searchDisabled ? (
+              <SearchUnavailableState />
+            ) : loading && results.length === 0 ? (
               <ResultsSkeleton count={density === "compact" ? 18 : 15} />
             ) : error ? (
               <ErrorState
@@ -1007,7 +1216,7 @@ export default function V2SearchPage({
                 hasFilters={isAiMode ? aiDisplayChips.length > 0 : hasActiveFilters(searchState.filters)}
                 onRetry={() => executeSearch(searchState)}
               />
-            ) : results.length === 0 ? (
+            ) : !loading && results.length === 0 ? (
               <EmptyState
                 query={activeResultQuery || (isAiMode ? aiSession.message : searchState.q)}
                 hasFilters={isAiMode ? aiDisplayChips.length > 0 : hasActiveFilters(searchState.filters)}
@@ -1015,28 +1224,34 @@ export default function V2SearchPage({
                 onAskAi={() => setAiModalOpen(true)}
               />
             ) : (
-              <div className={gridClass}>
-                {results.map((hit, index) => {
-                  const document = normalizeSearchHit(hit);
-                  return (
-                    <ProductCard
-                      key={`${document.item_code || "result"}-${index}`}
-                      document={document}
-                      query={activeResultQuery}
-                      onNavigate={handleNavigate}
-                      onQuickView={openQuickView}
-                      onShortlist={addToShortlist}
-                      onWishlist={addToWishlist}
-                      isWishlisted={isWishlisted(document)}
-                      isShortlisted={isShortlisted(document)}
-                      includeInactive={searchState.include_inactive}
-                      dense={density === "compact"}
-                      salesMode={salesMode}
-                      cartQty={salesMode ? getCartQty(document) : 0}
-                      onAddToCart={salesMode ? onAddToCart : undefined}
-                    />
-                  );
-                })}
+              <div className="relative">
+                {loading && (
+                  <div className="pointer-events-none absolute inset-0 z-10 rounded-xl bg-white/60 backdrop-blur-[1px]" />
+                )}
+                <div className={`${gridClass} transition-opacity duration-200 ${loading ? "opacity-50" : "opacity-100"}`}>
+                  {results.map((hit, index) => {
+                    const document = normalizeSearchHit(hit);
+                    return (
+                      <ProductCard
+                        key={`${document.item_code || "result"}-${index}`}
+                        document={document}
+                        query={activeResultQuery}
+                        onNavigate={handleNavigate}
+                        onQuickView={openQuickView}
+                        onShortlist={addToShortlist}
+                        onWishlist={addToWishlist}
+                        onReportIssue={handleOpenIssueModal}
+                        isWishlisted={isWishlisted(document)}
+                        isShortlisted={isShortlisted(document)}
+                        includeInactive={searchState.include_inactive}
+                        dense={density === "compact"}
+                        salesMode={salesMode}
+                        cartQty={salesMode ? getCartQty(document) : 0}
+                        onAddToCart={salesMode ? handleOpenCartModal : undefined}
+                      />
+                    );
+                  })}
+                </div>
               </div>
             )}
 
@@ -1050,7 +1265,7 @@ export default function V2SearchPage({
 
           {salesMode && rightPanel && (
             <aside className="hidden lg:block">
-              <div className="sticky top-[20px]">
+              <div className="sticky top-[12px] rounded-[10px] border border-[#e9edf2] bg-white">
                 {rightPanel}
               </div>
             </aside>
@@ -1087,6 +1302,39 @@ export default function V2SearchPage({
         searchV2Requested={searchV2Requested}
       />
 
+      <IssueReportModal
+        open={issueModalOpen}
+        onClose={() => {
+          setIssueModalOpen(false);
+          setIssueModalProduct(null);
+        }}
+        product={issueModalProduct}
+      />
+
+      <AiGuidedAssistantLauncher
+        onClick={openGuidedAssistant}
+        pending={Boolean(guidedAssistantSession?.messages?.length && !guidedAssistantSession?.done)}
+      />
+
+      <AiGuidedAssistantDialog
+        open={guidedAssistantOpen}
+        onClose={closeGuidedAssistant}
+        session={guidedAssistantSession}
+        inputValue={guidedAssistantInput}
+        onInputChange={setGuidedAssistantInput}
+        onSubmit={() => submitGuidedAssistant()}
+        onChipClick={(suggestion) => submitGuidedAssistant(suggestion?.value || suggestion?.label || "")}
+        onSkip={skipGuidedAssistantQuestion}
+        onStartOver={() => resetGuidedAssistant(true)}
+        onEndChat={closeGuidedAssistant}
+        loading={guidedAssistantLoading}
+        secondaryActionLabel="Open direct AI search"
+        onSecondaryAction={() => {
+          setGuidedAssistantOpen(false);
+          setAiModalOpen(true);
+        }}
+      />
+
       <AiSearchDialog
         open={aiModalOpen}
         onClose={() => setAiModalOpen(false)}
@@ -1107,6 +1355,28 @@ export default function V2SearchPage({
           found={found}
           aiSession={aiSession}
           events={getV2Events()}
+        />
+      )}
+
+      {addModalProduct && (
+        <SalesAddToCartModal
+          product={addModalProduct}
+          onClose={() => setAddModalProduct(null)}
+          onConfirm={async (qty) => {
+            await onAddToCart?.(addModalProduct, qty);
+          }}
+        />
+      )}
+
+      {detailModalOpen && (
+        <ProductDetail
+          visible={detailModalOpen}
+          productData={detailModalProduct}
+          hide={() => {
+            setDetailModalOpen(false);
+            setDetailModalProduct(null);
+            window.document.body.style.overflow = "unset";
+          }}
         />
       )}
     </div>

@@ -124,9 +124,34 @@ function formatPowerRangeValue(value) {
   return `${formatNumericLabel(min)}W-${formatNumericLabel(max)}W`;
 }
 
+function formatColorTemperatureRangeValue(value) {
+  const min = value?.min;
+  const max = value?.max;
+  const hasMin = min !== "" && min !== undefined;
+  const hasMax = max !== "" && max !== undefined;
+
+  if (!hasMin && !hasMax) {
+    return "";
+  }
+
+  if (!hasMin && hasMax) {
+    return `Up to ${formatNumericLabel(max)}K`;
+  }
+
+  if (hasMin && !hasMax) {
+    return `At least ${formatNumericLabel(min)}K`;
+  }
+
+  return `${formatNumericLabel(min)}K-${formatNumericLabel(max)}K`;
+}
+
 export function formatRangeValue(value, key = "") {
   if (key === "power_value_range") {
     return formatPowerRangeValue(value);
+  }
+
+  if (key === "color_temp_kelvin_range") {
+    return formatColorTemperatureRangeValue(value);
   }
 
   const min = value?.min;

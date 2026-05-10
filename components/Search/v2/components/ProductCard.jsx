@@ -9,12 +9,12 @@ export default function ProductCard({
   onQuickView,
   onShortlist,
   onWishlist,
+  onReportIssue,
   onSimilar,
   isWishlisted,
   isShortlisted,
   includeInactive,
   dense = false,
-  // Sales mode props
   salesMode = false,
   cartQty = 0,
   onAddToCart,
@@ -32,6 +32,7 @@ export default function ProductCard({
   const discountPct = discounted
     ? Number(document.discount_percentage) || Math.round(((rate - offer) / rate) * 100)
     : 0;
+  const discountAmount = discounted ? rate - offer : 0;
 
   const stock = Number(document.stock);
   const inStock = document.in_stock === true || document.in_stock === 1 || stock > 0;
@@ -49,163 +50,208 @@ export default function ProductCard({
   };
 
   return (
-    <article className="group relative flex h-full flex-col border border-[#e5e7eb] bg-white hover:border-[#111] hover:shadow-[0_2px_12px_rgba(0,0,0,0.07)] transition-all duration-150 cursor-pointer">
+    <article
+      onClick={() => onNavigate(document)}
+      className="group relative flex flex-col overflow-hidden rounded-xl border border-[#e8eaed] bg-white shadow-[0_1px_3px_rgba(16,24,40,0.06)] transition-all duration-200 hover:-translate-y-0.5 hover:border-[#d0d5dd] hover:shadow-[0_8px_24px_rgba(16,24,40,0.1)] cursor-pointer"
+    >
+      {/* PROMO badge — top-right corner */}
+      {discounted && (
+        <div className="absolute right-0 top-0 z-20 overflow-hidden rounded-tr-xl">
+          <div className="bg-[#dc2626] px-2.5 py-[4px] text-[9px] font-bold uppercase tracking-[0.1em] text-white rounded-bl-lg">
+            Promo
+          </div>
+        </div>
+      )}
 
-      {/* IMAGE */}
-      <div className="relative overflow-hidden border-b border-[#eef0f3] bg-[#f7f7f7]" style={{ paddingBottom: "74%" }}>
-        <button
-          type="button"
-          onClick={() => onNavigate(document)}
-          className="absolute inset-0 flex items-center justify-center"
-          aria-label={`Open ${document.item_name || document.item_code}`}
-        >
-          <ProductImage document={document} />
-        </button>
-
-        {/* badges */}
-        <div className="pointer-events-none absolute left-[6px] top-[6px] flex flex-col gap-[3px]">
+      {/* Status badges — top-left */}
+      {(exactSkuMatch || inactive || !inStock || (inStock && stock > 0 && stock <= 5)) && (
+        <div className="absolute left-2 top-2 z-20 flex flex-col gap-1 pointer-events-none">
           {exactSkuMatch && <Badge tone="accent">SKU</Badge>}
           {inactive      && <Badge tone="danger">Inactive</Badge>}
-          {discounted    && <Badge tone="sale">-{discountPct}%</Badge>}
           {inStock && stock > 0 && stock <= 5 && <Badge tone="warn">Low</Badge>}
           {!inStock      && <Badge tone="oos">OOS</Badge>}
         </div>
+      )}
+
+      {/* IMAGE */}
+      <div className="relative aspect-[4/3] overflow-hidden bg-[#f7f8fa] flex items-center justify-center">
+        <ProductImage document={document} />
 
         {/* hover actions */}
-        <div className="absolute right-[6px] top-[6px] flex flex-col gap-[3px] opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100">
-          <IconBtn label={isWishlisted ? "Remove" : "Save"} active={isWishlisted} onClick={(e) => { e.stopPropagation(); onWishlist(document); }}>
+        <div className="absolute right-2 top-2 hidden lg:flex flex-col gap-1.5 translate-y-1 opacity-0 transition-all duration-200 group-hover:translate-y-0 group-hover:opacity-100">
+          <IconBtn label={isWishlisted ? "Remove from saved" : "Save"} active={isWishlisted} onClick={(e) => { e.stopPropagation(); onWishlist(document); }}>
             <HeartIcon filled={isWishlisted} />
           </IconBtn>
           <IconBtn label="Quick view" onClick={(e) => { e.stopPropagation(); onQuickView(document); }}>
             <EyeIcon />
           </IconBtn>
-          {onSimilar && (
-            <IconBtn label="Similar" onClick={(e) => { e.stopPropagation(); onSimilar(document); }}>
-              <SparkIcon />
-            </IconBtn>
-          )}
+          <IconBtn label="Report issue" onClick={(e) => { e.stopPropagation(); onReportIssue && onReportIssue(document); }}>
+            <FlagIcon />
+          </IconBtn>
         </div>
       </div>
 
       {/* BODY */}
-      <div className="flex flex-1 flex-col gap-[8px] px-[12px] pb-[12px] pt-[12px]">
+      <div className="flex flex-1 flex-col gap-1 p-2.5">
 
         {/* Brand · Category */}
-        <div className="flex min-h-[16px] items-center gap-[4px] min-w-0">
-          {document.brand && (
-            <span className="truncate text-[10px] font-semibold uppercase tracking-[0.08em] text-[#6b7280]">
-              {document.brand}
-            </span>
-          )}
-          {document.brand && (document.category_list || document.item_group) && (
-            <span className="shrink-0 text-[10px] text-[#d1d5db]">·</span>
-          )}
-          {(document.category_list || document.item_group) && (
-            <span className="truncate text-[10px] text-[#9ca3af]">
-              {document.category_list || document.item_group}
-            </span>
-          )}
-        </div>
+        {(document.brand || document.category_list || document.item_group) && (
+          <div className="flex items-center gap-1 min-w-0">
+            {document.brand && (
+              <span className="truncate text-[9px] font-bold uppercase tracking-[0.12em] text-[#a8b3bf]">
+                {document.brand}
+              </span>
+            )}
+            {document.brand && (document.category_list || document.item_group) && (
+              <span className="shrink-0 text-[9px] text-[#d1d5db]">·</span>
+            )}
+            {(document.category_list || document.item_group) && (
+              <span className="truncate text-[9px] font-bold uppercase tracking-[0.12em] text-[#a8b3bf]">
+                {document.category_list || document.item_group}
+              </span>
+            )}
+          </div>
+        )}
 
-        {/* SKU */}
+        {/* Item code — primary identifier */}
         <button
           type="button"
           onClick={copySku}
-          title="Click to copy SKU"
-          className="flex min-h-[22px] items-center gap-[4px] min-w-0 text-left"
+          title="Click to copy item code"
+          className="flex items-center gap-1.5 min-w-0 text-left hover:opacity-80 transition-opacity"
         >
-          <span className="truncate font-mono text-[11px] font-semibold text-[#111]">
+          <span className="truncate font-mono text-[13px] font-bold text-[#111827]">
             {highlightText(document.item_code || "-", query)}
           </span>
-          <span className="shrink-0 rounded-[3px] bg-[#f3f4f6] px-[5px] py-[2px] font-mono text-[9px] text-[#9ca3af]">
+          <span className="shrink-0 rounded bg-[#f3f4f6] px-[5px] py-[1px] font-mono text-[7px] text-[#b0b7c3]">
             {copied ? "✓" : "copy"}
           </span>
         </button>
 
-        {/* PRICE */}
-        <div className="min-h-[42px]">
+        {/* Item name — fixed 2-line height so all cards align */}
+        <p
+          className="line-clamp-2 h-[28px] overflow-hidden text-[10px] font-normal leading-[1.4] text-[#6b7280]"
+          title={document.item_name || document.item_code}
+        >
+          {highlightText(document.item_name || document.item_code || "-", query)}
+        </p>
+
+        {/* Price */}
+        <div className="mt-0.5">
           {hasPrice ? (
-            <div className="flex flex-wrap items-center gap-[6px]">
-              <span className="text-[15px] font-bold text-[#111] leading-none">
-                {formatPrice(activePrice)}
-              </span>
-              {discounted && (
-                <>
-                  <span className="text-[11px] text-[#b0b0b0] line-through leading-none">
+            <>
+              <div className="flex flex-wrap items-baseline gap-1.5">
+                <span className="text-[14px] font-bold leading-none text-[#111827]">
+                  {formatPrice(activePrice)}
+                </span>
+                {discounted && (
+                  <span className="text-[10px] leading-none text-[#b0b7c3] line-through">
                     {formatPrice(rate)}
                   </span>
-                  <span className="rounded-[3px] bg-[#dc2626] px-[4px] py-[1px] text-[9px] font-bold uppercase text-white leading-none">
+                )}
+              </div>
+              {discounted && (
+                <div className="mt-1 flex flex-wrap items-center gap-1">
+                  <span className="rounded-md bg-[#fef2f2] px-1.5 py-[2px] text-[9px] font-bold text-[#dc2626]">
                     -{discountPct}%
                   </span>
-                </>
+                  <span className="text-[9px] text-[#9ca3af]">
+                    Save {formatPrice(discountAmount)}
+                  </span>
+                </div>
               )}
-            </div>
+            </>
           ) : (
-            <span className="text-[11px] text-[#9ca3af]">—</span>
+            <span className="text-[10px] text-[#9ca3af]">Price on request</span>
           )}
         </div>
 
-        {/* STOCK */}
-        <div className="flex min-h-[20px] items-center gap-[5px]">
+        {/* Stock — highlighted */}
+        <div className="mt-1">
           {inStock ? (
-            <>
-              <CheckIcon />
-              <span className="text-[11px] font-medium text-[#16a34a] leading-none">
+            <span className="inline-flex items-center gap-1.5 rounded-lg bg-[#f0fdf4] border border-[#bbf7d0] px-2.5 py-[5px]">
+              <svg className="h-[13px] w-[13px] shrink-0 text-[#16a34a]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <path d="M20 7H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2z" strokeLinejoin="round" />
+                <path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2" strokeLinejoin="round" />
+                <line x1="12" y1="12" x2="12" y2="12" strokeWidth="3" strokeLinecap="round" />
+              </svg>
+              <span className="text-[11px] font-bold text-[#16a34a]">
                 {stock > 0
                   ? `${stock}${document.stock_uom ? ` ${document.stock_uom}` : ""}`
                   : "In stock"}
               </span>
-            </>
+            </span>
           ) : (
-            <>
-              <MinusCircleIcon />
-              <span className="text-[11px] font-medium text-[#9ca3af] leading-none">Out of stock</span>
-            </>
+            <span className="inline-flex items-center gap-1.5 rounded-lg bg-[#fafafa] border border-[#e5e7eb] px-2.5 py-[5px]">
+              <svg className="h-[13px] w-[13px] shrink-0 text-[#9ca3af]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <circle cx="12" cy="12" r="9" />
+                <path d="M8 12h8" strokeLinecap="round" />
+              </svg>
+              <span className="text-[11px] font-semibold text-[#9ca3af]">Out of stock</span>
+            </span>
           )}
         </div>
 
-        {/* ADD BUTTON */}
-        {salesMode ? (
-          cartQty > 0 ? (
-            <div className="mt-auto flex items-center border border-[#e5e7eb]">
+        {/* Add button */}
+        <div className="mt-2">
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onReportIssue && onReportIssue(document); }}
+            className="mb-2 inline-flex items-center gap-1.5 rounded-full border border-[#e6ebf1] bg-[#fbfcfe] px-2.5 py-1 text-[9px] font-semibold uppercase tracking-[0.12em] text-[#6b7280] transition hover:border-[#111827] hover:text-[#111827]"
+          >
+            <FlagIcon />
+            Report issue
+          </button>
+          {salesMode ? (
+            <div className="relative h-[33px]">
+              <div
+                className={`absolute inset-0 flex items-center overflow-hidden rounded-lg border border-[#e6ebf1] bg-white transition-all duration-200 ${
+                  cartQty > 0 ? "opacity-100 scale-100" : "opacity-0 scale-95 pointer-events-none"
+                }`}
+              >
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); onAddToCart && onAddToCart(document, cartQty - 1); }}
+                  className="flex h-full w-9 shrink-0 items-center justify-center text-lg font-light text-[#374151] hover:bg-[#f9fafb] active:bg-[#f3f4f6]"
+                >
+                  −
+                </button>
+                <span className="flex-1 text-center text-[13px] font-bold tabular-nums text-[#111]">
+                  {cartQty}
+                </span>
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); onAddToCart && onAddToCart(document, cartQty + 1); }}
+                  className="flex h-full w-9 shrink-0 items-center justify-center text-lg font-light text-[#374151] hover:bg-[#f9fafb] active:bg-[#f3f4f6]"
+                >
+                  +
+                </button>
+              </div>
               <button
                 type="button"
-                onClick={(e) => { e.stopPropagation(); onAddToCart && onAddToCart(document, cartQty - 1); }}
-                className="flex h-[36px] w-[36px] shrink-0 items-center justify-center text-[16px] font-bold text-[#111] hover:bg-[#f3f4f6] transition-colors"
+                onClick={(e) => { e.stopPropagation(); onAddToCart && onAddToCart(document, 1); }}
+                className={`absolute inset-0 rounded-lg bg-black px-3 text-[10px] font-bold uppercase tracking-[0.1em] text-white transition-all duration-200 hover:bg-[#1f1f1f] active:scale-[0.99] ${
+                  cartQty === 0 ? "opacity-100 scale-100" : "opacity-0 scale-95 pointer-events-none"
+                }`}
               >
-                −
-              </button>
-              <span className="flex-1 text-center text-[12px] font-bold text-[#111]">{cartQty}</span>
-              <button
-                type="button"
-                onClick={(e) => { e.stopPropagation(); onAddToCart && onAddToCart(document, cartQty + 1); }}
-                className="flex h-[36px] w-[36px] shrink-0 items-center justify-center text-[16px] font-bold text-[#111] hover:bg-[#f3f4f6] transition-colors"
-              >
-                +
+                Add to Cart
               </button>
             </div>
           ) : (
             <button
               type="button"
-              onClick={(e) => { e.stopPropagation(); onAddToCart && onAddToCart(document, 1); }}
-              className="mt-auto w-full py-[10px] text-[11px] font-bold uppercase tracking-[0.1em] bg-[#111] text-white hover:bg-[#333] transition-colors duration-150"
+              onClick={(e) => { e.stopPropagation(); onShortlist(document); }}
+              className={`h-[33px] w-full rounded-lg px-3 text-[10px] font-bold uppercase tracking-[0.1em] active:scale-[0.99] transition-all duration-[180ms] ${
+                isShortlisted
+                  ? "bg-[#1b6dff] text-white"
+                  : "bg-black text-white hover:bg-[#1f1f1f]"
+              }`}
             >
-              Add to Cart
+              {isShortlisted ? "✓ Added" : "Add"}
             </button>
-          )
-        ) : (
-          <button
-            type="button"
-            onClick={(e) => { e.stopPropagation(); onShortlist(document); }}
-            className={`mt-auto w-full py-[10px] text-[11px] font-bold uppercase tracking-[0.1em] transition-colors duration-150 ${
-              isShortlisted
-                ? "bg-[#1b6dff] text-white"
-                : "bg-[#111] text-white hover:bg-[#333]"
-            }`}
-          >
-            {isShortlisted ? "✓ Added" : "Add"}
-          </button>
-        )}
+          )}
+        </div>
+
       </div>
     </article>
   );
@@ -217,11 +263,10 @@ function Badge({ tone, children }) {
     accent: "bg-[#1b6dff] text-white",
     danger: "bg-[#b42318] text-white",
     warn:   "bg-[#d97706] text-white",
-    sale:   "bg-[#dc2626] text-white",
     oos:    "bg-white/90 text-[#6b7280] border border-[#e5e5e5]",
   };
   return (
-    <span className={`inline-block px-[5px] py-[1px] text-[8px] font-bold uppercase tracking-[0.08em] ${cls[tone] || cls.oos}`}>
+    <span className={`inline-flex items-center rounded-full px-[6px] py-[2px] text-[8px] font-bold uppercase tracking-[0.06em] shadow-sm ${cls[tone] || cls.oos}`}>
       {children}
     </span>
   );
@@ -235,10 +280,10 @@ function IconBtn({ label, active, onClick, children }) {
       onClick={onClick}
       title={label}
       aria-label={label}
-      className={`pointer-events-auto inline-flex h-[24px] w-[24px] items-center justify-center border transition ${
+      className={`pointer-events-auto inline-flex h-[26px] w-[26px] items-center justify-center rounded-lg border shadow-sm transition-all duration-[180ms] ${
         active
           ? "border-[#111] bg-[#111] text-white"
-          : "border-[#e5e5e5] bg-white/90 text-[#374151] hover:border-[#111]"
+          : "border-[#e5e5e5] bg-white/95 text-[#374151] hover:border-[#111] hover:bg-white"
       }`}
     >
       {children}
@@ -246,43 +291,28 @@ function IconBtn({ label, active, onClick, children }) {
   );
 }
 
-/* ── STOCK ICONS ── */
-function CheckIcon() {
-  return (
-    <svg className="h-[10px] w-[10px] shrink-0 text-[#16a34a]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.8">
-      <path d="M20 6L9 17l-5-5" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-function MinusCircleIcon() {
-  return (
-    <svg className="h-[10px] w-[10px] shrink-0 text-[#9ca3af]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-      <circle cx="12" cy="12" r="9" />
-      <path d="M8 12h8" strokeLinecap="round" />
-    </svg>
-  );
-}
-
 /* ── CARD ICONS ── */
 function HeartIcon({ filled }) {
   return (
-    <svg className="h-[11px] w-[11px]" viewBox="0 0 24 24" fill={filled ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2">
+    <svg className="h-[10px] w-[10px]" viewBox="0 0 24 24" fill={filled ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2">
       <path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 1 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8z" />
     </svg>
   );
 }
 function EyeIcon() {
   return (
-    <svg className="h-[11px] w-[11px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <svg className="h-[10px] w-[10px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
       <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z" />
       <circle cx="12" cy="12" r="3" />
     </svg>
   );
 }
-function SparkIcon() {
+
+function FlagIcon() {
   return (
-    <svg className="h-[11px] w-[11px]" viewBox="0 0 24 24" fill="currentColor">
-      <path d="M12 2l1.9 5.2L19 9l-5.1 1.8L12 16l-1.9-5.2L5 9l5.1-1.8L12 2z" />
+    <svg className="h-[10px] w-[10px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M5 3v18" strokeLinecap="round" />
+      <path d="M5 4h10l-1.8 4L15 12H5" strokeLinejoin="round" />
     </svg>
   );
 }
@@ -309,31 +339,68 @@ function ProductImage({ document }) {
       loading="lazy"
       decoding="async"
       onError={() => setErrored(true)}
-      className="h-full w-full object-contain p-[10px] transition-transform duration-300 group-hover:scale-[1.05]"
+      className="h-full w-full object-contain p-3 transition-transform duration-200 group-hover:scale-[1.04]"
     />
   );
 }
 
+const CATEGORY_STYLES = [
+  { keys: ["LIGHT", "SPOT", "LAMP", "LED"],       bg: "#fffbeb", accent: "#d97706", letter: "#92400e" },
+  { keys: ["AUDIO", "SPEAKER", "SOUND"],           bg: "#eef2ff", accent: "#6366f1", letter: "#3730a3" },
+  { keys: ["ELECTRIC"],                             bg: "#eff6ff", accent: "#3b82f6", letter: "#1d4ed8" },
+  { keys: ["DECOR"],                                bg: "#fdf4ff", accent: "#c026d3", letter: "#86198f" },
+  { keys: ["SMART", "AUTO", "HOME"],               bg: "#ecfdf5", accent: "#10b981", letter: "#065f46" },
+  { keys: ["IT ", "ASSET", "COMPUTER"],            bg: "#f0f9ff", accent: "#0ea5e9", letter: "#075985" },
+  { keys: ["VIPRA"],                                bg: "#f5f3ff", accent: "#8b5cf6", letter: "#5b21b6" },
+  { keys: ["RAW"],                                  bg: "#fefce8", accent: "#ca8a04", letter: "#713f12" },
+  { keys: ["HARDWARE", "TOOL"],                    bg: "#f5f5f4", accent: "#78716c", letter: "#44403c" },
+  { keys: ["STATION"],                              bg: "#f0fdf4", accent: "#22c55e", letter: "#14532d" },
+];
+
+function getCategoryStyle(document) {
+  const group = String(document?.item_group || document?.category_list || "").toUpperCase();
+  for (const s of CATEGORY_STYLES) {
+    if (s.keys.some((k) => group.includes(k))) return s;
+  }
+  return { bg: "#f4f6f8", accent: "#64748b", letter: "#334155" };
+}
+
 function ProductPlaceholder({ document }) {
-  const initial = (
-    document?.brand?.[0] || document?.item_name?.[0] || document?.item_code?.[0] || "?"
-  ).toUpperCase();
-  const code = document?.item_code || "";
-  const hue = [...code].reduce((n, c) => n + c.charCodeAt(0), 0) % 360;
+  const { bg, accent, letter } = getCategoryStyle(document);
+  const group = document?.item_group || document?.category_list || "";
+  const abbr = group ? group.replace(/[^A-Z]/gi, "").slice(0, 2).toUpperCase() || group.slice(0, 2).toUpperCase() : "IH";
 
   return (
-    <div className="flex h-full w-full flex-col items-center justify-center gap-[6px]">
+    <div
+      className="relative flex h-full w-full items-center justify-center overflow-hidden"
+      style={{ background: `linear-gradient(150deg, ${bg} 0%, #ffffff 70%)` }}
+    >
       <div
-        className="flex h-[40px] w-[40px] items-center justify-center rounded-[4px] text-[16px] font-bold text-white"
-        style={{ backgroundColor: `hsl(${hue},30%,55%)` }}
+        className="absolute inset-0 pointer-events-none"
+        style={{ background: `radial-gradient(ellipse at 30% 30%, ${accent}18 0%, transparent 65%)` }}
+      />
+      <div
+        className="absolute select-none font-black leading-none pointer-events-none"
+        style={{ fontSize: "80px", color: accent, opacity: 0.05, letterSpacing: "-3px" }}
+        aria-hidden="true"
       >
-        {initial}
+        {abbr}
       </div>
-      {code && (
-        <span className="px-[4px] text-center font-mono text-[8px] font-medium uppercase tracking-[0.1em] text-[#c0c0c0] leading-[1.3]">
-          {code}
-        </span>
-      )}
+      <div className="relative z-10 flex flex-col items-center gap-1.5">
+        <div
+          className="flex h-[34px] w-[34px] items-center justify-center rounded-xl text-[12px] font-black tracking-tight"
+          style={{
+            backgroundColor: `${accent}18`,
+            color: letter,
+            border: `1.5px solid ${accent}30`,
+          }}
+        >
+          {abbr}
+        </div>
+        <p className="text-[8px] font-semibold uppercase tracking-[0.2em] text-gray-400">
+          No image yet
+        </p>
+      </div>
     </div>
   );
 }

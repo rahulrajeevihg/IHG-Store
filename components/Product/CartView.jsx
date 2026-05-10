@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import Image from 'next/image';
 import { useRouter } from 'next/router';
-import { get_cart_items, check_Image, search_opportunities, create_quotation_from_portal, clear_cart } from '@/libs/api';
+import { get_cart_items, check_Image, search_opportunities, create_quotation_from_portal, clear_cart, extractFrappeErrorMessage, getErpDeskQuotationUrl } from '@/libs/api';
 import { setCartItems, resetCart } from '@/redux/slice/cartSettings';
 import { toast } from 'react-toastify';
 import CardButton from './CardButton';
@@ -21,11 +21,14 @@ const CartView = () => {
     const [isCreating, setIsCreating] = useState(false);
     const [isLoadingCart, setIsLoadingCart] = useState(false);
 
-    const isLoggedIn = !!localStorage.getItem('full_name');
+    const [isLoggedIn, setIsLoggedIn] = useState(false);
     const searchRef = useRef(null);
     const debounceRef = useRef(null);
 
     useEffect(() => {
+        if (typeof window !== 'undefined') {
+            setIsLoggedIn(!!localStorage.getItem('full_name'));
+        }
         loadCart();
     }, []);
 
@@ -114,6 +117,7 @@ const CartView = () => {
             return;
         }
 
+        const quotationWindow = typeof window !== 'undefined' ? window.open('', '_blank') : null;
         setIsCreating(true);
         try {
             const payload = {
@@ -127,15 +131,24 @@ const CartView = () => {
 
             const resp = await create_quotation_from_portal(payload);
             if (resp && resp.message && resp.message.status === 'success') {
-                toast.success(`Quotation ${resp.message.quotation} created successfully!`);
+                const quotationName = resp.message.quotation;
+                const quotationUrl = getErpDeskQuotationUrl(quotationName);
+                if (quotationWindow && quotationUrl) {
+                    quotationWindow.location.href = quotationUrl;
+                } else if (quotationUrl) {
+                    window.open(quotationUrl, '_blank', 'noopener,noreferrer');
+                }
+                toast.success(`Draft quotation ${quotationName} opened in ERPNext. Complete required fields and save it there.`);
                 try { await clear_cart(); } catch (_) {}
                 dispatch(resetCart());
                 router.push('/tabs/my-orders');
             } else {
-                toast.error(resp?.message?.message || 'Failed to create quotation');
+                if (quotationWindow) quotationWindow.close();
+                toast.error(extractFrappeErrorMessage(resp, 'Failed to create quotation'));
             }
-        } catch {
-            toast.error('An error occurred while creating the quotation');
+        } catch (error) {
+            if (quotationWindow) quotationWindow.close();
+            toast.error(extractFrappeErrorMessage(error, 'An error occurred while creating the quotation'));
         } finally {
             setIsCreating(false);
         }

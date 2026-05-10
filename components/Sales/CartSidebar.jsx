@@ -10,6 +10,8 @@ import {
   get_recent_quotations,
   get_cart_items,
   check_Image,
+  extractFrappeErrorMessage,
+  getErpDeskQuotationUrl,
 } from '@/libs/api';
 import {
   setCartItems,
@@ -111,6 +113,7 @@ export default function CartSidebar({ onClose, onQuotationCreated }) {
       toast.warning('Cart is empty');
       return;
     }
+    const quotationWindow = typeof window !== 'undefined' ? window.open('', '_blank') : null;
     setIsCreating(true);
     try {
       const payload = {
@@ -125,7 +128,13 @@ export default function CartSidebar({ onClose, onQuotationCreated }) {
       const resp = await create_quotation_from_portal(payload);
       if (resp?.message?.status === 'success') {
         const qname = resp.message.quotation;
-        toast.success(`Quotation ${qname} created!`);
+        const quotationUrl = getErpDeskQuotationUrl(qname);
+        if (quotationWindow && quotationUrl) {
+          quotationWindow.location.href = quotationUrl;
+        } else if (quotationUrl) {
+          window.open(quotationUrl, '_blank', 'noopener,noreferrer');
+        }
+        toast.success(`Draft quotation ${qname} opened in ERPNext. Complete required fields and save it there.`);
         try { await clear_cart(); } catch (_) {}
         dispatch(resetCart());   // also clears selectedOpportunity and itemNotes
         setSearchQuery('');
@@ -134,10 +143,12 @@ export default function CartSidebar({ onClose, onQuotationCreated }) {
         // refresh drawer list if open
         if (drawerOpen) loadRecentQuotations();
       } else {
-        toast.error(resp?.message?.message || 'Failed to create quotation');
+        if (quotationWindow) quotationWindow.close();
+        toast.error(extractFrappeErrorMessage(resp, 'Failed to create quotation'));
       }
-    } catch {
-      toast.error('Error creating quotation');
+    } catch (error) {
+      if (quotationWindow) quotationWindow.close();
+      toast.error(extractFrappeErrorMessage(error, 'Error creating quotation'));
     } finally {
       setIsCreating(false);
     }

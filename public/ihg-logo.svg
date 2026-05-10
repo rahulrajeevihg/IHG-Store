@@ -1,0 +1,7 @@
+<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+  <!-- Black rounded background -->
+  <rect x="0" y="0" width="200" height="200" rx="48" fill="#000000"/>
+
+  <!-- White IHG text -->
+  <text x="100" y="130" font-family="'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif" font-size="92" font-weight="700" fill="#FFFFFF" text-anchor="middle" dominant-baseline="middle" letter-spacing="-4">IHG</text>
+</svg>

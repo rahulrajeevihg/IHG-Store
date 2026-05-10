@@ -2,8 +2,11 @@ import { Fragment, useEffect, useMemo, useState } from "react";
 import { Dialog, Transition } from "@headlessui/react";
 import {
   getSimilarProductsV2,
+  isSearchV2DisabledError,
   normalizeSearchHit,
   buildFeatureFlagOverride,
+  reportSearchV2DisabledOnce,
+  SEARCH_V2_DISABLED_DISPLAY_MESSAGE,
 } from "@/libs/ighSearchV2";
 import { logV2Event } from "@/libs/ighSearchV2Metrics";
 import ImageLoader from "@/components/ImageLoader";
@@ -89,6 +92,20 @@ export default function V2QuickViewDrawer({
         });
       } catch (error) {
         if (!active || error?.name === "AbortError") {
+          return;
+        }
+
+        if (isSearchV2DisabledError(error)) {
+          reportSearchV2DisabledOnce({
+            source: "get_similar_products_v2",
+            item_code: item.item_code,
+          });
+          setSimilarState({
+            loading: false,
+            loaded: true,
+            items: [],
+            error: SEARCH_V2_DISABLED_DISPLAY_MESSAGE,
+          });
           return;
         }
 

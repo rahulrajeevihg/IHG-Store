@@ -1,6 +1,8 @@
-import { Fragment, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { Dialog, Transition } from "@headlessui/react";
 import { VISIBLE_FILTERS } from "../constants";
+import FilterOptionsModal from "./FilterOptionsModal";
+import { formatRangeValue, isMeaningfulRange } from "../utils/format";
 
 /* ─── icons (refined) ─────────────────────────────────────────── */
 const ICONS = {
@@ -32,7 +34,7 @@ export default function FilterPanel({
 
   const sections = useMemo(
     () =>
-      VISIBLE_FILTERS.map((f) => {
+      VISIBLE_FILTERS.filter((filter) => !["power", "color_temp"].includes(filter.key)).map((f) => {
         const sel = new Set(filters[f.key] || []);
         const options = (visibleFilterOptions[f.key] || []).filter((opt) => {
           if (sel.has(opt.value)) return true;
@@ -44,15 +46,59 @@ export default function FilterPanel({
     [filters, visibleFilterOptions]
   );
 
-  const totalActive =
-    sections.reduce((s, x) => s + x.selectedCount, 0) +
-    (filters.in_stock ? 1 : 0) +
-    (filters.rate_range?.min || filters.rate_range?.max ? 1 : 0);
+  const totalActive = useMemo(
+    () =>
+      Object.entries(filters || {}).reduce((count, [key, value]) => {
+        if (Array.isArray(value)) {
+          return count + value.length;
+        }
+        if (typeof value === "boolean") {
+          return count + (value ? 1 : 0);
+        }
+        if (key.endsWith("_range") && isMeaningfulRange(value)) {
+          return count + 1;
+        }
+        return count;
+      }, 0),
+    [filters]
+  );
+
+  const powerSliderBounds = useMemo(
+    () => buildPowerSliderBounds(visibleFilterOptions.power || []),
+    [visibleFilterOptions.power]
+  );
+
+  const colorTemperatureSliderBounds = useMemo(
+    () => buildKelvinSliderBounds(visibleFilterOptions.color_temp || []),
+    [visibleFilterOptions.color_temp]
+  );
+
+  const groupedSections = useMemo(() => {
+    const PRIMARY = new Set(["brand", "category_list", "product_type"]);
+    const TECHNICAL = new Set([
+      "ip_rate",
+      "beam_angle",
+      "mounting",
+      "input_voltage",
+      "output_voltage",
+      "output_current",
+      "lamp_type",
+      "body_finish",
+      "material",
+      "warranty",
+    ]);
+
+    return {
+      primary: sections.filter((s) => PRIMARY.has(s.key)),
+      technical: sections.filter((s) => TECHNICAL.has(s.key)),
+      advanced: sections.filter((s) => !PRIMARY.has(s.key) && !TECHNICAL.has(s.key)),
+    };
+  }, [sections]);
 
   return (
-    <div className="w-full h-full flex flex-col bg-white overflow-hidden">
+    <div className="w-full h-full flex flex-col bg-[#fcfdff] overflow-hidden">
       {/* ── HEADER ── */}
-      <div className="flex h-14 items-center justify-between border-b border-gray-100 px-5 shrink-0">
+      <div className="sticky top-0 z-10 flex h-12 items-center justify-between border-b border-[#eef0f3] bg-[#fcfdff] px-4 shrink-0">
         <div className="flex items-center gap-2.5">
           <span className="text-[14px] font-bold text-gray-900 tracking-tight">Filters</span>
           {totalActive > 0 && (
@@ -74,12 +120,12 @@ export default function FilterPanel({
 
       {/* ── CONTENT ── */}
       <div
-        className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-thin scrollbar-thumb-gray-200"
+        className="flex-1 overflow-y-auto overflow-x-hidden scroll-smooth scrollbar-thin scrollbar-thumb-[#d7dde7]"
         style={{ maxHeight: "calc(100vh - 180px)" }}
       >
-        <div className="p-4 space-y-1">
+        <div className="p-[14px_16px] space-y-3">
           {/* IN STOCK toggle */}
-          <div className="px-1 py-3 mb-2 flex items-center justify-between rounded-xl border border-gray-50 bg-gray-50/30">
+          <div className="px-2 py-3 flex items-center justify-between rounded-xl border border-[#edf1f5] bg-white">
             <div className="flex items-center gap-3">
               <div className={`p-1.5 rounded-lg ${filters.in_stock ? "bg-red-50 text-red-600" : "bg-gray-100 text-gray-400"}`}>
                 <StockIcon />
@@ -123,47 +169,538 @@ export default function FilterPanel({
             </div>
           </FilterSection>
 
-          {/* FACET sections */}
-          {sections.map((section, i) => (
-            <FacetSection
-              key={section.key}
-              section={section}
-              icon={ICONS[section.key] || <DotIcon />}
-              selected={filters[section.key] || []}
-              defaultOpen={i < 3}
-              onChange={(values) =>
-                updateMultiFilter(section.key, values.map((v) => ({ value: v })))
+          <PowerRangeSection
+            bounds={powerSliderBounds}
+            value={filters.power_value_range}
+            active={isMeaningfulRange(filters.power_value_range) || (filters.power || []).length > 0}
+            rawValueCount={(filters.power || []).length}
+            onChange={(nextRange) => {
+              if ((filters.power || []).length > 0) {
+                updateMultiFilter("power", []);
               }
-            />
-          ))}
+              updateRangeFilter("power_value_range", "min", nextRange.min);
+              updateRangeFilter("power_value_range", "max", nextRange.max);
+            }}
+            onClear={() => {
+              if ((filters.power || []).length > 0) {
+                updateMultiFilter("power", []);
+              }
+              updateRangeFilter("power_value_range", "min", "");
+              updateRangeFilter("power_value_range", "max", "");
+            }}
+          />
+
+          <ColorTemperatureRangeSection
+            bounds={colorTemperatureSliderBounds}
+            value={filters.color_temp_kelvin_range}
+            active={isMeaningfulRange(filters.color_temp_kelvin_range) || (filters.color_temp || []).length > 0}
+            rawValueCount={(filters.color_temp || []).length}
+            onChange={(nextRange) => {
+              if ((filters.color_temp || []).length > 0) {
+                updateMultiFilter("color_temp", []);
+              }
+              updateRangeFilter("color_temp_kelvin_range", "min", nextRange.min);
+              updateRangeFilter("color_temp_kelvin_range", "max", nextRange.max);
+            }}
+            onClear={() => {
+              if ((filters.color_temp || []).length > 0) {
+                updateMultiFilter("color_temp", []);
+              }
+              updateRangeFilter("color_temp_kelvin_range", "min", "");
+              updateRangeFilter("color_temp_kelvin_range", "max", "");
+            }}
+          />
+
+          {/* FACET sections grouped */}
+          <FilterGroup title="Primary Filters" sections={groupedSections.primary} filters={filters} updateMultiFilter={updateMultiFilter} />
+          <FilterGroup title="Technical Filters" sections={groupedSections.technical} filters={filters} updateMultiFilter={updateMultiFilter} />
+          {groupedSections.advanced.length > 0 && (
+            <FilterGroup title="Advanced Filters" sections={groupedSections.advanced} filters={filters} updateMultiFilter={updateMultiFilter} />
+          )}
         </div>
       </div>
     </div>
   );
 }
 
-/* ─── FilterSection ─────────────────────────────────────────────── */
-function FilterSection({ label, icon, active, children }) {
-  const [open, setOpen] = useState(true);
+function PowerRangeSection({ bounds, value, active, rawValueCount, onChange, onClear }) {
+  const [open, setOpen] = useState(false);
+  const effectiveMin = bounds.min;
+  const effectiveMax = bounds.max;
+  const step = bounds.step;
+  const minValue = clampRangeValue(value?.min, effectiveMin, effectiveMax, effectiveMin);
+  const maxValue = clampRangeValue(value?.max, effectiveMin, effectiveMax, effectiveMax);
+  const displayMin = value?.min === "" || value?.min === undefined ? effectiveMin : minValue;
+  const displayMax = value?.max === "" || value?.max === undefined ? effectiveMax : maxValue;
+
+  const setRange = (nextMin, nextMax) => {
+    onChange({
+      min:
+        Number(nextMin) <= effectiveMin && Number(nextMax) >= effectiveMax
+          ? ""
+          : formatSliderNumber(nextMin),
+      max:
+        Number(nextMin) <= effectiveMin && Number(nextMax) >= effectiveMax
+          ? ""
+          : formatSliderNumber(nextMax),
+    });
+  };
 
   return (
-    <div className="border-b border-gray-50 last:border-0 pb-3">
+    <div className="rounded-lg border border-transparent bg-white">
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        className="flex w-full items-center justify-between py-3 px-1 group"
+        className={`flex h-[46px] w-full items-center justify-between px-2 group rounded-lg transition-colors ${open ? "bg-[#f6f8fb]" : "hover:bg-[#f8fafc]"}`}
+      >
+        <div className="flex items-center gap-3">
+          <span className={`transition-colors ${active ? "text-red-600" : "text-gray-400 group-hover:text-gray-900"}`}>
+            {ICONS.power}
+          </span>
+          <div className="flex items-center gap-2">
+            <span className="text-[13px] font-semibold text-[#1f2937]">Power</span>
+            {active && (
+              <span className="rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-bold text-red-600">
+                {formatRangeValue(
+                  {
+                    min: value?.min === "" ? effectiveMin : displayMin,
+                    max: value?.max === "" ? effectiveMax : displayMax,
+                  },
+                  "power_value_range"
+                )}
+              </span>
+            )}
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          {(active || rawValueCount > 0) && (
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                onClear();
+              }}
+              className="rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-red-500 hover:bg-red-50"
+            >
+              Clear
+            </button>
+          )}
+          <ChevronIcon rotated={open} />
+        </div>
+      </button>
+      <div className={`grid transition-all duration-200 ${open ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"}`}>
+        <div className="overflow-hidden px-2 pb-3">
+          <div className="mb-3 grid grid-cols-2 gap-2">
+            <NumericInput
+              label="Min"
+              value={displayMin}
+              min={effectiveMin}
+              max={displayMax}
+              step={step}
+              onChange={(nextValue) => setRange(nextValue, displayMax)}
+            />
+            <NumericInput
+              label="Max"
+              value={displayMax}
+              min={displayMin}
+              max={effectiveMax}
+              step={step}
+              onChange={(nextValue) => setRange(displayMin, nextValue)}
+            />
+          </div>
+
+          <div className="relative px-1 py-3">
+            <div
+              className="absolute left-1 right-1 top-1/2 h-1 -translate-y-1/2 rounded-full bg-[#e5e7eb]"
+            />
+            <div
+              className="absolute top-1/2 h-1 -translate-y-1/2 rounded-full bg-[#111]"
+              style={{
+                left: `${toPercent(displayMin, effectiveMin, effectiveMax)}%`,
+                right: `${100 - toPercent(displayMax, effectiveMin, effectiveMax)}%`,
+              }}
+            />
+            <input
+              type="range"
+              min={effectiveMin}
+              max={effectiveMax}
+              step={step}
+              value={displayMin}
+              onChange={(event) =>
+                setRange(
+                  Math.min(Number(event.target.value), displayMax),
+                  displayMax
+                )
+              }
+              className="absolute left-0 top-1/2 h-0 w-full -translate-y-1/2 bg-transparent z-[1]"
+            />
+            <input
+              type="range"
+              min={effectiveMin}
+              max={effectiveMax}
+              step={step}
+              value={displayMax}
+              onChange={(event) =>
+                setRange(
+                  displayMin,
+                  Math.max(Number(event.target.value), displayMin)
+                )
+              }
+              className="absolute left-0 top-1/2 h-1 w-full -translate-y-1/2 bg-transparent"
+            />
+          </div>
+
+          <div className="mt-4 flex items-center justify-between text-[11px] font-medium text-[#6b7280]">
+            <span>{formatSliderNumber(effectiveMin)}W</span>
+            <span>{formatSliderNumber(effectiveMax)}W</span>
+          </div>
+
+          {rawValueCount > 0 && (
+            <p className="mt-3 text-[11px] leading-5 text-[#9ca3af]">
+              This range overrides {rawValueCount} selected raw power value{rawValueCount > 1 ? "s" : ""}.
+            </p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function NumericInput({ label, value, min, max, step, onChange }) {
+  const [draft, setDraft] = useState(String(value ?? ""));
+
+  useEffect(() => {
+    setDraft(String(value ?? ""));
+  }, [value]);
+
+  const commitDraft = () => {
+    const trimmed = String(draft).trim();
+    if (!trimmed) {
+      onChange(min);
+      return;
+    }
+
+    const nextValue = Number(trimmed);
+    if (!Number.isFinite(nextValue)) {
+      setDraft(String(value ?? ""));
+      return;
+    }
+
+    const clampedValue = Math.min(max, Math.max(min, nextValue));
+    onChange(clampedValue);
+  };
+
+  return (
+    <label className="group">
+      <span className="mb-1 block text-[10px] font-bold uppercase tracking-[0.12em] text-[#9ca3af]">
+        {label}
+      </span>
+      <div className="relative">
+        <input
+          type="number"
+          value={draft}
+          min={min}
+          max={max}
+          step={step}
+          onChange={(event) => setDraft(event.target.value)}
+          onBlur={commitDraft}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.preventDefault();
+              commitDraft();
+              event.currentTarget.blur();
+            }
+          }}
+          className="h-10 w-full rounded-lg border border-gray-100 bg-gray-50/50 pl-3 pr-10 text-[12px] text-gray-900 outline-none focus:border-red-600 focus:bg-white focus:ring-4 focus:ring-red-600/5 transition-all"
+        />
+        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] font-semibold text-[#9ca3af]">
+          W
+        </span>
+      </div>
+    </label>
+  );
+}
+
+function ColorTemperatureRangeSection({ bounds, value, active, rawValueCount, onChange, onClear }) {
+  const [open, setOpen] = useState(false);
+  const effectiveMin = bounds.min;
+  const effectiveMax = bounds.max;
+  const step = bounds.step;
+  const minValue = clampRangeValue(value?.min, effectiveMin, effectiveMax, effectiveMin);
+  const maxValue = clampRangeValue(value?.max, effectiveMin, effectiveMax, effectiveMax);
+  const displayMin = value?.min === "" || value?.min === undefined ? effectiveMin : minValue;
+  const displayMax = value?.max === "" || value?.max === undefined ? effectiveMax : maxValue;
+
+  const setRange = (nextMin, nextMax) => {
+    onChange({
+      min:
+        Number(nextMin) <= effectiveMin && Number(nextMax) >= effectiveMax
+          ? ""
+          : formatSliderNumber(nextMin),
+      max:
+        Number(nextMin) <= effectiveMin && Number(nextMax) >= effectiveMax
+          ? ""
+          : formatSliderNumber(nextMax),
+    });
+  };
+
+  return (
+    <div className="rounded-lg border border-transparent bg-white">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className={`flex h-[46px] w-full items-center justify-between px-2 group rounded-lg transition-colors ${open ? "bg-[#f6f8fb]" : "hover:bg-[#f8fafc]"}`}
+      >
+        <div className="flex items-center gap-3">
+          <span className={`transition-colors ${active ? "text-red-600" : "text-gray-400 group-hover:text-gray-900"}`}>
+            {ICONS.color_temp}
+          </span>
+          <div className="flex items-center gap-2">
+            <span className="text-[13px] font-semibold text-[#1f2937]">Color Temperature</span>
+            {active && (
+              <span className="rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-bold text-red-600">
+                {formatRangeValue(
+                  {
+                    min: value?.min === "" ? effectiveMin : displayMin,
+                    max: value?.max === "" ? effectiveMax : displayMax,
+                  },
+                  "color_temp_kelvin_range"
+                )}
+              </span>
+            )}
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          {(active || rawValueCount > 0) && (
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                onClear();
+              }}
+              className="rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-red-500 hover:bg-red-50"
+            >
+              Clear
+            </button>
+          )}
+          <ChevronIcon rotated={open} />
+        </div>
+      </button>
+      <div className={`grid transition-all duration-200 ${open ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"}`}>
+        <div className="overflow-hidden px-2 pb-3">
+          <div className="mb-3 grid grid-cols-2 gap-2">
+            <NumericInput
+              label="Min"
+              value={displayMin}
+              min={effectiveMin}
+              max={displayMax}
+              step={step}
+              onChange={(nextValue) => setRange(nextValue, displayMax)}
+            />
+            <NumericInput
+              label="Max"
+              value={displayMax}
+              min={displayMin}
+              max={effectiveMax}
+              step={step}
+              onChange={(nextValue) => setRange(displayMin, nextValue)}
+            />
+          </div>
+
+          <div className="relative px-1 py-3">
+            <div className="absolute left-1 right-1 top-1/2 h-1 -translate-y-1/2 rounded-full bg-[#e5e7eb]" />
+            <div
+              className="absolute top-1/2 h-1 -translate-y-1/2 rounded-full bg-[#111]"
+              style={{
+                left: `${toPercent(displayMin, effectiveMin, effectiveMax)}%`,
+                right: `${100 - toPercent(displayMax, effectiveMin, effectiveMax)}%`,
+              }}
+            />
+            <input
+              type="range"
+              min={effectiveMin}
+              max={effectiveMax}
+              step={step}
+              value={displayMin}
+              onChange={(event) =>
+                setRange(
+                  Math.min(Number(event.target.value), displayMax),
+                  displayMax
+                )
+              }
+              className="absolute left-0 top-1/2 h-0 w-full -translate-y-1/2 bg-transparent z-[1]"
+            />
+            <input
+              type="range"
+              min={effectiveMin}
+              max={effectiveMax}
+              step={step}
+              value={displayMax}
+              onChange={(event) =>
+                setRange(
+                  displayMin,
+                  Math.max(Number(event.target.value), displayMin)
+                )
+              }
+              className="absolute left-0 top-1/2 h-1 w-full -translate-y-1/2 bg-transparent"
+            />
+          </div>
+
+          <div className="mt-4 flex items-center justify-between text-[11px] font-medium text-[#6b7280]">
+            <span>{formatSliderNumber(effectiveMin)}K</span>
+            <span>{formatSliderNumber(effectiveMax)}K</span>
+          </div>
+
+          {rawValueCount > 0 && (
+            <p className="mt-3 text-[11px] leading-5 text-[#9ca3af]">
+              This range overrides {rawValueCount} selected raw temperature value{rawValueCount > 1 ? "s" : ""}.
+            </p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function buildPowerSliderBounds(options = []) {
+  const values = [];
+  let hasDecimals = false;
+
+  for (const option of options) {
+    const rawValue = String(option?.value || option?.label || "").trim().toUpperCase();
+    if (!rawValue || rawValue.includes("/M") || rawValue.includes("METER")) {
+      continue;
+    }
+
+    const numbers = rawValue.match(/\d+(?:\.\d+)?/g) || [];
+    if (!numbers.length || !rawValue.includes("W")) {
+      continue;
+    }
+
+    numbers.forEach((entry) => {
+      const numericValue = Number(entry);
+      if (!Number.isFinite(numericValue)) {
+        return;
+      }
+      if (!Number.isInteger(numericValue)) {
+        hasDecimals = true;
+      }
+      values.push(numericValue);
+    });
+  }
+
+  if (!values.length) {
+    return { min: 0, max: 100, step: 1 };
+  }
+
+  const min = Math.floor(Math.min(...values));
+  const max = Math.ceil(Math.max(...values));
+  return {
+    min,
+    max: Math.max(max, min + 1),
+    step: hasDecimals ? 0.1 : 1,
+  };
+}
+
+function buildKelvinSliderBounds(options = []) {
+  const values = [];
+
+  for (const option of options) {
+    const rawValue = String(option?.value || option?.label || "").trim().toUpperCase();
+    const match = rawValue.match(/(\d{3,5})\s*K\b/);
+    if (!match) {
+      continue;
+    }
+
+    const numericValue = Number(match[1]);
+    if (Number.isFinite(numericValue)) {
+      values.push(numericValue);
+    }
+  }
+
+  if (!values.length) {
+    return { min: 2000, max: 6500, step: 100 };
+  }
+
+  const min = Math.floor(Math.min(...values) / 100) * 100;
+  const max = Math.ceil(Math.max(...values) / 100) * 100;
+  return {
+    min,
+    max: Math.max(max, min + 100),
+    step: 100,
+  };
+}
+
+function clampRangeValue(value, min, max, fallback) {
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue)) {
+    return fallback;
+  }
+  return Math.min(max, Math.max(min, numericValue));
+}
+
+function formatSliderNumber(value) {
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue)) {
+    return "";
+  }
+  return String(Number(numericValue.toFixed(2)));
+}
+
+function toPercent(value, min, max) {
+  if (max <= min) {
+    return 0;
+  }
+  return ((value - min) / (max - min)) * 100;
+}
+
+function FilterGroup({ title, sections, filters, updateMultiFilter }) {
+  if (!sections?.length) return null;
+  return (
+    <div className="rounded-xl border border-[#edf1f5] bg-white p-2">
+      <div className="px-2 pb-1 pt-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-[#6b7280]">
+        {title}
+      </div>
+      {sections.map((section, i) => (
+        <FacetSection
+          key={section.key}
+          section={section}
+          icon={ICONS[section.key] || <DotIcon />}
+          selected={filters[section.key] || []}
+          defaultOpen={false}
+          onChange={(values) =>
+            updateMultiFilter(section.key, values.map((v) => ({ value: v })))
+          }
+        />
+      ))}
+    </div>
+  );
+}
+
+/* ─── FilterSection ─────────────────────────────────────────────── */
+function FilterSection({ label, icon, active, children }) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div className="rounded-lg border border-transparent bg-white">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className={`flex h-[46px] w-full items-center justify-between px-2 group rounded-lg transition-colors ${open ? "bg-[#f6f8fb]" : "hover:bg-[#f8fafc]"}`}
       >
         <div className="flex items-center gap-3">
           <span className={`transition-colors ${active ? "text-red-600" : "text-gray-400 group-hover:text-gray-900"}`}>
             {icon}
           </span>
-          <span className="text-[13px] font-bold text-gray-800 tracking-tight uppercase tracking-widest text-[11px] opacity-70">
+          <span className="text-[13px] font-semibold text-[#1f2937]">
             {label}
           </span>
         </div>
         <ChevronIcon rotated={open} />
       </button>
-      {open && <div className="px-1">{children}</div>}
+      <div className={`grid transition-all duration-200 ${open ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"}`}>
+        <div className="overflow-hidden px-2">{children}</div>
+      </div>
     </div>
   );
 }
@@ -173,6 +710,7 @@ function FacetSection({ section, icon, selected, defaultOpen, onChange }) {
   const [open, setOpen] = useState(defaultOpen);
   const [search, setSearch] = useState("");
   const [showAll, setShowAll] = useState(false);
+  const [optionsModalOpen, setOptionsModalOpen] = useState(false);
 
   const parsed = useMemo(() => section.options.map((opt) => {
     const m = opt.label.match(/^(.*)\s*\((\d+)\)$/);
@@ -194,31 +732,49 @@ function FacetSection({ section, icon, selected, defaultOpen, onChange }) {
     else onChange([...selected, value]);
   };
 
+  const isBrandSection = section.key === "brand";
+  const isCategorySection = section.key === "category_list";
+  const usesLargeOptionsModal = isBrandSection || isCategorySection;
+
   return (
-    <div className="border-b border-gray-50 last:border-0 pb-1">
+    <div className="pb-1">
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        className="flex w-full items-center justify-between py-3 px-1 group"
+        className={`flex h-[46px] w-full items-center justify-between px-2 group rounded-lg transition-colors ${open ? "bg-[#f6f8fb]" : "hover:bg-[#f8fafc]"}`}
       >
         <div className="flex items-center gap-3">
           <span className={`transition-colors ${section.selectedCount > 0 ? "text-red-600" : "text-gray-400 group-hover:text-gray-900"}`}>
             {icon}
           </span>
-          <span className="text-[13px] font-bold text-gray-800 tracking-tight uppercase tracking-[0.05em] text-[11px] opacity-70">
+          <span className="text-[13px] font-semibold text-[#1f2937]">
             {section.label}
           </span>
           {section.selectedCount > 0 && (
-            <span className="inline-flex h-4 min-w-[16px] items-center justify-center rounded-full bg-red-50 px-1 text-[9px] font-bold text-red-600">
+            <span className="inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-red-50 px-1.5 text-[10px] font-bold text-red-600">
               {section.selectedCount}
             </span>
           )}
         </div>
-        <ChevronIcon rotated={open} />
+        <div className="flex items-center gap-2">
+          {section.selectedCount > 0 && (
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                onChange([]);
+              }}
+              className="rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-red-500 hover:bg-red-50"
+            >
+              Clear
+            </button>
+          )}
+          <ChevronIcon rotated={open} />
+        </div>
       </button>
 
-      {open && (
-        <div className="px-1 pb-3">
+      <div className={`grid transition-all duration-200 ${open ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"}`}>
+        <div className="overflow-hidden px-2 pb-3">
           {parsed.length > 6 && (
             <div className="relative mb-3 group">
               <div className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400">
@@ -228,7 +784,7 @@ function FacetSection({ section, icon, selected, defaultOpen, onChange }) {
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder={`Search ${section.label.toLowerCase()}...`}
-                className="h-8 w-full rounded-lg border border-gray-100 bg-gray-50/50 pl-8 pr-8 text-[12px] text-gray-900 outline-none focus:border-red-600 focus:bg-white transition-all"
+                className="h-7 w-full rounded-lg border border-[#e6eaf0] bg-[#f9fafb] pl-8 pr-8 text-[12px] text-gray-900 placeholder:text-[#9ca3af] outline-none focus:border-red-600 focus:bg-white focus:ring-2 focus:ring-red-600/10 transition-all"
               />
               {search && (
                 <button
@@ -242,17 +798,21 @@ function FacetSection({ section, icon, selected, defaultOpen, onChange }) {
             </div>
           )}
 
-          <div className="space-y-0.5 max-h-60 overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-gray-100">
+          <div className="space-y-1 max-h-60 overflow-y-auto pr-1 scroll-smooth scrollbar-thin scrollbar-thumb-[#dbe2ea]">
             {visible.length === 0 && (
               <p className="py-2 text-[12px] text-gray-400 text-center italic">No results found</p>
             )}
             {visible.map((item) => {
               const checked = selected.includes(item.value);
               return (
-                <label
+                <button
                   key={item.value}
-                  className={`flex cursor-pointer items-center justify-between gap-3 rounded-lg px-2 py-2 text-[12px] transition-all hover:bg-gray-50 ${
-                    checked ? "font-bold text-red-600 bg-red-50/30" : "text-gray-600"
+                  type="button"
+                  role="checkbox"
+                  aria-checked={checked}
+                  onClick={() => toggle(item.value)}
+                  className={`flex w-full cursor-pointer items-center justify-between gap-3 rounded-lg px-2.5 py-2.5 text-left text-[12px] transition-all hover:bg-gray-50 ${
+                    checked ? "font-semibold text-[#b42318] bg-red-50/50" : "text-gray-600"
                   }`}
                 >
                   <span className="flex min-w-0 items-center gap-2.5">
@@ -268,21 +828,51 @@ function FacetSection({ section, icon, selected, defaultOpen, onChange }) {
                       {item.count}
                     </span>
                   )}
-                </label>
+                </button>
               );
             })}
           </div>
 
           {!search && filtered.length > 6 && (
-            <button
-              type="button"
-              onClick={() => setShowAll(!showAll)}
-              className="mt-2 w-full text-center text-[11px] font-bold text-gray-400 hover:text-red-600 py-1.5 rounded-lg hover:bg-red-50/50 transition-all"
-            >
-              {showAll ? "SHOW LESS" : `SHOW ALL (${filtered.length})`}
-            </button>
+            usesLargeOptionsModal ? (
+              <button
+                type="button"
+                onClick={() => setOptionsModalOpen(true)}
+                className="mt-2 w-full text-center text-[11px] font-bold text-gray-400 hover:text-red-600 py-1.5 rounded-lg hover:bg-red-50/50 transition-all"
+              >
+                SHOW ALL ({filtered.length})
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setShowAll(!showAll)}
+                className="mt-2 w-full text-center text-[11px] font-bold text-gray-400 hover:text-red-600 py-1.5 rounded-lg hover:bg-red-50/50 transition-all"
+              >
+                {showAll ? "SHOW LESS" : `SHOW ALL (${filtered.length})`}
+              </button>
+            )
           )}
         </div>
+      </div>
+
+      {usesLargeOptionsModal && (
+        <FilterOptionsModal
+          open={optionsModalOpen}
+          title={isBrandSection ? "Select Brands" : "Select Categories"}
+          subtitle={
+            isBrandSection
+              ? "Choose one or more brands to filter products"
+              : "Choose one or more categories to filter products"
+          }
+          options={parsed.map((item) => ({
+            label: item.name,
+            value: item.value,
+            count: item.count,
+          }))}
+          selectedValues={selected}
+          onApply={(values) => onChange(values)}
+          onClose={() => setOptionsModalOpen(false)}
+        />
       )}
     </div>
   );
@@ -471,7 +1061,7 @@ export function MobileFilterDialog(props) {
           enter="ease-out duration-200" enterFrom="opacity-0" enterTo="opacity-100"
           leave="ease-in duration-150" leaveFrom="opacity-100" leaveTo="opacity-0"
         >
-          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm" />
+          <div className="fixed inset-0 bg-black/40" />
         </Transition.Child>
         <div className="fixed inset-0 overflow-hidden">
           <div className="flex min-h-full justify-end">
@@ -480,7 +1070,7 @@ export function MobileFilterDialog(props) {
               enter="ease-out duration-300" enterFrom="translate-x-full" enterTo="translate-x-0"
               leave="ease-in duration-250" leaveFrom="translate-x-0" leaveTo="translate-x-full"
             >
-              <Dialog.Panel className="flex h-screen w-full max-w-[340px] flex-col bg-white shadow-2xl">
+              <Dialog.Panel className="flex h-screen w-full max-w-[360px] flex-col bg-white shadow-2xl">
                 <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
                   <Dialog.Title className="text-[14px] font-bold text-gray-900 tracking-tight">
                     Filters
@@ -492,14 +1082,23 @@ export function MobileFilterDialog(props) {
                 <div className="flex-1 overflow-auto">
                   <FilterPanel {...props} />
                 </div>
-                <div className="border-t border-gray-100 p-4 bg-gray-50/50">
-                  <button
-                    type="button"
-                    onClick={props.onClose}
-                    className="h-12 w-full bg-red-600 text-[13px] font-bold text-white rounded-xl shadow-lg shadow-red-600/20 active:scale-[0.98] transition-all"
-                  >
-                    View Results
-                  </button>
+                <div className="sticky bottom-0 border-t border-gray-100 bg-white p-3">
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={props.clearFilters}
+                      className="h-11 w-full rounded-lg border border-[#e5e7eb] bg-white text-[12px] font-semibold text-[#475467]"
+                    >
+                      Clear All
+                    </button>
+                    <button
+                      type="button"
+                      onClick={props.onClose}
+                      className="h-11 w-full bg-red-600 text-[12px] font-bold text-white rounded-lg shadow-lg shadow-red-600/20 active:scale-[0.98] transition-all"
+                    >
+                      Apply Filters
+                    </button>
+                  </div>
                 </div>
               </Dialog.Panel>
             </Transition.Child>

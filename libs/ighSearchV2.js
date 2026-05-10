@@ -1,10 +1,68 @@
 import { domain } from "./config/siteConfig";
 import { handleUnauthorizedResponse } from "./auth";
+import {
+  SearchV2DisabledError,
+  buildSearchV2DisabledError,
+  isSearchV2DisabledError,
+  isSearchV2DisabledResponse,
+  SEARCH_V2_DISABLED_DISPLAY_MESSAGE,
+} from "./ighSearchV2Errors.mjs";
+import { logV2Event } from "./ighSearchV2Metrics";
+
+export {
+  SearchV2DisabledError,
+  isSearchV2DisabledError,
+  SEARCH_V2_DISABLED_DISPLAY_MESSAGE,
+};
 
 // Route all igh_search API calls through the ERP cookie-forwarding proxy
 // so the Frappe `sid` HttpOnly cookie is forwarded verbatim to the backend.
 // The proxy handler is at pages/api/erp/[...path].js → mounted at /api/erp/.
 const apiBase = `/api/erp/api/method/igh_search.igh_search.api.`;
+
+const SEARCH_V2_DISABLED_REPORT_KEY = "igh_search_v2_disabled_reported";
+
+export const reportSearchV2DisabledOnce = (context = {}) => {
+  if (typeof window === "undefined") return false;
+
+  let alreadyReported = false;
+  try {
+    if (window.sessionStorage?.getItem(SEARCH_V2_DISABLED_REPORT_KEY) === "1") {
+      alreadyReported = true;
+    } else {
+      window.sessionStorage?.setItem(SEARCH_V2_DISABLED_REPORT_KEY, "1");
+    }
+  } catch {
+    // sessionStorage unavailable (private mode etc.) — fall back to in-memory.
+    if (window.__IGH_SEARCH_V2_DISABLED_REPORTED__) {
+      alreadyReported = true;
+    } else {
+      window.__IGH_SEARCH_V2_DISABLED_REPORTED__ = true;
+    }
+  }
+
+  if (alreadyReported) return false;
+
+  logV2Event("search_v2_disabled", { ...context });
+
+  if (typeof window.__errorReporter?.captureException === "function") {
+    try {
+      window.__errorReporter.captureException(new SearchV2DisabledError(), {
+        tags: { feature: "igh_search_v2", reason: "feature_flag_off" },
+        extra: context,
+      });
+    } catch {
+      // never break the search flow on a reporter failure
+    }
+  } else if (typeof window.console !== "undefined") {
+    window.console.error(
+      "[igh-search] V2 search disabled by site_config flag",
+      context
+    );
+  }
+
+  return true;
+};
 
 export const V2_SORT_OPTIONS = [
   { label: "Relevance", value: "" },
@@ -90,7 +148,7 @@ export const DEFAULT_V2_STATE = {
     material: [],
     warranty: [],
     variant_of: [],
-    in_stock: false,
+    in_stock: true,
     rate_range: { min: "", max: "" },
     offer_rate_range: { min: "", max: "" },
     discount_percentage_range: { min: "", max: "" },
@@ -155,6 +213,9 @@ const parseJsonResponse = async (response) => {
   const data = await response.json().catch(() => ({}));
 
   if (!response.ok) {
+    if (isSearchV2DisabledResponse(response.status, data)) {
+      throw buildSearchV2DisabledError(data);
+    }
     const errorMessage =
       data?.message?.message ||
       data?.message ||
@@ -249,10 +310,14 @@ export const probeSearchV2Availability = async (
   );
 
 export const searchProductsV2 = async (payload, options = {}) => {
+  const sortByValue = payload?.sort_by ?? "";
   const normalizedPayload = {
     query: payload?.query ?? payload?.q ?? "",
     filters: payload?.filters ?? {},
-    sort_by: payload?.sort_by ?? "",
+    sort_by: sortByValue,
+    // Enforce field-first sort when user explicitly picks a sort option.
+    // Without this, backend may keep _text_match as the primary sort key.
+    strict_sort: sortByValue ? 1 : 0,
     page: payload?.page ?? 1,
     page_length: payload?.page_length ?? 20,
     include_inactive: payload?.include_inactive ? 1 : 0,
@@ -489,6 +554,9 @@ const POWER_RANGE_PATTERNS = [
   },
 ];
 
+const IN_STOCK_PHRASE_REGEX =
+  /\b(?:in\s*stock|on\s*stock|instock|stock\s*available|available\s*stock|available\s*now)\b/i;
+
 const normalizeDerivedQuery = (query) =>
   String(query || "")
     .replace(/\s+/g, " ")
@@ -631,8 +699,12 @@ export const applyPromptDerivedSpecFilters = (state, prompt) => {
   const safeState = state || DEFAULT_V2_STATE;
   const powerConstraint = getPromptDerivedPowerConstraint(prompt);
   const colorTemperature = getPromptDerivedColorTemperature(prompt);
+  const normalizedPrompt = normalizeDerivedQuery(
+    typeof prompt === "string" ? prompt : safeState.q || ""
+  );
+  const inStockMatch = normalizedPrompt.match(IN_STOCK_PHRASE_REGEX);
 
-  if (!powerConstraint && !colorTemperature) {
+  if (!powerConstraint && !colorTemperature && !inStockMatch) {
     return {
       state: safeState,
       displayFilters: [],
@@ -645,6 +717,9 @@ export const applyPromptDerivedSpecFilters = (state, prompt) => {
   }
   if (colorTemperature?.matchText) {
     nextQuery = removePromptDerivedColorTemperature(nextQuery);
+  }
+  if (inStockMatch?.[0]) {
+    nextQuery = normalizeDerivedQuery(nextQuery.replace(inStockMatch[0], " "));
   }
 
   const nextFilters = {
@@ -669,6 +744,15 @@ export const applyPromptDerivedSpecFilters = (state, prompt) => {
       key: "color_temp",
       label: "Color Temperature",
       value: colorTemperature.displayValue,
+    });
+  }
+
+  if (inStockMatch) {
+    nextFilters.in_stock = true;
+    displayFilters.push({
+      key: "in_stock",
+      label: "In Stock",
+      value: "Yes",
     });
   }
 
@@ -837,7 +921,9 @@ export const stateFromQuery = (query, isSystemManager = false) => {
     nextState.filters[key] = parseArrayValue(query[key]);
   });
 
-  nextState.filters.in_stock = parseBooleanFlag(query.in_stock);
+  if (query.in_stock !== undefined) {
+    nextState.filters.in_stock = parseBooleanFlag(query.in_stock);
+  }
 
   const rangeMap = {
     rate_range: "rate",

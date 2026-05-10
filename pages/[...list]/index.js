@@ -1,11 +1,28 @@
 import { useState, useEffect, useMemo, useRef, useCallback, Fragment, memo } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
-import { seo_Image, getCurrentUrl, typesense_search_items, get_all_masters, ai_product_search } from '@/libs/api';
+import {
+  seo_Image,
+  getCurrentUrl,
+  typesense_search_items,
+  get_all_masters,
+  ai_product_search,
+  startGuidedAiSearch,
+  continueGuidedAiSearch,
+} from '@/libs/api';
 import {
   buildFeatureFlagOverride,
   getIsSystemManager,
+  isSearchV2DisabledError,
   probeSearchV2Availability,
 } from '@/libs/ighSearchV2';
+import {
+  buildGuidedSessionFromResponse,
+  buildLegacyFiltersFromGuidedResponse,
+  deriveLegacySuggestedAnswers,
+  isGuidedSkipAnswer,
+  mergeGuidedSuggestedAnswers,
+  normalizeGuidedAiResponse,
+} from '@/libs/aiGuidedSearch';
 import dynamic from 'next/dynamic';
 const ProductBox = dynamic(() => import('@/components/Product/ProductBox'))
 const Filters = dynamic(() => import('@/components/Product/filters/Filters'))
@@ -28,6 +45,8 @@ import useTabView from '@/libs/hooks/useTabView';
 import { resetFilter } from '@/redux/slice/homeFilter';
 import { setProductDetail } from '@/redux/slice/productDetail';
 import { toast } from 'react-toastify';
+import AiGuidedAssistantLauncher from '@/components/AiGuidedAssistant/AiGuidedAssistantLauncher';
+import AiGuidedAssistantDialog from '@/components/AiGuidedAssistant/AiGuidedAssistantDialog';
 const V2SearchPage = dynamic(() => import('@/components/Search/v2/V2SearchPage'));
 // import ProductDetail from '@/components/Detail/ProductDetail';
 
@@ -85,6 +104,11 @@ function LegacyList({ category, brand, search, fallbackMessage }) {
   const [aiSearchLoading, setAiSearchLoading] = useState(false);
   const [aiExplanation, setAiExplanation] = useState('');
   const [aiModalOpen, setAiModalOpen] = useState(false);
+  const [guidedAssistantOpen, setGuidedAssistantOpen] = useState(false);
+  const [guidedAssistantLoading, setGuidedAssistantLoading] = useState(false);
+  const [guidedAssistantInput, setGuidedAssistantInput] = useState('');
+  const [guidedAssistantSession, setGuidedAssistantSession] = useState(null);
+  const guidedAutoQuestionKeyRef = useRef('');
 
   // useEffect(() => {
   //   setResults(initialData)
@@ -712,6 +736,149 @@ function LegacyList({ category, brand, search, fallbackMessage }) {
     }
   }
 
+  const resetGuidedAssistant = (resetFilters = true) => {
+    setGuidedAssistantInput('');
+    setGuidedAssistantSession(null);
+    guidedAutoQuestionKeyRef.current = '';
+
+    if (resetFilters) {
+      const nextFilters = {
+        ...initialState,
+        price_range: { ...initialState.price_range },
+        stock_range: { ...initialState.stock_range },
+      };
+      localStorage.setItem('sort_by', nextFilters.sort_by);
+      setResults([]);
+      setpageNo(1);
+      setFilters(nextFilters);
+      dispatch(setAllFilter({ ...nextFilters }));
+      fetchResults(true, true, nextFilters);
+    }
+  };
+
+  const applyGuidedAssistantResponse = (payload, userMessage = '') => {
+    const normalized = normalizeGuidedAiResponse(payload);
+    if (!normalized) {
+      throw new Error('Guided assistant did not return a valid response.');
+    }
+
+    const nextFilters = buildLegacyFiltersFromGuidedResponse(normalized, initialState);
+    const suggestedAnswers = mergeGuidedSuggestedAnswers(
+      normalized.suggested_answers,
+      deriveLegacySuggestedAnswers(
+        normalized.question_key,
+        results,
+        mastersData,
+        normalized.suggested_answers
+      )
+    );
+
+    const nextSession = buildGuidedSessionFromResponse(
+      {
+        ...normalized,
+        suggested_answers: suggestedAnswers,
+        result_count:
+          normalized.result_count !== null && normalized.result_count !== undefined
+            ? normalized.result_count
+            : foundValue,
+      },
+      guidedAssistantSession,
+      userMessage
+    );
+
+    setGuidedAssistantSession(nextSession);
+    setGuidedAssistantInput('');
+    setGuidedAssistantOpen(true);
+    localStorage.setItem('sort_by', nextFilters.sort_by);
+    setResults([]);
+    setpageNo(1);
+    setFilters(nextFilters);
+    dispatch(setAllFilter({ ...nextFilters }));
+    fetchResults(true, true, nextFilters);
+  };
+
+  const submitGuidedAssistant = async (overrideValue) => {
+    const message = String(overrideValue ?? guidedAssistantInput).trim();
+    if (!message) {
+      toast.info('Tell the assistant what you need first.');
+      return;
+    }
+    if (guidedAssistantSession?.question_key && isGuidedSkipAnswer(message)) {
+      await skipGuidedAssistantQuestion();
+      return;
+    }
+
+    setGuidedAssistantLoading(true);
+    try {
+      const isContinuation = Boolean(guidedAssistantSession?.messages?.length);
+      const response = isContinuation
+        ? await continueGuidedAiSearch({
+            session_id: guidedAssistantSession?.session_id || '',
+            source_message: (guidedAssistantSession?.messages || [])
+              .filter((entry) => entry?.role === 'user')
+              .map((entry) => entry?.content || '')
+              .join(' '),
+            applied_query: guidedAssistantSession?.current_query || '',
+            current_intent: guidedAssistantSession?.current_intent || {},
+            resolved_intent: guidedAssistantSession?.resolved_intent || null,
+            question_key: guidedAssistantSession?.question_key || '',
+            answer: message,
+            page_context: {
+              route: router.pathname === '/[...list]' ? '/list' : router.asPath,
+              category: router.query['category'] ? String(router.query['category']) : '',
+              brand: router.query['brand'] ? String(router.query['brand']) : '',
+              search: router.query['search'] ? String(router.query['search']) : '',
+            },
+          })
+        : await startGuidedAiSearch({
+            message,
+            page_context: {
+              route: router.pathname === '/[...list]' ? '/list' : router.asPath,
+              category: router.query['category'] ? String(router.query['category']) : '',
+              brand: router.query['brand'] ? String(router.query['brand']) : '',
+              search: router.query['search'] ? String(router.query['search']) : '',
+            },
+          });
+
+      applyGuidedAssistantResponse(response, message);
+    } catch (error) {
+      toast.error(error?.message || 'Guided assistant failed. Please try again.');
+    } finally {
+      setGuidedAssistantLoading(false);
+    }
+  };
+
+  const skipGuidedAssistantQuestion = async () => {
+    if (!guidedAssistantSession?.question_key) return;
+
+    setGuidedAssistantLoading(true);
+    try {
+      const response = await continueGuidedAiSearch({
+        session_id: guidedAssistantSession?.session_id || '',
+        source_message: (guidedAssistantSession?.messages || [])
+          .filter((entry) => entry?.role === 'user')
+          .map((entry) => entry?.content || '')
+          .join(' '),
+        applied_query: guidedAssistantSession?.current_query || '',
+        current_intent: guidedAssistantSession?.current_intent || {},
+        resolved_intent: guidedAssistantSession?.resolved_intent || null,
+        question_key: guidedAssistantSession?.question_key || '',
+        skip: 1,
+        page_context: {
+          route: router.pathname === '/[...list]' ? '/list' : router.asPath,
+          category: router.query['category'] ? String(router.query['category']) : '',
+          brand: router.query['brand'] ? String(router.query['brand']) : '',
+          search: router.query['search'] ? String(router.query['search']) : '',
+        },
+      });
+      applyGuidedAssistantResponse(response);
+    } catch (error) {
+      toast.error(error?.message || 'Unable to skip this question right now.');
+    } finally {
+      setGuidedAssistantLoading(false);
+    }
+  };
+
   // onChnage filters
   useEffect(() => {
     if (initialLoad) {
@@ -730,6 +897,53 @@ function LegacyList({ category, brand, search, fallbackMessage }) {
     // dispatch(setFilter({ ...filters }));
     fetchResults(true, true);
   }, [filters.hot_product, filters.sort_by, filters.has_variants, filters.in_stock, filters.show_promotion, filters.custom_in_bundle_item]);
+
+  useEffect(() => {
+    if (!guidedAssistantSession?.question_key) return;
+
+    const nextSuggestions = mergeGuidedSuggestedAnswers(
+      guidedAssistantSession.suggested_answers,
+      deriveLegacySuggestedAnswers(
+        guidedAssistantSession.question_key,
+        results,
+        mastersData,
+        guidedAssistantSession.suggested_answers
+      )
+    );
+
+    setGuidedAssistantSession((current) => {
+      if (!current?.question_key) return current;
+      const sameSuggestions =
+        JSON.stringify(current.suggested_answers || []) === JSON.stringify(nextSuggestions);
+      const sameCount = Number(current.result_count || 0) === Number(foundValue || 0);
+      if (sameSuggestions && sameCount) return current;
+      return {
+        ...current,
+        suggested_answers: nextSuggestions,
+        result_count: Number(foundValue || 0),
+      };
+    });
+  }, [results, mastersData, foundValue, guidedAssistantSession?.question_key]);
+
+  useEffect(() => {
+    if (!guidedAssistantSession?.question_key) {
+      guidedAutoQuestionKeyRef.current = '';
+      return;
+    }
+    if ((guidedAssistantSession?.suggested_answers || []).length !== 1) {
+      guidedAutoQuestionKeyRef.current = '';
+      return;
+    }
+    if (guidedAutoQuestionKeyRef.current === guidedAssistantSession.question_key) {
+      return;
+    }
+
+    const onlySuggestion = guidedAssistantSession.suggested_answers[0];
+    if (!onlySuggestion?.value || guidedAssistantLoading) return;
+
+    guidedAutoQuestionKeyRef.current = guidedAssistantSession.question_key;
+    submitGuidedAssistant(onlySuggestion.value);
+  }, [guidedAssistantSession, guidedAssistantLoading]);
 
   // Initial
   useEffect(() => {
@@ -1042,6 +1256,31 @@ function LegacyList({ category, brand, search, fallbackMessage }) {
           </div>
         </Dialog>
       </Transition>
+
+      <AiGuidedAssistantLauncher
+        onClick={() => setGuidedAssistantOpen(true)}
+        pending={Boolean(guidedAssistantSession?.messages?.length && !guidedAssistantSession?.done)}
+      />
+
+      <AiGuidedAssistantDialog
+        open={guidedAssistantOpen}
+        onClose={() => setGuidedAssistantOpen(false)}
+        session={guidedAssistantSession}
+        inputValue={guidedAssistantInput}
+        onInputChange={setGuidedAssistantInput}
+        onSubmit={() => submitGuidedAssistant()}
+        onChipClick={(suggestion) => submitGuidedAssistant(suggestion?.value || suggestion?.label || '')}
+        onSkip={skipGuidedAssistantQuestion}
+        onStartOver={() => resetGuidedAssistant(true)}
+        onEndChat={() => setGuidedAssistantOpen(false)}
+        loading={guidedAssistantLoading}
+        secondaryActionLabel="Open direct AI search"
+        onSecondaryAction={() => {
+          setGuidedAssistantOpen(false);
+          setAiModalOpen(true);
+        }}
+      />
+
       {isOpenCat && <div className='filtersPopup'>
         <Rodal visible={isOpenCat} enterAnimation='slideDown' animation='' onClose={closeModal}>
           <MobileCategoryFilter closeModal={closeModal} handleSortBy={handleSortBy} />
@@ -1125,16 +1364,6 @@ function LegacyList({ category, brand, search, fallbackMessage }) {
           </>
         </div>
       </div>
-
-      <button
-        type="button"
-        onClick={() => setAiModalOpen(true)}
-        className="fixed bottom-[110px] right-[18px] z-[999] flex items-center gap-[10px] rounded-full bg-[#111] px-[16px] py-[12px] text-[13px] font-semibold text-white shadow-[0_10px_30px_rgba(0,0,0,0.18)] md:bottom-[90px]"
-      >
-        <span className="grid h-[28px] w-[28px] place-items-center rounded-full bg-white text-[13px] font-bold text-[#111]">AI</span>
-        <span>AI Search</span>
-      </button>
-
 
       {/* <div class={`md:mb-[60px] lg:flex tab:flex tab:flex-col lg:py-5 lg:gap-[17px] md:gap-[10px] transition-all duration-300 ease-in`}>
         {
@@ -1245,6 +1474,17 @@ function ListPageRouter(props) {
         setMode('v2');
       } catch (error) {
         if (!active || error?.name === 'AbortError') {
+          return;
+        }
+
+        if (isSearchV2DisabledError(error)) {
+          // Feature flag is off. Don't fall back to V1 (no V1 endpoint on this
+          // backend) — let V2SearchPage render its disabled-state empty UI so
+          // the rest of the page (filters, nav, cart) stays usable.
+          if (typeof window !== 'undefined') {
+            sessionStorage.setItem(cacheKey, 'enabled');
+          }
+          setMode('v2');
           return;
         }
 

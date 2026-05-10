@@ -33,14 +33,15 @@ export default function AuthModal({ visible, hide, page, cssClass, setVisible })
 
     return (
         <>
-            {page ?
+            {page ? (
                 <LoginScreen cssClass={cssClass} webSettings={webSettings} modal={modal} checkModal={checkModal} hide={hide} />
-                : <div className='auth_modal'>
+            ) : (
+                <div className='auth_modal'>
                     <Rodal visible={visible} animation='slideUp' onClose={hide}>
                         <LoginScreen visible={visible} setVisible={setVisible} webSettings={webSettings} modal={modal} checkModal={checkModal} hide={hide} />
                     </Rodal>
                 </div>
-            }
+            )}
         </>
     )
 }
@@ -90,7 +91,7 @@ const LoginScreen = ({ webSettings, modal, checkModal, hide, cssClass, visible, 
                 {webSettings && webSettings.websiteSettings && webSettings.websiteSettings.login_image && <Image src={check_Image(webSettings.websiteSettings.login_image)} height={200} width={400} alt={'go-1 Market'} className={`w-full h-full rounded-[10px_0_0_10px]`} />}
             </div> */}
             {webSettings && <div className={`flex w-full flex-col justify-center items-center md:px-[10px]`}>
-                <div className='w-full lg:w-[450px] lg:h-[450px]'>
+                <div className='w-full lg:w-[450px]'>
                 {modal == 'login' ? <Login checkModal={(mod) => checkModal(mod)} hide={hide} />
                         : modal == 'forget' ? <Forget checkModal={(mod) => checkModal(mod)} hide={hide} visible={visible} setVisible={setVisible} />
                                 : <>{modal}</>}

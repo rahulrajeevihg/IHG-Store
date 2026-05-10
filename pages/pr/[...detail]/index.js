@@ -38,6 +38,8 @@ import Head from "next/head";
 import { toast } from "react-toastify";
 import ViewAll from "@/components/Common/ViewAll";
 import Tabs from "@/components/Common/Tabs";
+import IssueReportModal from "@/components/ProductDataIssues/IssueReportModal";
+import IssueStatusBadge from "@/components/ProductDataIssues/IssueStatusBadge";
 
 const Detail = () => {
     // const Detail = ({ productDetail, detail }) => {
@@ -283,6 +285,7 @@ const DetailPage = ({ productDetail, toast, details, relatedProductData }) => {
     let cardref = useRef();
     let [apiCall, setApicall] = useState(true);
     let [pageLoading, setPageLoading] = useState(false);
+    const [issueModalOpen, setIssueModalOpen] = useState(false);
 
     // console.log("product", productDetail)
     useEffect(() => {
@@ -984,6 +987,16 @@ const DetailPage = ({ productDetail, toast, details, relatedProductData }) => {
                                                         OUT OF STOCK
                                                     </p>
                                                 )}
+                                                <div className="mt-4 flex flex-wrap items-center gap-3">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setIssueModalOpen(true)}
+                                                        className="inline-flex h-10 items-center rounded-xl border border-[#dbe5ef] bg-white px-4 text-[12px] font-semibold uppercase tracking-[0.08em] text-[#111827] transition hover:border-[#111827] hover:bg-[#f8fafc]"
+                                                    >
+                                                        Report Data Issue
+                                                    </button>
+                                                    <IssueStatusBadge itemCode={data.item_code} />
+                                                </div>
                                             </>
                                         ) : (
                                             <>
@@ -1003,6 +1016,16 @@ const DetailPage = ({ productDetail, toast, details, relatedProductData }) => {
                                                                 OUT OF STOCK
                                                             </p>
                                                         )}
+                                                        <div className="mt-3 flex flex-wrap items-center gap-2">
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => setIssueModalOpen(true)}
+                                                                className="inline-flex h-9 items-center rounded-xl border border-[#dbe5ef] bg-white px-3 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#111827] transition hover:border-[#111827] hover:bg-[#f8fafc]"
+                                                            >
+                                                                Report Issue
+                                                            </button>
+                                                            <IssueStatusBadge itemCode={data.item_code} compact />
+                                                        </div>
                                                         {/* {data.stock && <p>{data.stock}</p>} */}
                                                     </div>
                                                 </div>
@@ -1227,6 +1250,11 @@ const DetailPage = ({ productDetail, toast, details, relatedProductData }) => {
             {/* Shop By Brands */}
 
             {/* <Brands customCss={'lg:w-[90%] max-w-[1300px]'} /> */}
+            <IssueReportModal
+                open={issueModalOpen}
+                onClose={() => setIssueModalOpen(false)}
+                product={data}
+            />
         </>
     );
 };

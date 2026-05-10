@@ -43,14 +43,14 @@ export default function WebHeader({ website_settings,categoryData, navigateDetai
 
 
           {/* headerWidth_l */}
-          <div className="flex gap-[0px]  p-[15px_0_0px_0]">
+          <div className="flex gap-[0px]  p-[8px_0_0px_0]">
             {/* <div className='h-[95px] w-[100px]'>
              {(websiteSettings.app_settings && websiteSettings.app_settings.website_logo) ? <Image onClick={()=>{router.push('/')}} className='cursor-pointer h-[90px] object-contain' height={60}  width={100} alt='logo' src={check_Image(websiteSettings.app_settings.website_logo)}></Image> : <></>}
             </div> */}
             {/* flex-[1] */}
             <div className='w-full'>
               {/* !mb-[15px] */}
-              <div className="flex border-b-[1px] border-b-slate-100 pb-[15px] ">
+              <div className="flex border-b-[1px] border-b-slate-100 pb-[8px] ">
                 <div className="main-width !m-[0_auto]">
                 {/* {console.log(websiteSettings,"websiteSettings")} */}
                   {/* {(staticMenu && staticMenu.length != 0) ? <StaticMenuSec staticMenu={staticMenu} /> : <div></div> } */}
@@ -58,9 +58,9 @@ export default function WebHeader({ website_settings,categoryData, navigateDetai
                 </div>
               </div>
               {/* headerWidth_r p-[10px_0_5px_0] bg-[#00000008] lg:min-h-[46px] */}
-              <div className=" p-0 flex items-center bg-[#00000008] lg:min-h-[35px]">
+              <div className=" p-0 flex items-center bg-[#00000008]">
                 {/* {websiteSettings.all_categories && <Navbar all_categories={websiteSettings.all_categories} />} */}
-                {websiteSettings.default_header && <Navbar all_categories={websiteSettings.all_categories} categoryData={categoryData} />}
+                {/* Navbar removed */}
               </div>
             </div>
           </div>

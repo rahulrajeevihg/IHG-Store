@@ -92,7 +92,8 @@ export default function MainHeader({ header_template, theme_settings, website_se
   }, [])
 
 
-  useMemo(() => {
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
     if (business || localStorage['business'] || (adddressInfo && adddressInfo.address)) {
       let localValue = stored_customer_info()
       setLocalValue(localValue);
@@ -122,14 +123,13 @@ export default function MainHeader({ header_template, theme_settings, website_se
 
   }, [cartCount, wishlistCount, cartValue, tabs])
 
-  useMemo(() => {
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
     if ((loginInfo && loginInfo.full_name) || localStorage['full_name']) {
-      // console.log(loginInfo,'loginInfo')
       setCustomerName(localStorage['full_name'])
     } else {
       setCustomerName()
     }
-
   }, [loginInfo])
 
   const [enableModal, setEnableModal] = useState(false)
@@ -331,6 +331,7 @@ export default function MainHeader({ header_template, theme_settings, website_se
     { 'title': 'My Profile', route: '/profile?my_account=edit-profile' },
     { 'title': 'My Order', route: '/profile?my_account=orders' },
     { 'title': 'My Cart', route: '/profile?my_account=mycart' },
+    { 'title': 'Product Issues', route: '/product-data-issues' },
     { 'title': 'Logout', route: '' },
   ]
   const moveToProfile = () => {
@@ -466,9 +467,9 @@ export default function MainHeader({ header_template, theme_settings, website_se
         {header_template && header_template.items.length != 0 &&
           header_template.items.map((res, index) => {
             return (
-              <>
+              <div key={index}>
                 {(res.section_name == 'Header Logo' && res.section_type == 'Static Section') &&
-                  <div key={index} className=''>
+                  <div className=''>
                     {/* /h-[100px] */}
                     {/* {theme_settings.website_logo && <Image onClick={() => { router.push('/') }} className='cursor-pointer  w-[150px] object-cover' height={60} width={100} alt='logo' src={check_Image(theme_settings.website_logo)}></Image>} */}
                     {theme_settings.website_logo && <Image onClick={() => { router.push('/') }} className='cursor-pointer object-cover' height={41} width={51} alt='logo' src={'/logo.png'}></Image>}
@@ -476,7 +477,7 @@ export default function MainHeader({ header_template, theme_settings, website_se
                 }
 
                 {(res.section_name == 'Header Menu' && res.section_type == 'Menu') &&
-                  <div className={`flex-[0_0_calc(45%_-_0px)]`}>
+                  <div className={`flex-[0_0_calc(45%_-_0px)] ${router.pathname === '/list' ? 'invisible pointer-events-none' : ''}`}>
                     <div key={index} className={`${website_settings.enable_multi_store == 1 ? 'w-full' : 'w-full'} relative flex justify-end gap-3`}>
                       <select name="" id="" value={searchType} onChange={(e)=> handleSearchType(e)}  className="border border-gray-300 outline-none p-2 rounded-[30px] px-3">
                     <option value="All">All</option>
@@ -494,12 +495,12 @@ export default function MainHeader({ header_template, theme_settings, website_se
                 }
 
                 {(res.section_name == 'Header Button' && res.section_type == 'Static Section') &&
-                  <div key={index} className='pl-[15px] flex gap-[25px] items-center justify-end'>
+                  <div className='pl-[15px] flex gap-[25px] items-center justify-end'>
 
 
                     <div>
                       <Link href={"/scanner"}>
-                        <Image src="/qr_scanner.svg" height={20} width={20} />
+                        <Image src="/qr_scanner.svg" height={20} width={20} alt="QR scanner" />
                       </Link>
                     </div>
 
@@ -551,7 +552,7 @@ export default function MainHeader({ header_template, theme_settings, website_se
                   </div>
                 }
 
-              </>
+              </div>
             )
           })
         }

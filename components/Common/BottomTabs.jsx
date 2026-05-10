@@ -38,7 +38,7 @@ export default function BottomTabs({ activeTab, getActiveTab, tabs }) {
                     return (
                         <li key={index} className={`flex flex-col your-element flex-[0_0_25%] gap-[5px] justify-between cursor-pointer text-[14px] font-medium whitespace-pre text-[#858585] removeFlick ${nav.active && 'active_nav'}`}
                             onClick={() => changeNav(nav)} style={{ border: 'none' }}>
-                            <Image loading="lazy" alt={nav.menu_label} src={router.asPath == nav.redirect_url ? nav.active_icon : nav.icon} width={16} height={16} className="m-auto h-[25px] w-[25px]" />
+                            <Image loading="lazy" alt={nav.menu_label} src={router.asPath == nav.redirect_url ? nav.active_icon : nav.icon} width={16} height={16} className="m-auto h-[25px] w-[25px]" style={{ width: "auto", height: "auto" }} />
                             <p className="text-[12px] text-center">{nav.menu_label}</p>
                         </li>
                     )
@@ -49,4 +49,3 @@ export default function BottomTabs({ activeTab, getActiveTab, tabs }) {
         </div>
     </>);
 }
-

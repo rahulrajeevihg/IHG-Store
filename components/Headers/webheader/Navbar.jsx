@@ -195,7 +195,7 @@ export default function Navbar({ all_categories, categoryData }) {
 
                       <div className="w-[241px] z-99 dropdown  top-[32px] shadow-[0_0_5px_#ddd] absolute bg-[#fff]">
                         {item.child.map((submenu, sub1) => (
-                          <>
+                          <div key={sub1}>
 
                             <span key={sub1} onClick={() => { navigateToDetail(submenu) }} onMouseEnter={() => enbleDropdown1('enter', sub1)} className={`${dropdown1 == sub1 ? 'hoverNav_1' : ''} transition-colors ease-in duration-200 delay-50 p-[7px_8px] rounded-[5px] flex items-center cursor-pointer hoverNav relative justify-between`} >
                               <h6 className='text-left text-[14px] uppercase text-[#000] p-[5px_10px] transition-colors ease-in duration-200 delay-50'>{submenu.category_name}</h6>
@@ -213,7 +213,7 @@ export default function Navbar({ all_categories, categoryData }) {
                                 ))}
                               </div>
                             }
-                          </>
+                          </div>
                         ))}
                       </div>
                     }
@@ -253,14 +253,14 @@ export default function Navbar({ all_categories, categoryData }) {
                 {moreMenu == 1 && (categoryData && categoryData.length != 0) &&
                   <div className="w-[241px] dropdown top-[25px] overflow-y-auto min-h-[100px] max-h-[400px] select_scrollbar right-[0] shadow-[0_0_5px_#ddd] absolute bg-[#fff] z-[2000]">
                     {categoryData.slice(tabView ? 6 : 10, categoryData.length).map((submenu, sub1) => (
-                      <>
-                        <div onClick={() => changeCategory(submenu)} className={`hoverMore cursor-pointer transition-colors ease-in duration-200 delay-50 p-[2px_8px] rounded-[5px] flex items-center hoverNav relative justify-between`} key={sub1}>
+                      <div key={sub1}>
+                        <div onClick={() => changeCategory(submenu)} className={`hoverMore cursor-pointer transition-colors ease-in duration-200 delay-50 p-[2px_8px] rounded-[5px] flex items-center hoverNav relative justify-between`}>
                           <h6 className={`text-left text-[#000000B2] text-[13px] ${router?.query?.category === submenu ? 'font-semibold' : ''} uppercase p-[5px_10px] transition-colors ease-in duration-200 delay-50`}>{submenu}</h6>
                         </div>
                         {/* <Link href={('/list?category=' + submenu)}  className={`hoverMore transition-colors ease-in duration-200 delay-50 p-[7px_8px] rounded-[5px] flex items-center cursor-pointer hoverNav relative justify-between`} key={sub1}>
                           <h6 className='text-left text-[14px] uppercase text-[#000] p-[5px_10px] transition-colors ease-in duration-200 delay-50'>{submenu}</h6>
                         </Link> */}
-                      </>
+                      </div>
                     ))}
                   </div>
                 }

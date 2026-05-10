@@ -62,13 +62,23 @@ export default function ProductBox({ productList, size, rowCount, leftHorizontal
   }
 
   const [isMobile, setIsMobile] = useState()
+  const [viewportWidth, setViewportWidth] = useState(1024)
   useEffect(() => {
     checkIsMobile();
+    setViewportWidth(window.innerWidth || 1024);
     window.addEventListener('resize', checkIsMobile)
+    window.addEventListener('resize', handleResizeWidth)
     return () => {
       window.removeEventListener('resize', checkIsMobile);
+      window.removeEventListener('resize', handleResizeWidth);
     };
   }, [])
+
+  const handleResizeWidth = () => {
+    if (typeof window !== 'undefined') {
+      setViewportWidth(window.innerWidth || 1024);
+    }
+  }
 
   const checkIsMobile = async () => {
     let isMobile = await checkMobile();
@@ -108,7 +118,7 @@ export default function ProductBox({ productList, size, rowCount, leftHorizontal
 
 
                 <div className={`${remove_bg ? '' : 'product_images'} product_images_container  flex cursor-pointer items-center justify-center lg:h-[160px] 2xl:h-[185px] ${(productBoxView && productBoxView == 'List View') ? 'md:h-[140] md:w-[140px] lg:w-[25%] lg:!h-[120px]' : 'md:h-[170px] md:w-[100%] '} your-element `}>
-                  <div onClick={() => navigateDetail(item)} className={` ${productBoxView && productBoxView == 'List View' ? 'lg:!h-[120px]' : 'lg:h-[160px] 2xl:h-[185px]'}  md:h-[125px] md:w-[125px] lg:w-full your-element`}><ImageLoader height={(productBoxView && productBoxView == 'List View') ? (isMobile ? 120 : 120) : isMobile ? 125 : window.innerWidth >= 1400 ? 185 : 160} width={'100'} style={`${productBoxView && productBoxView == 'List View' ? 'lg:!h-[120px] lg:rounded-[5px]' : 'lg:h-[160px] 2xl:h-[185px]'}  lg:w-full md:h-[125px] md:w-[125px] object-cover your-element`} src={item.document.website_image_url} title={item.item ? item.item : ''} /></div>
+                  <div onClick={() => navigateDetail(item)} className={` ${productBoxView && productBoxView == 'List View' ? 'lg:!h-[120px]' : 'lg:h-[160px] 2xl:h-[185px]'}  md:h-[125px] md:w-[125px] lg:w-full your-element`}><ImageLoader height={(productBoxView && productBoxView == 'List View') ? (isMobile ? 120 : 120) : isMobile ? 125 : viewportWidth >= 1400 ? 185 : 160} width={'100'} style={`${productBoxView && productBoxView == 'List View' ? 'lg:!h-[120px] lg:rounded-[5px]' : 'lg:h-[160px] 2xl:h-[185px]'}  lg:w-full md:h-[125px] md:w-[125px] object-cover your-element`} src={item.document.website_image_url} title={item.item ? item.item : ''} /></div>
                   {/* <Link onClick={() => navigateDetail(item)} href={'/pr/' + item.document.item_code} className={` ${productBoxView && productBoxView == 'List View' ? 'lg:!h-[120px]' : 'lg:h-[160px] 2xl:h-[185px]'}  md:h-[125px] md:w-[125px] lg:w-full your-element`}><ImageLoader height={(productBoxView && productBoxView == 'List View') ? (isMobile ? 120 : 120) : isMobile ? 125 : window.innerWidth >= 1400 ? 185 : 160} width={'100'} style={`${productBoxView && productBoxView == 'List View' ? 'lg:!h-[120px] lg:rounded-[5px]' : 'lg:h-[160px] 2xl:h-[185px]'}  lg:w-full md:h-[125px] md:w-[125px] object-cover your-element`} src={item.document.website_image_url} title={item.item ? item.item : ''} /></Link> */}
                   {(item.document.offer_rate && (item.document.offer_rate < item.document.rate)) ? <h6 className={`bg-[#009f58]  text-[#fff] p-[1px_5px] absolute top-0 ${productBoxView && productBoxView == 'List View' ? 'right-0 left-auto rounded-[0_5px_0_5px]' : 'left-0 rounded-[0_0_5px_0]'} left-0 text-[12px]`}>{parseInt(((item.document.rate - item.document.offer_rate) / item.document.rate) * 100)}<span className='px-[0px] text-[#fff] text-[12px]'>% (AED {parseFloat(item.document.rate - item.document.offer_rate).toFixed(2)}) off</span> </h6> : <></>}
 
