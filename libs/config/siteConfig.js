@@ -1,6 +1,6 @@
 // export const domain = 'ovationwps.go1cms.com'; https://ihgtest.tridotstech.com/
 // export const domain = 'ihgtest.tridotstech.com';
-export const domain = '167.71.204.41';
+export const domain = 'erp.ihgind.com';
 
 export const website = 'https://ihg-sigma.vercel.app';
 export const recaptcha = '6LdIz3IpAAAAABL8GJC1H8sVo9qP1xaq9Fqqji0k'

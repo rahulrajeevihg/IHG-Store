@@ -1,4 +1,4 @@
-const ERP_BASE_URL = 'http://167.71.204.41';
+const ERP_BASE_URL = 'https://erp.ihgind.com';
 const upstreamUrl = `${ERP_BASE_URL}/api/method/login`;
 
 const forwardHeaders = {

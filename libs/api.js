@@ -1,7 +1,7 @@
 import { toast } from "react-toastify";
 import 'react-toastify/dist/ReactToastify.css';
 import { domain, typesense_api_key, website } from "./config/siteConfig"
-import { handleUnauthorizedResponse } from "./auth";
+import { handleUnauthorizedResponse, logoutAndRedirect } from "./auth";
 
 // All ERP calls go through our cookie-forwarding proxy.
 // The proxy handler is at pages/api/erp/[...path].js, mounted at /api/erp/.
@@ -26,6 +26,61 @@ const apiUrl_mobileapi = `${sitename}.api.`
 const apiUrl_api = `${sitename}.api.`
 const apiUrl_api_url = `${sitename}.api`
 
+const MUTATION_METHOD_NAMES = [
+    'insert_cart_items',
+    'update_cartitem',
+    'delete_cart_items',
+    'clear_cartitem',
+    'move_all_tocart',
+    'start_guided_ai_search',
+    'continue_guided_ai_search',
+    'create_product_data_issue',
+    'update_product_data_issue',
+    'add_product_data_issue_comment',
+    'reopen_product_data_issue',
+];
+
+export const PRODUCT_DATA_MANAGER_ROLES = ['System Manager', 'Product Data Manager'];
+
+function getMutationMethodNameFromApi(api) {
+    if (!api || typeof api !== 'string') return null;
+    return MUTATION_METHOD_NAMES.find((name) => api.includes(name)) || null;
+}
+
+export function getStoredRoles() {
+    if (typeof window === 'undefined') return [];
+
+    try {
+        const raw = localStorage.getItem('roles');
+        const parsed = raw ? JSON.parse(raw) : [];
+        return Array.isArray(parsed) ? parsed : [];
+    } catch (_) {
+        return [];
+    }
+}
+
+export function isProductDataManager() {
+    const roles = getStoredRoles();
+    return PRODUCT_DATA_MANAGER_ROLES.some((role) => roles.includes(role));
+}
+
+export function getStoredUserProfile() {
+    if (typeof window === 'undefined') {
+        return {
+            email: '',
+            name: '',
+            customerId: '',
+            roles: [],
+        };
+    }
+
+    return {
+        email: localStorage.getItem('email') || localStorage.getItem('CustomerId') || '',
+        name: localStorage.getItem('CustomerName') || localStorage.getItem('full_name') || '',
+        customerId: localStorage.getItem('customerRefId') || '',
+        roles: getStoredRoles(),
+    };
+}
 
 export const checkMobile = () => {
     if (window.innerWidth < 767) {
@@ -91,30 +146,39 @@ export function stored_locations_info(location) {
 }
 
 export function storeCustomerInfo(resp) {
-    localStorage['CustomerId'] = resp.message[0].email;
-    localStorage['email'] = resp.message[0].email;
-    localStorage['CustomerName'] = resp.message[0].full_name;
-    localStorage['referral_code'] = resp.message[0].referral_code
-    localStorage['Customerphone'] = resp.message[0].phone;
-    localStorage['Customerfirst_name'] = resp.message[0].first_name
-    localStorage['Customerlast_name'] = resp.message[0].last_name
-    localStorage['customerRefId'] = resp.message[0].name
-    localStorage['customerUser_id'] = resp.message[0].user_id;
+    const source = Array.isArray(resp?.message)
+        ? resp.message[0]
+        : (resp?.message && typeof resp.message === 'object' ? resp.message : null);
+
+    if (!source) {
+        console.warn('[storeCustomerInfo] Missing customer payload:', resp);
+        return;
+    }
+
+    localStorage['CustomerId'] = source.email || '';
+    localStorage['email'] = source.email || '';
+    localStorage['CustomerName'] = source.full_name || '';
+    localStorage['referral_code'] = source.referral_code || '';
+    localStorage['Customerphone'] = source.phone || '';
+    localStorage['Customerfirst_name'] = source.first_name || '';
+    localStorage['Customerlast_name'] = source.last_name || '';
+    localStorage['customerRefId'] = source.name || '';
+    localStorage['customerUser_id'] = source.user_id || '';
     let business_addr_info = {};
-    business_addr_info.business_name = resp.message[0].business_name
-    business_addr_info.business_phone = resp.message[0].business_phone
-    business_addr_info.business_address = resp.message[0].business_address
-    business_addr_info.business_landmark = resp.message[0].business_landmark
-    business_addr_info.business_city = resp.message[0].business_city
-    business_addr_info.business_state = resp.message[0].business_state
-    business_addr_info.business_zip = resp.message[0].business_zip
-    business_addr_info.business_country = resp.message[0].business_country
+    business_addr_info.business_name = source.business_name || '';
+    business_addr_info.business_phone = source.business_phone || '';
+    business_addr_info.business_address = source.business_address || '';
+    business_addr_info.business_landmark = source.business_landmark || '';
+    business_addr_info.business_city = source.business_city || '';
+    business_addr_info.business_state = source.business_state || '';
+    business_addr_info.business_zip = source.business_zip || '';
+    business_addr_info.business_country = source.business_country || '';
     localStorage['Business_address'] = JSON.stringify(business_addr_info);
     localStorage.removeItem('guestRefId');
 }
 
 export const check_Image = (Image) => {
-    let baseUrl = `http://${domain}`
+    let baseUrl = `https://${domain}`
     if (Image && Image != '') {
         if (Image.indexOf('https') == -1) {
             return baseUrl + Image;
@@ -127,7 +191,7 @@ export const check_Image = (Image) => {
 }
 
 export const seo_Image = (Image) => {
-    let baseUrl = `http://${domain}`
+    let baseUrl = `https://${domain}`
     if (Image) {
         if (Image.indexOf('https') == -1) {
             return baseUrl + Image;
@@ -141,6 +205,21 @@ export const seo_Image = (Image) => {
 
 export const getCurrentUrl = (URl) => {
     return website + URl
+}
+
+export const getErpDeskQuotationUrl = (quotationName) => {
+    if (!quotationName) return '';
+    return `https://${domain}/app/quotation/${encodeURIComponent(quotationName)}`;
+}
+
+export const getErpDeskItemUrl = (itemCode) => {
+    if (!itemCode) return '';
+    return `https://${domain}/app/item/${encodeURIComponent(itemCode)}`;
+}
+
+export const getErpDeskProductDataIssueUrl = (issueId) => {
+    if (!issueId) return '';
+    return `https://${domain}/app/product-data-issue/${encodeURIComponent(issueId)}`;
 }
 
 export function getColor(value) {
@@ -194,9 +273,11 @@ export async function postMethod(api, payload) {
             throw new Error('Invalid API endpoint');
         }
 
-        // Hard guard: cart update is write-only and must never be called as query-string GET style.
-        if (api.includes('update_cartitem') && api.includes('?')) {
-            throw new Error('update_cartitem must be called via POST body, not query params');
+        const mutationMethodName = getMutationMethodNameFromApi(api);
+
+        // Hard guard: cart mutations are write-only and must never be query-string GET style.
+        if (mutationMethodName && api.includes('?')) {
+            throw new Error(`${mutationMethodName} must be called via POST body, not query params`);
         }
 
         const body = (typeof payload === 'object') ? JSON.stringify(payload) : payload;
@@ -221,8 +302,8 @@ export async function postMethod(api, payload) {
             redirect: 'error',
         });
 
-        if (api.includes('update_cartitem')) {
-            console.info('[postMethod] update_cartitem request sent as POST', { api });
+        if (mutationMethodName) {
+            console.info(`[postMethod] ${mutationMethodName} request sent as POST`, { api });
         }
 
         if (handleUnauthorizedResponse(response)) {
@@ -234,11 +315,19 @@ export async function postMethod(api, payload) {
         if (!contentType.includes('application/json')) {
             const rawText = await response.text();
             console.error('[postMethod] Non-JSON response:', rawText.slice(0, 500));
+            if (isBrokenSessionPayload(rawText)) {
+                logoutAndRedirect('expired');
+                return;
+            }
             toast.error('Unexpected server response. Please try again.');
             return { message: { status: 'error', message: 'Non-JSON response from server.' } };
         }
 
         const data = await response.json();
+        if (response.status === 417 && isBrokenSessionPayload(data)) {
+            logoutAndRedirect('expired');
+            return;
+        }
         return data;
     } catch (error) {
         console.error('API Error:', error);
@@ -257,6 +346,16 @@ export async function postMethod(api, payload) {
  * The browser's sid cookie is forwarded by the proxy; no Authorization header needed.
  */
 export async function get(api) {
+    const mutationMethodName = getMutationMethodNameFromApi(api);
+    if (mutationMethodName) {
+        const message = `[get] Blocked invalid GET call to mutation endpoint "${mutationMethodName}". Use postMethod() instead.`;
+        console.error(message, { api });
+        if (typeof window !== 'undefined' && typeof window.console?.trace === 'function') {
+            window.console.trace('[get] Mutation endpoint call stack');
+        }
+        return { message: { status: 'error', message } };
+    }
+
     const response = await fetch(api, {
         method: 'GET',
         headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
@@ -270,9 +369,16 @@ export async function get(api) {
     if (!contentType.includes('application/json')) {
         const rawText = await response.text();
         console.error('[get] Non-JSON response:', rawText.slice(0, 500));
+        if (isBrokenSessionPayload(rawText)) {
+            logoutAndRedirect('expired');
+        }
         return null;
     }
     const data = await response.json();
+    if (response.status === 417 && isBrokenSessionPayload(data)) {
+        logoutAndRedirect('expired');
+        return;
+    }
     return data;
 }
 
@@ -291,6 +397,69 @@ async function parseJsonResponseSafe(response, contextLabel = 'api') {
         console.error(`[${contextLabel}] Invalid JSON response:`, error?.message, rawText.slice(0, 500));
         return null;
     }
+}
+
+function getCsrfHeader() {
+    if (typeof document === 'undefined') return {};
+    const csrfCookie = document.cookie.split(';').find((c) => c.trim().startsWith('csrf_token='));
+    if (!csrfCookie) return {};
+
+    return {
+        'X-Frappe-CSRF-Token': decodeURIComponent(
+            csrfCookie.split('=').slice(1).join('=').trim()
+        ),
+    };
+}
+
+export function extractFrappeErrorMessage(payload, fallback = 'Request failed') {
+    if (!payload) return fallback;
+
+    if (typeof payload === 'string') {
+        return payload;
+    }
+
+    if (payload?.message?.message) {
+        return payload.message.message;
+    }
+
+    if (typeof payload?.message === 'string') {
+        return payload.message;
+    }
+
+    if (payload?._server_messages) {
+        try {
+            const parsed = JSON.parse(payload._server_messages);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+                const first = typeof parsed[0] === 'string' ? JSON.parse(parsed[0]) : parsed[0];
+                if (first?.message) {
+                    return first.message;
+                }
+            }
+        } catch (_) {}
+    }
+
+    if (payload?.exception) {
+        const exceptionText = String(payload.exception);
+        const match = exceptionText.match(/frappe\.exceptions\.[^:]+:\s*(.+)$/);
+        if (match?.[1]) {
+            return match[1].trim();
+        }
+        return exceptionText;
+    }
+
+    if (payload?.exc_type) {
+        return String(payload.exc_type);
+    }
+
+    return fallback;
+}
+
+function isBrokenSessionPayload(payloadOrText) {
+    const text = typeof payloadOrText === 'string'
+        ? payloadOrText
+        : extractFrappeErrorMessage(payloadOrText, '');
+
+    return /Authentication required/i.test(text) || /User None is disabled/i.test(text);
 }
 
 
@@ -407,7 +576,7 @@ export async function clear_cartitem(data) {
 }
 
 export async function clear_cart() {
-    let api = methodUrl + 'igh_search.api.clear_cart';
+    let api = methodUrl + 'igh_search.igh_search.api.clear_cart';
     return await postMethod(api, {})
 }
 
@@ -690,6 +859,16 @@ export async function ai_product_search(data) {
     return await postMethod(api, data)
 }
 
+export async function startGuidedAiSearch(data) {
+    const api = methodUrl + 'igh_search.igh_search.api.start_guided_ai_search';
+    return await postMethod(api, data);
+}
+
+export async function continueGuidedAiSearch(data) {
+    const api = methodUrl + 'igh_search.igh_search.api.continue_guided_ai_search';
+    return await postMethod(api, data);
+}
+
 export async function insert_email_subscription(data) {
     let api = methodUrl + apiUrl_api + 'insert_email_subscription';
     return await postMethod(api, data)
@@ -775,7 +954,7 @@ export async function get_brands_list(keys, data) {
     return await parseJsonResponseSafe(response, 'get_brands_list');
 }
 export async function get_user_opportunities() {
-    let api = methodUrl + 'igh_search.api.get_user_opportunities';
+    let api = methodUrl + 'igh_search.igh_search.api.get_user_opportunities';
     return await get(api);
 }
 
@@ -785,13 +964,155 @@ export async function search_opportunities(search, customer_id) {
 }
 
 export async function create_quotation_from_portal(payload) {
-    let api = methodUrl + 'igh_search.api.create_quotation_from_portal';
+    let api = methodUrl + 'igh_search.igh_search.api.create_quotation_from_portal';
     const resp = await postMethod(api, payload);
     return resp;
 }
 
 export async function get_recent_quotations() {
-    let api = methodUrl + 'igh_search.api.get_recent_quotations';
+    let api = methodUrl + 'igh_search.igh_search.api.get_recent_quotations';
     const resp = await postMethod(api, {});
     return resp;
+}
+
+function normalizeProductDataIssueRow(issue) {
+    if (!issue) return null;
+
+    return {
+        id: issue.name || issue.id || '',
+        item_code: issue.item_code || '',
+        item_name_snapshot: issue.item_name_snapshot || '',
+        reporter_user: issue.reporter_user || '',
+        reporter_name: issue.reporter_name || '',
+        reporter_role_snapshot: issue.reporter_role_snapshot || '',
+        issue_type: issue.issue_type || '',
+        severity: issue.severity || '',
+        affected_field: issue.affected_field || '',
+        current_value_snapshot: issue.current_value_snapshot || '',
+        suggested_value: issue.suggested_value || '',
+        description: issue.description || '',
+        attachment: issue.attachment || issue.attachment_url || '',
+        status: issue.status || '',
+        assigned_to: issue.assigned_to || '',
+        resolution_notes: issue.resolution_notes || '',
+        created_at: issue.creation || issue.created_at || '',
+        modified_at: issue.modified || issue.modified_at || '',
+        open_issue_count: Number(issue.open_issue_count || 0),
+    };
+}
+
+function normalizeProductDataIssueComment(comment) {
+    if (!comment) return null;
+
+    return {
+        id: comment.name || '',
+        owner: comment.owner || comment.comment_by || '',
+        content: comment.content || comment.text || '',
+        created_at: comment.creation || '',
+        comment_type: comment.comment_type || 'Comment',
+    };
+}
+
+function normalizeProductDataIssueDetail(payload) {
+    const source = payload?.issue || payload?.message?.issue || payload?.message || payload;
+    const comments = payload?.comments || payload?.message?.comments || [];
+
+    return {
+        issue: normalizeProductDataIssueRow(source),
+        comments: Array.isArray(comments)
+            ? comments.map(normalizeProductDataIssueComment).filter(Boolean)
+            : [],
+        can_manage: Boolean(payload?.can_manage ?? payload?.message?.can_manage),
+        can_reopen: Boolean(payload?.can_reopen ?? payload?.message?.can_reopen),
+    };
+}
+
+export async function uploadFileToErp(file, options = {}) {
+    if (!file) {
+        throw new Error('File is required');
+    }
+
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('is_private', options.isPrivate ? '1' : '0');
+
+    if (options.doctype) formData.append('doctype', options.doctype);
+    if (options.docname) formData.append('docname', options.docname);
+    if (options.folder) formData.append('folder', options.folder);
+
+    const response = await fetch('/api/erp/api/method/upload_file', {
+        method: 'POST',
+        headers: {
+            Accept: 'application/json',
+            ...getCsrfHeader(),
+        },
+        body: formData,
+        credentials: 'include',
+    });
+
+    if (handleUnauthorizedResponse(response)) {
+        throw new Error('Authentication required');
+    }
+
+    const payload = await parseJsonResponseSafe(response, 'uploadFileToErp');
+    if (!response.ok || !payload) {
+        throw new Error(extractFrappeErrorMessage(payload, 'Failed to upload attachment.'));
+    }
+
+    return payload?.message || payload;
+}
+
+export async function createProductDataIssue(payload) {
+    const api = methodUrl + 'igh_search.igh_search.api.create_product_data_issue';
+    const response = await postMethod(api, payload);
+    if (!response) return null;
+
+    const normalized = normalizeProductDataIssueDetail(response?.message || response);
+    return {
+        ...normalized,
+        issue: normalized.issue,
+    };
+}
+
+export async function listProductDataIssues(filters = {}) {
+    const api = methodUrl + 'igh_search.igh_search.api.list_product_data_issues';
+    const response = await postMethod(api, filters);
+    const payload = response?.message || response || {};
+    const issues = Array.isArray(payload.items)
+        ? payload.items.map(normalizeProductDataIssueRow).filter(Boolean)
+        : [];
+
+    return {
+        items: issues,
+        summary: payload.summary || {},
+        can_manage: Boolean(payload.can_manage),
+    };
+}
+
+export async function getProductDataIssue(issueId) {
+    const api = methodUrl + 'igh_search.igh_search.api.get_product_data_issue';
+    const response = await postMethod(api, { issue_id: issueId });
+    if (!response) return null;
+    return normalizeProductDataIssueDetail(response?.message || response);
+}
+
+export async function updateProductDataIssue(issueId, payload) {
+    const api = methodUrl + 'igh_search.igh_search.api.update_product_data_issue';
+    const response = await postMethod(api, { issue_id: issueId, ...(payload || {}) });
+    if (!response) return null;
+    return normalizeProductDataIssueDetail(response?.message || response);
+}
+
+export async function addProductDataIssueComment(payload) {
+    const api = methodUrl + 'igh_search.igh_search.api.add_product_data_issue_comment';
+    const response = await postMethod(api, payload);
+    if (!response) return null;
+    return normalizeProductDataIssueDetail(response?.message || response);
+}
+
+export async function reopenProductDataIssue(issueId, payload = {}) {
+    const api = methodUrl + 'igh_search.igh_search.api.reopen_product_data_issue';
+    const response = await postMethod(api, { issue_id: issueId, ...(payload || {}) });
+    if (!response) return null;
+    return normalizeProductDataIssueDetail(response?.message || response);
 }

@@ -9,9 +9,6 @@ import { setDetail } from '@/redux/slice/customerInfo'
 import AlertUi from '../Common/AlertUi'
 import Cookies from 'js-cookie';
 import { touchSessionActivity } from '@/libs/auth';
-// import { GoogleLogin } from '@react-oauth/google';
-// import FacebookLogin from 'react-facebook-login';
-
 
 export default function LogIn({ hide, checkModal }) {
 
@@ -21,17 +18,13 @@ export default function LogIn({ hide, checkModal }) {
     const { register, handleSubmit, setValue, formState: { errors } } = useForm();
     const dispatch = useDispatch();
 
-    // const [userName,setUserName] = useState('')
-    // const [passWord,setPassword] = useState('')
     let [remember_me_check, setRememberMe] = useState(false)
 
-    
     useEffect(() => {
         let cookie_username;
         let cookie_password;
         let cookie_user_type;
         let username1 = document.getElementById('emailId')
-        // console.log('3123214',username1)
         if (Cookies.get('username') && Cookies.get('password')) {
             cookie_username = Cookies.get('username');
             cookie_password = Cookies.get('password');
@@ -45,8 +38,6 @@ export default function LogIn({ hide, checkModal }) {
 
                 setValue('email', cookie_username);
                 setValue('password', cookie_password);
-                //  clearErrors('email');
-                //  clearErrors('password');
             }
         }
 
@@ -58,7 +49,6 @@ export default function LogIn({ hide, checkModal }) {
     }
 
     async function log_in(data) {
-        // Fallback for missing data from form state
         const email = data?.email || document.getElementById('emailId')?.value;
         const password = data?.password || document.getElementById('password')?.value;
 
@@ -69,7 +59,6 @@ export default function LogIn({ hide, checkModal }) {
             }
             let val = await login(datas);
 
-            // Handle network/proxy error flagged by our login() wrapper
             if (val?._error) {
                 msg = { message: val?.message?.message || 'Login failed. Please try again.' }
                 setMsg(msg)
@@ -79,11 +68,9 @@ export default function LogIn({ hide, checkModal }) {
                 return;
             }
 
-            // Frappe standard login returns { message: "Logged In", full_name: "..." }
             if (val && (val.message === 'Logged In' || val.message?.message === 'Logged In')) {
                 touchSessionActivity();
 
-                // Store only display data — no api_key/api_secret
                 localStorage['full_name'] = val.full_name || '';
                 if (val.message?.roles) {
                     localStorage['roles'] = JSON.stringify(val.message.roles);
@@ -92,12 +79,10 @@ export default function LogIn({ hide, checkModal }) {
                 dispatch(setCustomerInfo(val));
                 dispatch(setDetail(val))
 
-                // Fetch customer-specific profile info
                 await getCustomerInfo({ email: email, guest_id: localStorage['customerRefId'] }, { usr: email, pwd: password });
 
                 hide()
             } else {
-                // Surface the Frappe error message (e.g. "Incorrect password")
                 const errMsg = val?.message?.message || val?.message || 'Invalid credentials. Please try again.';
                 msg = { message: errMsg }
                 setMsg(msg)
@@ -109,7 +94,6 @@ export default function LogIn({ hide, checkModal }) {
     }
 
     const rememberMe = (queryparam) => {
-        // console.log('queryparam',queryparam)
         if (!Cookies.get('password') && !Cookies.get('username')) {
             const dateNow = new Date();
             dateNow.setDate(dateNow.getDate() + 14);
@@ -129,13 +113,13 @@ export default function LogIn({ hide, checkModal }) {
         const dateNow = new Date();
         dateNow.setDate(dateNow.getDate() + 14);
         const resp = await get_customer_info(mail);
-        if (resp && resp.message && resp.message.length != 0) {
+        if (resp && Array.isArray(resp.message) && resp.message.length > 0) {
             storeCustomerInfo(resp);
-            document.cookie = `customerRefId=${localStorage["customerRefId"]};expires=${dateNow}`; 
+            document.cookie = `customerRefId=${localStorage["customerRefId"]};expires=${dateNow}`;
             dispatch(setCustomerInfo(resp.message[0]));
             dispatch(setDetail(resp.message[0]))
 
-            let queryparam = { 'username': datas.usr, 'password': datas.pwd, 'customer_id': (resp.message[0] && resp.message[0].name) ? resp.message[0].name : resp.message[0].name }
+            let queryparam = { 'username': datas.usr, 'password': datas.pwd, 'customer_id': resp.message[0]?.name || '' }
 
             if (remember_me_check) {
                 rememberMe(queryparam);
@@ -152,14 +136,9 @@ export default function LogIn({ hide, checkModal }) {
     let [showAlert, setShowAlert] = useState(false)
     const closeModal = () => {
         setShowAlert(false)
-        // setTimeout(() => {
-        //     hide()
-        // }, 200);
     }
 
-    // Google Login
     const handleSuccess = (response) => {
-        // console.log(parseJwt(response.credential))
         socialLogin(parseJwt(response.credential))
     };
 
@@ -173,7 +152,6 @@ export default function LogIn({ hide, checkModal }) {
         var jsonPayload = decodeURIComponent(window.atob(base64).split('').map(function (c) {
             return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
         }).join(''));
-
 
         return JSON.parse(jsonPayload);
     }
@@ -191,13 +169,11 @@ export default function LogIn({ hide, checkModal }) {
         }
 
         const resp = await social_login(payload)
-        // console.log(resp,"resp")
         if (resp.message && resp.message.message && resp.message.message == 'Logged In') {
             localStorage['api_key'] = resp.message.api_key
             localStorage['api_secret'] = resp.message.api_secret
             touchSessionActivity();
 
-            // getCustomerInfo({ email: data.email, guest_id: localStorage['customerRefId'] }, datas)
             let mail = {
                 email: data.email,
                 guest_id: localStorage['customerRefId']
@@ -209,8 +185,6 @@ export default function LogIn({ hide, checkModal }) {
                 dispatch(setDetail(res.message[0]))
                 localStorage['roles'] = JSON.stringify(res.message[0].roles_list);
             }
-            // localStorage['customerUser_id'] = val.message.user_id;
-            // localStorage['customer_id'] = val.message.customer_id;
             localStorage['full_name'] = resp.full_name;
             hide()
         } else {
@@ -220,125 +194,322 @@ export default function LogIn({ hide, checkModal }) {
             setHeaderMsg(headerMsg)
             setShowAlert(true)
         }
-
     }
-
-    // Facebook Login
-    const responseFacebook = (response) => {
-        // Handle response from Facebook login
-        if (response.accessToken) {
-            // Successful login
-            handleFacebookLogin(response);
-        } else {
-            // Error or login canceled
-            // console.log('Facebook login failed:', response);
-        }
-    };
-
-    const handleFacebookLogin = (response) => {
-        // Handle login response
-        // console.log('Facebook login response:', response);
-        // Redirect or update state accordingly
-    };
 
     return (
         <>
+            <style>{`
+                .glass-login-container {
+                    position: relative;
+                    min-height: 100vh;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    background: transparent;
+                    overflow: hidden;
+                    padding: 24px;
+                }
+                .glass-login-container::before {
+                    content: '';
+                    position: absolute;
+                    top: -20%;
+                    right: -10%;
+                    width: 500px;
+                    height: 500px;
+                    background: radial-gradient(circle, rgba(99, 102, 241, 0.08) 0%, transparent 70%);
+                    pointer-events: none;
+                }
+                .glass-login-container::after {
+                    content: '';
+                    position: absolute;
+                    bottom: -20%;
+                    left: -10%;
+                    width: 500px;
+                    height: 500px;
+                    background: radial-gradient(circle, rgba(59, 130, 246, 0.06) 0%, transparent 70%);
+                    pointer-events: none;
+                }
+                .glass-card {
+                    position: relative;
+                    z-index: 10;
+                    width: 100%;
+                    max-width: 400px;
+                    padding: 48px 44px;
+                    background: #ffffff;
+                    border: 1px solid rgba(99, 102, 241, 0.1);
+                    border-radius: 20px;
+                    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.04), 0 20px 40px rgba(0, 0, 0, 0.08);
+                    animation: cardSlideIn 0.5s ease-out;
+                }
+                @keyframes cardSlideIn {
+                    from { opacity: 0; transform: translateY(16px); }
+                    to { opacity: 1; transform: translateY(0); }
+                }
+                .logo-wrapper {
+                    display: flex;
+                    justify-content: center;
+                    margin-bottom: 28px;
+                }
+                .logo-wrapper img {
+                    width: 56px;
+                    height: 56px;
+                }
+                .glass-title {
+                    font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
+                    font-size: 26px;
+                    font-weight: 700;
+                    color: #0f172a;
+                    text-align: center;
+                    margin-bottom: 6px;
+                    letter-spacing: -0.5px;
+                }
+                .glass-subtitle {
+                    font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
+                    font-size: 14px;
+                    color: #64748b;
+                    text-align: center;
+                    margin-bottom: 32px;
+                }
+                .glass-form-group {
+                    margin-bottom: 18px;
+                }
+                .glass-label {
+                    font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
+                    display: block;
+                    font-size: 13px;
+                    font-weight: 600;
+                    color: #374151;
+                    margin-bottom: 7px;
+                    letter-spacing: 0.1px;
+                }
+                .glass-input-wrapper {
+                    position: relative;
+                    display: flex;
+                    align-items: center;
+                    gap: 10px;
+                    padding: 0 14px;
+                    height: 46px;
+                    background: #f8fafc;
+                    border: 1.5px solid #e2e8f0;
+                    border-radius: 10px;
+                    transition: all 0.2s ease;
+                }
+                .glass-input-wrapper:focus-within {
+                    background: #ffffff;
+                    border-color: #6366f1;
+                    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12);
+                }
+                .glass-input-wrapper svg {
+                    width: 17px;
+                    height: 17px;
+                    color: #94a3b8;
+                    flex-shrink: 0;
+                }
+                .glass-input-wrapper:focus-within svg {
+                    color: #6366f1;
+                }
+                .glass-input {
+                    flex: 1;
+                    background: transparent;
+                    border: none;
+                    color: #0f172a;
+                    font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
+                    font-size: 14px;
+                    outline: none;
+                    padding: 0;
+                }
+                .glass-input::placeholder {
+                    color: #c0ccd9;
+                }
+                .glass-toggle-btn {
+                    background: none;
+                    border: none;
+                    cursor: pointer;
+                    padding: 0;
+                    display: flex;
+                    align-items: center;
+                    color: #94a3b8;
+                    transition: color 0.2s ease;
+                }
+                .glass-toggle-btn:hover {
+                    color: #6366f1;
+                }
+                .glass-toggle-btn svg {
+                    width: 17px;
+                    height: 17px;
+                }
+                .glass-error {
+                    font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
+                    font-size: 12px;
+                    color: #ef4444;
+                    margin-top: 5px;
+                }
+                .glass-submit-btn {
+                    width: 100%;
+                    height: 46px;
+                    margin-top: 24px;
+                    background: #4f46e5;
+                    color: #ffffff;
+                    border: none;
+                    border-radius: 10px;
+                    font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
+                    font-size: 15px;
+                    font-weight: 600;
+                    cursor: pointer;
+                    transition: all 0.2s ease;
+                    box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3);
+                    letter-spacing: 0.2px;
+                }
+                .glass-submit-btn:hover {
+                    background: #4338ca;
+                    box-shadow: 0 6px 18px rgba(79, 70, 229, 0.35);
+                    transform: translateY(-1px);
+                }
+                .glass-submit-btn:active {
+                    transform: translateY(0);
+                    box-shadow: 0 2px 8px rgba(79, 70, 229, 0.25);
+                }
+                .glass-checkbox-group {
+                    display: flex;
+                    align-items: center;
+                    gap: 9px;
+                    margin: 18px 0 0 0;
+                }
+                .glass-checkbox {
+                    appearance: none;
+                    -webkit-appearance: none;
+                    width: 17px;
+                    height: 17px;
+                    border: 1.5px solid #cbd5e1;
+                    border-radius: 5px;
+                    cursor: pointer;
+                    background: #ffffff;
+                    transition: all 0.2s ease;
+                    flex-shrink: 0;
+                    position: relative;
+                }
+                .glass-checkbox:checked {
+                    background: #4f46e5;
+                    border-color: #4f46e5;
+                }
+                .glass-checkbox:checked::after {
+                    content: '';
+                    position: absolute;
+                    left: 4px;
+                    top: 1px;
+                    width: 5px;
+                    height: 9px;
+                    border: 2px solid #ffffff;
+                    border-top: none;
+                    border-left: none;
+                    transform: rotate(45deg);
+                }
+                .glass-checkbox-label {
+                    font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
+                    font-size: 13px;
+                    color: #4b5563;
+                    cursor: pointer;
+                    user-select: none;
+                }
+                @media (max-width: 640px) {
+                    .glass-card {
+                        max-width: 100%;
+                        padding: 36px 28px;
+                    }
+                    .glass-title {
+                        font-size: 22px;
+                    }
+                }
+            `}</style>
             {showAlert && <AlertUi button_2={'Ok'} closeModal={closeModal} isOpen={showAlert} headerMsg={headerMsg} alertMsg={msg} />}
-            {/* <div className='container h-full md:h-[calc(100vh_-_50px)] overflow-auto md:p-[0_15px] lg:justify-center gap-[20px] '> */}
 
-            <div className='w-full text-center flex items-center justify-center'>
-                {/* <h2 className='text-[20px] font-semibold'>Welcome</h2> */}
-                <Image className="" height={200} width={200} src="/login-logo.svg" />
-                {/* <p className='text-[14px]'>Don't have an account? <span className='primary_color text-[15px] cursor-pointer' onClick={() => checkModal('signup')}>Sign Up</span></p> */}
-            </div>
-            <form onSubmit={handleSubmit((data) => log_in(data))} autoComplete='off'>
-                <div className={`flex flex-col py-5 relative`}>
-                    <label className={`${styles.label} `} htmlFor='email' >Username / Email Address</label>
-                    <div className='border rounded-[5px] flex gap-[5px] mt-[5px] p-[0_10px] h-[40px] items-center'>
-                        <Image className={`t-[10px] ${errors.email?.message ? 'bottom-[48px]' : 'bottom-[25px]'} h-[23px] w-[20px] object-contain`} src={'/login/mail-01.svg'} height={15} width={15} alt={"pass"} />
-                        <input id='emailId' placeholder='Email' className={`${styles.input} ${styles.border_left} h-full`} 
-                        {...register('email',)} 
-                        // { required: { value: true, message: 'Email is required' }, 
-                        // pattern: { value: /^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,4}$/, message: "Please enter a valid email" } 
-                        // },)} 
+            <div className='glass-login-container'>
+                <div className='glass-card'>
+                    <div className='logo-wrapper'>
+                        <Image
+                            height={56}
+                            width={56}
+                            src="/ihg-logo.svg"
+                            alt="IHG Logo"
+                            priority
                         />
                     </div>
-                    {errors?.email && <p className={`${styles.danger}`}>{errors.email.message}</p>}
+
+                    <h1 className='glass-title'>Welcome Back</h1>
+                    <p className='glass-subtitle'>Sign in to your IHG account</p>
+
+                    <form onSubmit={handleSubmit((data) => log_in(data))} autoComplete='off'>
+                        <div className='glass-form-group'>
+                            <label htmlFor='email' className='glass-label'>Username</label>
+                            <div className='glass-input-wrapper'>
+                                <svg viewBox='0 0 24 24' fill='none' stroke='currentColor'>
+                                    <path d='M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z' strokeWidth='1.5' strokeLinecap='round' strokeLinejoin='round'/>
+                                </svg>
+                                <input
+                                    id='emailId'
+                                    type='text'
+                                    placeholder='Enter your username'
+                                    className='glass-input'
+                                    {...register('email')}
+                                />
+                            </div>
+                            {errors?.email && <p className='glass-error'>{errors.email.message}</p>}
+                        </div>
+
+                        <div className='glass-form-group'>
+                            <label htmlFor='password' className='glass-label'>Password</label>
+                            <div className='glass-input-wrapper'>
+                                <svg viewBox='0 0 24 24' fill='none' stroke='currentColor'>
+                                    <path d='M12 1C6.5 1 2 5.5 2 11v8c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2v-8c0-5.5-4.5-10-10-10zm0 2c4.4 0 8 3.6 8 8v2h-1V9c0-3.9-3.1-7-7-7s-7 3.1-7 7v4H4v-2c0-4.4 3.6-8 8-8z' strokeWidth='1.5'/>
+                                </svg>
+                                <input
+                                    id='password'
+                                    type={show ? 'text' : 'password'}
+                                    placeholder='••••••••'
+                                    className='glass-input'
+                                    {...register('password', { required: { value: true, message: 'Password is required' } })}
+                                />
+                                <button
+                                    type='button'
+                                    className='glass-toggle-btn'
+                                    onClick={() => setShow(!show)}
+                                    aria-label='Toggle password visibility'
+                                >
+                                    {show ? (
+                                        <svg viewBox='0 0 24 24' fill='none' stroke='currentColor'>
+                                            <path d='M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z' strokeWidth='1.5' strokeLinecap='round' strokeLinejoin='round'/>
+                                            <circle cx='12' cy='12' r='3' strokeWidth='1.5' fill='none'/>
+                                        </svg>
+                                    ) : (
+                                        <svg viewBox='0 0 24 24' fill='none' stroke='currentColor'>
+                                            <path d='M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24' strokeWidth='1.5' strokeLinecap='round' strokeLinejoin='round'/>
+                                            <line x1='1' y1='1' x2='23' y2='23' strokeWidth='1.5' strokeLinecap='round' strokeLinejoin='round'/>
+                                        </svg>
+                                    )}
+                                </button>
+                            </div>
+                            {errors.password && <p className='glass-error'>{errors.password.message}</p>}
+                        </div>
+
+                        <div className='glass-checkbox-group'>
+                            <input
+                                type='checkbox'
+                                id='rememberMe'
+                                className='glass-checkbox'
+                                checked={remember_me_check}
+                                onChange={(e) => setRememberMe(e.target.checked)}
+                            />
+                            <label htmlFor='rememberMe' className='glass-checkbox-label'>
+                                Keep me signed in
+                            </label>
+                        </div>
+
+                        <button type='submit' className='glass-submit-btn'>
+                            Sign In
+                        </button>
+                    </form>
                 </div>
-                <div className={`flex flex-col  pb-4 relative`}>
-                    <label className={` ${styles.label}`} htmlFor='password'>Password</label>
-                    <div className='border rounded-[5px] flex gap-[5px] mt-[5px] p-[0_10px] h-[40px] items-center'>
-                        {/* absolute  left-[10px] ${errors.password?.message ? 'bottom-[45px]' : 'bottom-[25px]'} */}
-                        <Image onClick={() => setShow(!show)} className={` h-[23px] w-[20px] cursor-pointer object-contain`} src={show ? '/login/password-02.svg' : '/login/password-01.svg'} height={15} width={15} alt={"pass"} />
-                        <input id='password' placeholder='Password' type={`${show ? 'text' : 'password'}`} className={`${styles.input} ${styles.border_left} h-full`} {...register('password', { required: { value: true, message: 'Password is required' } })} />
-                        <Image onClick={() => setShow(!show)} className={` h-[23px] w-[20px] cursor-pointer object-contain`} src={show ? '/login/eye.svg' : '/login/eye-hide.svg'} height={15} width={15} alt={"pass"} />
-                        {/* <button onClick={()=> setShow(!show)}>show</button> */}
-                    </div>
-                    {errors.password && <p className={`${styles.danger}`}>{errors.password.message}</p>}
-                </div>
-
-                <button type="submit" className={`${styles.loginBtn} `}>Log In</button>
-                {/* {wrong && <p className='text-center pt-[5px] text-[#ff1010] font-semibold'>Please check your email or password</p>} */}
-            </form>
-
-            {/* <div onClick={() => checkModal('otp')} className='flex gap-[10px] mt-5 w-[75%] md:w-full m-[0_auto] h-[45px] cursor-pointer rounded-[5px] border items-center justify-center '>
-                <Image height={20} width={20} alt='google' src={'/login/otp.svg'} />
-                <p className=' font-[500]' >Sign In with OTP</p>
-            </div> */}
-
-            {/* <div className='m-[0_auto] py-[10px]'> */}
-                {/* <GoogleLogin
-                    onSuccess={handleSuccess}
-                    onFailure={handleFailure}
-                    shape='rectangular'
-                /> */}
-
-
-                {/* <LoginSocialFacebook
-                    isOnlyGetToken
-                    appId={"341622788230249"}
-                    onLoginStart={(loginStart) => {
-                        console.log(loginStart, 'loginStart')
-                    }}
-                    onResolve={({ provider, data }) => {
-                        console.log(provider, 'provider')
-                        console.log(data, 'data')
-                    }}
-                    onReject={(err) => {
-                        console.log(err, 'err')
-                    }}
-                >
-                    <FacebookLoginButton />
-                </LoginSocialFacebook> */}
-
-
-            {/* </div> */}
-            {/* <div className='m-[0_auto] pb-[10px]'>
-                <FacebookLogin
-                    appId={"341622788230249"}
-                    // appId={process.env.NEXT_PUBLIC_FACEBOOK_APP_ID}
-                    autoLoad={false}
-                    fields="name,email,picture"
-                    callback={responseFacebook}
-                    // onFailure={(res)=>{
-                    //     console.log(res,'err onFailure')
-                    // }}
-                    cssClass="facebook-login-button p-[8px_40px] flex items-center gap-[10px] text-[13px] border rounded-[3px]"
-                    icon="fa-facebook"
-                    textButton="Login with Facebook"
-                    dispatch
-                />
-            </div> */}
-
-            {/* </div> */}
-
+            </div>
         </>
     )
 }
-
-
-
-
-
-
-

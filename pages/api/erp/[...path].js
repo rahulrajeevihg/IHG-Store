@@ -15,9 +15,23 @@
  *   All ERP API calls should use `/erp-proxy/api/method/...` instead of `/api/method/...`
  */
 
-const ERP_BASE_URL = 'http://167.71.204.41';
+const ERP_BASE_URL = process.env.ERP_BASE_URL || 'https://erp.ihgind.com';
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
 const MAX_UPSTREAM_REDIRECTS = 5;
+const MAX_FETCH_ATTEMPTS = 2;
+const POST_ONLY_MUTATION_METHODS = new Set([
+  'insert_cart_items',
+  'update_cartitem',
+  'delete_cart_items',
+  'clear_cartitem',
+  'move_all_tocart',
+  'start_guided_ai_search',
+  'continue_guided_ai_search',
+  'create_product_data_issue',
+  'update_product_data_issue',
+  'add_product_data_issue_comment',
+  'reopen_product_data_issue',
+]);
 
 export const config = {
   api: {
@@ -35,6 +49,29 @@ async function readBody(req) {
   });
 }
 
+async function fetchUpstreamWithRetry(url, options) {
+  let lastError;
+
+  for (let attempt = 1; attempt <= MAX_FETCH_ATTEMPTS; attempt += 1) {
+    try {
+      return await fetch(url, options);
+    } catch (error) {
+      lastError = error;
+      console.error(
+        `[ERP Proxy] Upstream fetch attempt ${attempt}/${MAX_FETCH_ATTEMPTS} failed:`,
+        error?.message,
+        error?.cause?.message || ''
+      );
+
+      if (attempt < MAX_FETCH_ATTEMPTS) {
+        await new Promise((resolve) => setTimeout(resolve, 250 * attempt));
+      }
+    }
+  }
+
+  throw lastError;
+}
+
 export default async function handler(req, res) {
   const { path } = req.query;
 
@@ -44,11 +81,60 @@ export default async function handler(req, res) {
   requestUrl.searchParams.delete('path'); // remove the catch-all param
   const queryString = requestUrl.search; // e.g. "?country=UAE" or ""
   const upstreamUrl = `${ERP_BASE_URL}/${upstreamPath}${queryString}`;
+  const matchedMutationMethod = Array.from(POST_ONLY_MUTATION_METHODS).find((methodName) =>
+    upstreamPath?.includes(methodName)
+  );
+
+  if (matchedMutationMethod && req.method !== 'POST') {
+    const referer = req.headers.referer || '';
+    const origin = req.headers.origin || '';
+    const userAgent = req.headers['user-agent'] || '';
+    const xForwardedFor = req.headers['x-forwarded-for'] || '';
+    const realIp = req.headers['x-real-ip'] || '';
+    const clientIp = (Array.isArray(xForwardedFor) ? xForwardedFor[0] : xForwardedFor)?.split(',')[0]?.trim() || realIp || req.socket?.remoteAddress || '';
+
+    console.warn('[ERP Proxy] Rejected non-POST mutation request', {
+      received_method: req.method,
+      required_method: 'POST',
+      method_name: matchedMutationMethod,
+      upstream_path: upstreamPath,
+      upstream_url: upstreamUrl,
+      referer,
+      origin,
+      user_agent: userAgent,
+      client_ip: clientIp,
+    });
+
+    return res.status(405).json({
+      message: `Method ${req.method} not allowed. Allowed methods: POST`,
+      received_method: req.method,
+      required_method: 'POST',
+      method_name: matchedMutationMethod,
+    });
+  }
+
+  if (matchedMutationMethod && req.method === 'POST') {
+    const cookieHeader = req.headers.cookie || '';
+    const hasSidCookie = /(?:^|;\s*)sid=/.test(cookieHeader);
+    const hasCsrfCookie = /(?:^|;\s*)csrf_token=/.test(cookieHeader);
+    const referer = req.headers.referer || '';
+    const origin = req.headers.origin || '';
+
+    console.info('[ERP Proxy] Mutation POST auth context', {
+      method_name: matchedMutationMethod,
+      upstream_path: upstreamPath,
+      has_sid_cookie: hasSidCookie,
+      has_csrf_cookie: hasCsrfCookie,
+      referer,
+      origin,
+    });
+  }
 
   // Build forwarded headers — critically including the browser's cookies
   const forwardHeaders = {
     'Content-Type': req.headers['content-type'] || 'application/json',
     'Accept': req.headers['accept'] || 'application/json',
+    'Connection': 'close',
   };
 
   // Forward the browser's cookies verbatim — this is the key fix
@@ -96,7 +182,7 @@ export default async function handler(req, res) {
           ? body
           : undefined;
 
-      const erpResponse = await fetch(currentUrl, {
+      const erpResponse = await fetchUpstreamWithRetry(currentUrl, {
         method: currentMethod,
         headers: forwardHeaders,
         body: currentBody,
@@ -172,10 +258,14 @@ export default async function handler(req, res) {
     res.send(responseBody);
 
   } catch (err) {
-    console.error('[ERP Proxy] Upstream request failed:', err.message);
+    console.error(
+      '[ERP Proxy] Upstream request failed:',
+      err?.message,
+      err?.cause?.message || ''
+    );
     res.status(502).json({
       message: 'ERP proxy error: could not reach upstream server.',
-      error: err.message,
+      error: err?.cause?.message || err?.message,
     });
   }
 }
