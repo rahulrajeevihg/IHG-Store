@@ -90,15 +90,10 @@ export default function IssueFloatingLauncher() {
 
 function TicketIcon() {
   return (
-    <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5" aria-hidden="true">
-      <path
-        d="M4.75 8.25A2.25 2.25 0 0 1 7 6h10a2.25 2.25 0 0 1 2.25 2.25v2.1a1.6 1.6 0 0 0 0 3.3v2.1A2.25 2.25 0 0 1 17 18H7a2.25 2.25 0 0 1-2.25-2.25v-2.1a1.6 1.6 0 0 0 0-3.3v-2.1Z"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinejoin="round"
-      />
-      <path d="M9 9.5h6M9 12h6M9 14.5h4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-      <path d="M8 8.75v6.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeDasharray="1.5 2.5" />
-    </svg>
+    <img
+      src="https://erp.ihgind.com/files/danger.gif"
+      alt="Product Data Issues"
+      className="h-11 w-11 rounded-[12px] object-cover"
+    />
   );
 }

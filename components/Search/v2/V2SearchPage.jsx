@@ -37,6 +37,7 @@ import {
   buildGuidedSessionFromResponse,
   buildV2StateFromGuidedResponse,
   deriveV2SuggestedAnswers,
+  getGuidedUserMessages,
   isGuidedSkipAnswer,
   mergeGuidedSuggestedAnswers,
   normalizeGuidedAiResponse,
@@ -236,6 +237,87 @@ export default function V2SearchPage({
     if (resetFilters) {
       clearAiSearch();
     }
+  };
+
+  const rebuildGuidedAssistantFromMessages = async (userMessages) => {
+    const normalizedMessages = (Array.isArray(userMessages) ? userMessages : [])
+      .map((value) => String(value || "").trim())
+      .filter(Boolean);
+
+    if (normalizedMessages.length === 0) {
+      resetGuidedAssistant(true);
+      return;
+    }
+
+    let previousSession = null;
+    let latestNormalized = null;
+
+    for (let index = 0; index < normalizedMessages.length; index += 1) {
+      const userMessage = normalizedMessages[index];
+      const response = previousSession
+        ? await continueGuidedAiSearch({
+            session_id: previousSession?.session_id || "",
+            source_message: normalizedMessages.slice(0, index).join(" "),
+            applied_query: previousSession?.current_query || "",
+            current_intent: previousSession?.current_intent || {},
+            resolved_intent: previousSession?.resolved_intent || null,
+            question_key: previousSession?.question_key || "",
+            answer: userMessage,
+            page_context: { route: router.pathname, search: searchState.q || "" },
+            feature_flag_override: featureFlagOverride,
+          })
+        : await startGuidedAiSearch({
+            message: userMessage,
+            page_context: { route: router.pathname, search: searchState.q || "" },
+            feature_flag_override: featureFlagOverride,
+          });
+
+      latestNormalized = normalizeGuidedAiResponse(response);
+      if (!latestNormalized) {
+        throw new Error("Guided assistant did not return a valid replay response.");
+      }
+
+      previousSession = buildGuidedSessionFromResponse(
+        {
+          ...latestNormalized,
+          suggested_answers: latestNormalized.suggested_answers || [],
+        },
+        previousSession,
+        userMessage
+      );
+    }
+
+    if (!latestNormalized || !previousSession) {
+      throw new Error("Unable to rebuild the guided assistant session.");
+    }
+
+    const suggestedAnswers = mergeGuidedSuggestedAnswers(
+      latestNormalized.suggested_answers,
+      deriveV2SuggestedAnswers(
+        latestNormalized.question_key,
+        visibleFilterOptions,
+        latestNormalized.suggested_answers
+      )
+    );
+
+    const nextSession = {
+      ...previousSession,
+      suggested_answers: suggestedAnswers,
+      result_count:
+        latestNormalized.result_count !== null && latestNormalized.result_count !== undefined
+          ? latestNormalized.result_count
+          : found,
+    };
+
+    setGuidedAssistantSession(nextSession);
+    setGuidedAssistantInput("");
+    setGuidedAssistantOpen(true);
+    clearAiSession();
+
+    const nextState = buildV2StateFromGuidedResponse(latestNormalized, searchState);
+    syncUrlRef.current = true;
+    setSearchInput(latestNormalized.applied_query || "");
+    updateState(nextState);
   };
 
   const exitAiMode = () => {
@@ -1071,6 +1153,25 @@ export default function V2SearchPage({
     setGuidedAssistantOpen(false);
   };
 
+  const removeLastGuidedAnswer = async () => {
+    const userMessages = getGuidedUserMessages(guidedAssistantSession);
+    if (userMessages.length === 0) return;
+
+    setGuidedAssistantLoading(true);
+    try {
+      await rebuildGuidedAssistantFromMessages(userMessages.slice(0, -1));
+      toast.success(
+        userMessages.length > 1
+          ? "Removed the last answer and rebuilt the guided search."
+          : "Cleared the guided search and reset the catalog."
+      );
+    } catch (error) {
+      toast.error(error?.message || "Unable to remove the last answer right now.");
+    } finally {
+      setGuidedAssistantLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (!guidedAssistantSession?.question_key) return;
 
@@ -1327,6 +1428,8 @@ export default function V2SearchPage({
         onSkip={skipGuidedAssistantQuestion}
         onStartOver={() => resetGuidedAssistant(true)}
         onEndChat={closeGuidedAssistant}
+        onShowResults={closeGuidedAssistant}
+        onRemoveLastAnswer={removeLastGuidedAnswer}
         loading={guidedAssistantLoading}
         secondaryActionLabel="Open direct AI search"
         onSecondaryAction={() => {

@@ -515,7 +515,7 @@ export default function MainHeader({ header_template, theme_settings, website_se
                     </div> */}
 
                     <Link href="/tabs/yourcart" className="relative headerBtbs">
-                      <Image style={{ objectFit: 'contain' }} className='h-[25px] w-[23px]' height={25} width={25} alt='cart' src={'/Navbar/Cart.svg'}></Image>
+                      <img style={{ objectFit: 'contain' }} className='h-[25px] w-[23px]' alt='cart' src={'https://erp.ihgind.com/files/grocery.gif'}></img>
                       {cartCount > 0 && (
                         <span className="absolute -top-2 -right-2 bg-red-600 text-white text-[10px] font-bold rounded-full h-5 w-5 flex items-center justify-center">
                           {cartCount}

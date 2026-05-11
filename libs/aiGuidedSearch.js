@@ -351,8 +351,13 @@ export function deriveLegacySuggestedAnswers(questionKey, results = [], mastersD
 }
 
 export function mergeGuidedSuggestedAnswers(primary = [], fallback = []) {
+  const normalizedPrimary = normalizeSuggestedAnswers(primary);
+  if (normalizedPrimary.length > 0) {
+    return normalizedPrimary.slice(0, 8);
+  }
+
   const seen = new Set();
-  const normalized = [...normalizeSuggestedAnswers(primary), ...normalizeSuggestedAnswers(fallback)]
+  const normalized = [...normalizedPrimary, ...normalizeSuggestedAnswers(fallback)]
     .filter((entry) => {
       const key = String(entry.value || "").toLowerCase();
       if (!key || seen.has(key)) return false;
@@ -362,6 +367,13 @@ export function mergeGuidedSuggestedAnswers(primary = [], fallback = []) {
     .slice(0, 8);
 
   return normalized;
+}
+
+export function getGuidedUserMessages(session) {
+  return (Array.isArray(session?.messages) ? session.messages : [])
+    .filter((entry) => entry?.role === "user")
+    .map((entry) => String(entry?.content || "").trim())
+    .filter(Boolean);
 }
 
 const GUIDED_SKIP_ANSWER_PATTERN =

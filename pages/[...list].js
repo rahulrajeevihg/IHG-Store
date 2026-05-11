@@ -19,6 +19,7 @@ import {
   buildGuidedSessionFromResponse,
   buildLegacyFiltersFromGuidedResponse,
   deriveLegacySuggestedAnswers,
+  getGuidedUserMessages,
   isGuidedSkipAnswer,
   mergeGuidedSuggestedAnswers,
   normalizeGuidedAiResponse,
@@ -756,6 +757,95 @@ function LegacyList({ category, brand, search, fallbackMessage }) {
     }
   };
 
+  const rebuildGuidedAssistantFromMessages = async (userMessages) => {
+    const normalizedMessages = (Array.isArray(userMessages) ? userMessages : [])
+      .map((value) => String(value || '').trim())
+      .filter(Boolean);
+
+    if (normalizedMessages.length === 0) {
+      resetGuidedAssistant(true);
+      return;
+    }
+
+    let previousSession = null;
+    let latestNormalized = null;
+
+    for (let index = 0; index < normalizedMessages.length; index += 1) {
+      const userMessage = normalizedMessages[index];
+      const response = previousSession
+        ? await continueGuidedAiSearch({
+            session_id: previousSession?.session_id || '',
+            source_message: normalizedMessages.slice(0, index).join(' '),
+            applied_query: previousSession?.current_query || '',
+            current_intent: previousSession?.current_intent || {},
+            resolved_intent: previousSession?.resolved_intent || null,
+            question_key: previousSession?.question_key || '',
+            answer: userMessage,
+            page_context: {
+              route: router.pathname === '/[...list]' ? '/list' : router.asPath,
+              category: router.query['category'] ? String(router.query['category']) : '',
+              brand: router.query['brand'] ? String(router.query['brand']) : '',
+              search: router.query['search'] ? String(router.query['search']) : '',
+            },
+          })
+        : await startGuidedAiSearch({
+            message: userMessage,
+            page_context: {
+              route: router.pathname === '/[...list]' ? '/list' : router.asPath,
+              category: router.query['category'] ? String(router.query['category']) : '',
+              brand: router.query['brand'] ? String(router.query['brand']) : '',
+              search: router.query['search'] ? String(router.query['search']) : '',
+            },
+          });
+
+      latestNormalized = normalizeGuidedAiResponse(response);
+      if (!latestNormalized) {
+        throw new Error('Guided assistant did not return a valid replay response.');
+      }
+
+      previousSession = buildGuidedSessionFromResponse(
+        {
+          ...latestNormalized,
+          suggested_answers: latestNormalized.suggested_answers || [],
+        },
+        previousSession,
+        userMessage
+      );
+    }
+
+    if (!latestNormalized || !previousSession) {
+      throw new Error('Unable to rebuild the guided assistant session.');
+    }
+
+    const nextFilters = buildLegacyFiltersFromGuidedResponse(latestNormalized, initialState);
+    const suggestedAnswers = mergeGuidedSuggestedAnswers(
+      latestNormalized.suggested_answers,
+      deriveLegacySuggestedAnswers(
+        latestNormalized.question_key,
+        results,
+        mastersData,
+        latestNormalized.suggested_answers
+      )
+    );
+
+    setGuidedAssistantSession({
+      ...previousSession,
+      suggested_answers: suggestedAnswers,
+      result_count:
+        latestNormalized.result_count !== null && latestNormalized.result_count !== undefined
+          ? latestNormalized.result_count
+          : foundValue,
+    });
+    setGuidedAssistantInput('');
+    setGuidedAssistantOpen(true);
+    localStorage.setItem('sort_by', nextFilters.sort_by);
+    setResults([]);
+    setpageNo(1);
+    setFilters(nextFilters);
+    dispatch(setAllFilter({ ...nextFilters }));
+    fetchResults(true, true, nextFilters);
+  };
+
   const applyGuidedAssistantResponse = (payload, userMessage = '') => {
     const normalized = normalizeGuidedAiResponse(payload);
     if (!normalized) {
@@ -874,6 +964,25 @@ function LegacyList({ category, brand, search, fallbackMessage }) {
       applyGuidedAssistantResponse(response);
     } catch (error) {
       toast.error(error?.message || 'Unable to skip this question right now.');
+    } finally {
+      setGuidedAssistantLoading(false);
+    }
+  };
+
+  const removeLastGuidedAnswer = async () => {
+    const userMessages = getGuidedUserMessages(guidedAssistantSession);
+    if (userMessages.length === 0) return;
+
+    setGuidedAssistantLoading(true);
+    try {
+      await rebuildGuidedAssistantFromMessages(userMessages.slice(0, -1));
+      toast.success(
+        userMessages.length > 1
+          ? 'Removed the last answer and rebuilt the guided search.'
+          : 'Cleared the guided search and reset the catalog.'
+      );
+    } catch (error) {
+      toast.error(error?.message || 'Unable to remove the last answer right now.');
     } finally {
       setGuidedAssistantLoading(false);
     }
@@ -1273,6 +1382,8 @@ function LegacyList({ category, brand, search, fallbackMessage }) {
         onSkip={skipGuidedAssistantQuestion}
         onStartOver={() => resetGuidedAssistant(true)}
         onEndChat={() => setGuidedAssistantOpen(false)}
+        onShowResults={() => setGuidedAssistantOpen(false)}
+        onRemoveLastAnswer={removeLastGuidedAnswer}
         loading={guidedAssistantLoading}
         secondaryActionLabel="Open direct AI search"
         onSecondaryAction={() => {
