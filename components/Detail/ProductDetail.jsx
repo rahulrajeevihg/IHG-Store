@@ -5,6 +5,12 @@ import Image from 'next/image';
 import ProductBox from '../Product/ProductBox';
 import CardButton from '../Product/CardButton';
 import Tabs from '../Common/Tabs';
+import {
+    formatHappyCustomers,
+    formatLifetimeSoldQty,
+    formatStarRating,
+    getBusinessSignals,
+} from '@/libs/businessSignals';
 
 const ProductDetail = ({ hide, visible, productData }) => {
     const [relatedProductData, setRelatedData] = useState([]);
@@ -134,6 +140,7 @@ const ProductDetail = ({ hide, visible, productData }) => {
     const discountPct = data.offer_rate > 0 && data.rate > 0
         ? parseInt(((data.rate - data.offer_rate) / data.rate) * 100)
         : 0;
+    const businessSignals = getBusinessSignals(data);
 
     return (
         <>
@@ -320,6 +327,26 @@ const ProductDetail = ({ hide, visible, productData }) => {
                                             )}
                                         </div>
 
+                                        <div className="mb-5 rounded-[14px] border border-[#e5e7eb] bg-[#f8fafc] p-3.5">
+                                            <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[#64748b] mb-2">
+                                                Business Signals
+                                            </p>
+                                            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                                                <MetricChip
+                                                    label="Star Rating"
+                                                    value={businessSignals.hasStarRating ? formatStarRating(businessSignals.starRating) : '-'}
+                                                />
+                                                <MetricChip
+                                                    label="Happy Customers"
+                                                    value={businessSignals.hasCustomerCount ? formatHappyCustomers(businessSignals.customerCount) : '-'}
+                                                />
+                                                <MetricChip
+                                                    label="Qty Sold"
+                                                    value={businessSignals.hasSoldQty ? formatLifetimeSoldQty(businessSignals.soldQty) : '-'}
+                                                />
+                                            </div>
+                                        </div>
+
                                         {/* Add to Cart */}
                                         <div className="mb-6">
                                             <CardButton item={data} index={0} text_btn={true} is_big={true} />
@@ -378,6 +405,13 @@ const ProductDetail = ({ hide, visible, productData }) => {
 };
 
 export default ProductDetail;
+
+const MetricChip = ({ label, value }) => (
+    <div className="rounded-[10px] border border-[#e2e8f0] bg-white px-2.5 py-2">
+        <p className="text-[10px] uppercase tracking-[0.08em] text-[#94a3b8]">{label}</p>
+        <p className="mt-1 text-[12px] font-semibold text-[#1e293b]">{value}</p>
+    </div>
+);
 
 
 const SheetSkeleton = () => (

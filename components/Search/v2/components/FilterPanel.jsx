@@ -41,6 +41,7 @@ export default function FilterPanel({
   clearFilters,
   setInStock,
   setShowPromotion,
+  setManufacturedOnly,
 }) {
   const open = true;
 
@@ -189,6 +190,20 @@ export default function FilterPanel({
             />
           </div>
 
+          {/* MANUFACTURED toggle */}
+          <div className="px-2 py-3 flex items-center justify-between rounded-xl border border-[#edf1f5] bg-white">
+            <div className="flex items-center gap-3">
+              <div className={`p-1.5 rounded-lg ${(filters.is_manufactured_item || []).includes("1") ? "bg-red-50 text-red-600" : "bg-gray-100 text-gray-400"}`}>
+                <FactoryIcon />
+              </div>
+              <span className="text-[13px] font-semibold text-gray-700">Manufactured</span>
+            </div>
+            <Toggle
+              checked={(filters.is_manufactured_item || []).includes("1")}
+              onChange={(v) => setManufacturedOnly(v)}
+            />
+          </div>
+
           {/* PRICE range */}
           <FilterSection
             label="Price Range"
@@ -248,76 +263,6 @@ export default function FilterPanel({
                   className="h-10 w-full rounded-lg border border-gray-100 bg-gray-50/50 pl-11 pr-3 text-[12px] text-gray-900 outline-none focus:border-red-600 focus:bg-white focus:ring-4 focus:ring-red-600/5 transition-all"
                 />
               </div>
-            </div>
-          </FilterSection>
-
-          <FilterSection
-            label="Star Rating"
-            icon={<StarIcon />}
-            active={!!(filters.product_star_rating_range?.min || filters.product_star_rating_range?.max)}
-          >
-            <div className="flex items-center gap-2 mt-1">
-              <div className="relative flex-1 group">
-                <input
-                  type="number"
-                  min="3.5"
-                  max="5"
-                  step="0.1"
-                  placeholder="Min"
-                  value={filters.product_star_rating_range?.min || ""}
-                  onChange={(e) => updateRangeFilter("product_star_rating_range", "min", e.target.value)}
-                  className="h-10 w-full rounded-lg border border-gray-100 bg-gray-50/50 pl-3 pr-8 text-[12px] text-gray-900 outline-none focus:border-red-600 focus:bg-white focus:ring-4 focus:ring-red-600/5 transition-all"
-                />
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] font-semibold text-[#9ca3af]">★</span>
-              </div>
-              <div className="h-[1px] w-3 bg-gray-200" />
-              <div className="relative flex-1 group">
-                <input
-                  type="number"
-                  min="3.5"
-                  max="5"
-                  step="0.1"
-                  placeholder="Max"
-                  value={filters.product_star_rating_range?.max || ""}
-                  onChange={(e) => updateRangeFilter("product_star_rating_range", "max", e.target.value)}
-                  className="h-10 w-full rounded-lg border border-gray-100 bg-gray-50/50 pl-3 pr-8 text-[12px] text-gray-900 outline-none focus:border-red-600 focus:bg-white focus:ring-4 focus:ring-red-600/5 transition-all"
-                />
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] font-semibold text-[#9ca3af]">★</span>
-              </div>
-            </div>
-          </FilterSection>
-
-          <FilterSection
-            label="Happy Customers"
-            icon={<UsersIcon />}
-            active={!!(filters.customer_count_range?.min || filters.customer_count_range?.max)}
-          >
-            <div className="mt-1 flex flex-wrap gap-2">
-              {["50", "75", "100"].map((threshold) => {
-                const activeThreshold = String(filters.customer_count_range?.min || "") === threshold;
-                return (
-                  <button
-                    key={threshold}
-                    type="button"
-                    onClick={() => {
-                      if (activeThreshold) {
-                        updateRangeFilter("customer_count_range", "min", "");
-                        updateRangeFilter("customer_count_range", "max", "");
-                        return;
-                      }
-                      updateRangeFilter("customer_count_range", "min", threshold);
-                      updateRangeFilter("customer_count_range", "max", "");
-                    }}
-                    className={`rounded-full border px-3 py-1 text-[11px] font-semibold transition-colors ${
-                      activeThreshold
-                        ? "border-red-600 bg-red-50 text-red-600"
-                        : "border-[#e5e7eb] bg-white text-[#374151] hover:border-[#111]"
-                    }`}
-                  >
-                    {threshold}+ happy
-                  </button>
-                );
-              })}
             </div>
           </FilterSection>
 
@@ -421,6 +366,86 @@ export default function FilterPanel({
           {groupedSections.advanced.length > 0 && (
             <FilterGroup title="Advanced Filters" sections={groupedSections.advanced} filters={filters} updateMultiFilter={updateMultiFilter} />
           )}
+
+          <FilterSection
+            label="Happy Customers"
+            icon={<UsersIcon />}
+            active={!!(filters.customer_count_range?.min || filters.customer_count_range?.max)}
+          >
+            <div className="mt-1 flex flex-wrap gap-2">
+              {[
+                { key: "below_50", label: "Below 50", min: "", max: "49" },
+                { key: "50_100", label: "50 to 100", min: "50", max: "100" },
+                { key: "100_250", label: "100 to 250", min: "100", max: "250" },
+                { key: "250_500", label: "250 to 500", min: "250", max: "500" },
+                { key: "above_500", label: "Above 500", min: "500", max: "" },
+              ].map((bucket) => {
+                const activeBucket =
+                  String(filters.customer_count_range?.min || "") === bucket.min &&
+                  String(filters.customer_count_range?.max || "") === bucket.max;
+
+                return (
+                  <button
+                    key={bucket.key}
+                    type="button"
+                    onClick={() => {
+                      if (activeBucket) {
+                        updateRangeFilter("customer_count_range", "min", "");
+                        updateRangeFilter("customer_count_range", "max", "");
+                        return;
+                      }
+                      updateRangeFilter("customer_count_range", "min", bucket.min);
+                      updateRangeFilter("customer_count_range", "max", bucket.max);
+                    }}
+                    className={`rounded-full border px-3 py-1 text-[11px] font-semibold transition-colors ${
+                      activeBucket
+                        ? "border-red-600 bg-red-50 text-red-600"
+                        : "border-[#e5e7eb] bg-white text-[#374151] hover:border-[#111]"
+                    }`}
+                  >
+                    {bucket.label}
+                  </button>
+                );
+              })}
+            </div>
+          </FilterSection>
+
+          <FilterSection
+            label="Star Rating"
+            icon={<StarIcon />}
+            active={!!(filters.product_star_rating_range?.min || filters.product_star_rating_range?.max)}
+          >
+            <div className="mt-1 flex flex-wrap gap-2">
+              {["3.5", "4.0", "4.5", "5.0"].map((rating) => {
+                const activeRating =
+                  String(filters.product_star_rating_range?.min || "") === rating &&
+                  String(filters.product_star_rating_range?.max || "") === "";
+
+                return (
+                  <button
+                    key={rating}
+                    type="button"
+                    onClick={() => {
+                      if (activeRating) {
+                        updateRangeFilter("product_star_rating_range", "min", "");
+                        updateRangeFilter("product_star_rating_range", "max", "");
+                        return;
+                      }
+                      updateRangeFilter("product_star_rating_range", "min", rating);
+                      updateRangeFilter("product_star_rating_range", "max", "");
+                    }}
+                    className={`rounded-full border px-3 py-1 text-[11px] font-semibold transition-colors ${
+                      activeRating
+                        ? "border-red-600 bg-red-50 text-red-600"
+                        : "border-[#e5e7eb] bg-white text-[#374151] hover:border-[#111]"
+                    }`}
+                  >
+                    {rating}+ ★
+                  </button>
+                );
+              })}
+            </div>
+          </FilterSection>
         </div>
       </div>
     </div>

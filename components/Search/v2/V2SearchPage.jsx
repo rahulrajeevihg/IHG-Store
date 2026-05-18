@@ -196,6 +196,18 @@ export default function V2SearchPage({
   const activeResultQuery = isAiMode ? aiSession.display_query || "" : searchState.q;
 
   useEffect(() => {
+    if (typeof document === "undefined") return;
+    const detailOpen = drawerOpen || detailModalOpen;
+    if (detailOpen) {
+      document.body.dataset.detailViewOpen = "1";
+      return;
+    }
+    if (document.body.dataset.detailViewOpen === "1") {
+      delete document.body.dataset.detailViewOpen;
+    }
+  }, [drawerOpen, detailModalOpen]);
+
+  useEffect(() => {
     if (typeof window === "undefined") return;
     const stored = window.localStorage.getItem(DENSITY_STORAGE_KEY);
     if (stored === "comfortable" || stored === "compact") {
@@ -858,6 +870,18 @@ export default function V2SearchPage({
       ...current,
       page: 1,
       filters: { ...current.filters, show_promotion: checked },
+    }));
+  };
+
+  const setManufacturedOnly = (checked) => {
+    exitAiMode();
+    updateState((current) => ({
+      ...current,
+      page: 1,
+      filters: {
+        ...current.filters,
+        is_manufactured_item: checked ? ["1"] : [],
+      },
     }));
   };
 
@@ -1527,6 +1551,8 @@ export default function V2SearchPage({
         updateRangeFilter={updateRangeFilter}
         clearFilters={clearFilters}
         setInStock={setInStock}
+        setShowPromotion={setShowPromotion}
+        setManufacturedOnly={setManufacturedOnly}
       />
 
       <V2QuickViewDrawer

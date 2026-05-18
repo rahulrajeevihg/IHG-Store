@@ -18,10 +18,32 @@ export default function IssueFloatingLauncher() {
   const router = useRouter();
   const [state, setState] = useState({ loading: true, pending: 0, closed: 0, total: 0 });
   const [unavailable, setUnavailable] = useState(false);
+  const [detailOverlayOpen, setDetailOverlayOpen] = useState(false);
+
+  useEffect(() => {
+    if (typeof document === "undefined") return undefined;
+
+    const readState = () => {
+      setDetailOverlayOpen(document.body?.dataset?.detailViewOpen === "1");
+    };
+    readState();
+
+    const observer = new MutationObserver(readState);
+    observer.observe(document.body, {
+      attributes: true,
+      attributeFilter: ["data-detail-view-open"],
+    });
+
+    return () => observer.disconnect();
+  }, []);
 
   const hidden = useMemo(
-    () => ["/login"].includes(router.pathname),
-    [router.pathname]
+    () =>
+      ["/login"].includes(router.pathname) ||
+      router.pathname === "/pr/[...detail]" ||
+      router.asPath.startsWith("/pr/") ||
+      detailOverlayOpen,
+    [router.asPath, router.pathname, detailOverlayOpen]
   );
 
   useEffect(() => {

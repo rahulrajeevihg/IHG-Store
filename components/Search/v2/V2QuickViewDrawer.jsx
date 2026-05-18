@@ -11,6 +11,12 @@ import {
 import { logV2Event } from "@/libs/ighSearchV2Metrics";
 import ImageLoader from "@/components/ImageLoader";
 import { check_Image } from "@/libs/api";
+import {
+  formatHappyCustomers,
+  formatLifetimeSoldQty,
+  formatStarRating,
+  getBusinessSignals,
+} from "@/libs/businessSignals";
 
 export default function V2QuickViewDrawer({
   open,
@@ -138,6 +144,7 @@ export default function V2QuickViewDrawer({
   ]);
 
   const summary = detail || item || {};
+  const businessSignals = getBusinessSignals(summary);
 
   return (
     <Transition.Root show={open} as={Fragment}>
@@ -312,6 +319,8 @@ export default function V2QuickViewDrawer({
                                 {summary.output_current && <Info label="Output Current" value={summary.output_current} />}
                                 {summary.warranty && <Info label="Warranty" value={summary.warranty} />}
                               </div>
+
+                              <BusinessSignalsRow signals={businessSignals} />
 
                               {summary.description && (
                                 <p className="mt-[14px] line-clamp-5 text-[13px] leading-[1.8] text-[#5d5d5d]">
@@ -513,6 +522,27 @@ function Info({ label, value }) {
     <div>
       <p className="text-[11px] uppercase tracking-[0.4px] text-[#867b6c]">{label}</p>
       <p className="mt-[2px] font-medium text-[#222]">{value}</p>
+    </div>
+  );
+}
+
+function BusinessSignalsRow({ signals }) {
+  const starValue = signals?.hasStarRating ? formatStarRating(signals.starRating) : "-";
+  const customerValue = signals?.hasCustomerCount
+    ? formatHappyCustomers(signals.customerCount)
+    : "-";
+  const soldQtyValue = signals?.hasSoldQty ? formatLifetimeSoldQty(signals.soldQty) : "-";
+
+  return (
+    <div className="mt-[14px] rounded-[22px] border border-[#eadfcd] bg-white p-[16px]">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.45px] text-[#8f7d62]">
+        Business Signals
+      </p>
+      <div className="mt-[10px] grid gap-[10px] text-[13px] text-[#444] md:grid-cols-3">
+        <Info label="Star Rating" value={starValue} />
+        <Info label="Happy Customers" value={customerValue} />
+        <Info label="Qty Sold" value={soldQtyValue} />
+      </div>
     </div>
   );
 }

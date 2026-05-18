@@ -358,6 +358,15 @@ function App({ Component, pageProps }) {
   const [detailVisible, setDetailVisible] = useState(false)
   const [currentProduct, setCurrentProduct] = useState(null)
 
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    if (detailVisible) {
+      document.body.dataset.detailViewOpen = "1";
+    } else if (document.body.dataset.detailViewOpen === "1") {
+      delete document.body.dataset.detailViewOpen;
+    }
+  }, [detailVisible]);
+
   const navigateDetail = (item) => {
     setCurrentProduct(item)
     document.body.style.overflow = "hidden"

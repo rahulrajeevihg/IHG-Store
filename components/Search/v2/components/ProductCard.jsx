@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { check_Image } from "@/libs/api";
 import { highlightText, formatPrice } from "../utils/format";
+import { formatPlusCount, getBusinessSignals } from "@/libs/businessSignals";
 
 export default function ProductCard({
   document,
@@ -33,25 +34,14 @@ export default function ProductCard({
     ? Number(document.discount_percentage) || Math.round(((rate - offer) / rate) * 100)
     : 0;
   const discountAmount = discounted ? rate - offer : 0;
-  const starRating = Number(
-    document.product_star_rating ??
-    document.star_rating ??
-    document.product_rating
-  );
-  const hasStarRating = Number.isFinite(starRating) && starRating > 0;
-  const customerCount = Number(
-    document.customer_count ??
-    document.invoice_count ??
-    document.happy_customers
-  );
-  const soldQty = Number(
-    document.total_sold_qty_lifetime ??
-    document.total_sold_qty ??
-    document.sold_qty_lifetime ??
-    document.sold_qty
-  );
-  const hasCustomerCount = Number.isFinite(customerCount) && customerCount > 0;
-  const hasSoldQty = Number.isFinite(soldQty) && soldQty > 0;
+  const {
+    starRating,
+    customerCount,
+    soldQty,
+    hasStarRating,
+    hasCustomerCount,
+    hasSoldQty,
+  } = getBusinessSignals(document);
 
   const stock = Number(document.stock);
   const inStock = document.in_stock === true || document.in_stock === 1 || stock > 0;
@@ -473,13 +463,4 @@ function ProductPlaceholder({ document }) {
       </div>
     </div>
   );
-}
-
-function formatPlusCount(value) {
-  const n = Number(value);
-  if (!Number.isFinite(n) || n <= 0) return "0";
-  if (n >= 1000) return `${Math.floor(n / 100) * 100}+`;
-  if (n >= 100) return `${Math.floor(n / 10) * 10}+`;
-  if (n >= 50) return `${Math.floor(n / 5) * 5}+`;
-  return `${Math.floor(n)}`;
 }
