@@ -45,9 +45,34 @@ import { enforceSessionTimeout, hasAuthSession, touchSessionActivity } from '@/l
 function App({ Component, pageProps }) {
 
   const router = useRouter();
+  const [authChecked, setAuthChecked] = useState(false);
   let [website_settings, setWebsite_settings] = useState()
   const [activeTab, setActiveTab] = useState(0)
   const [pageKey, setPageKey] = useState(Date.now()); // A unique key for each page
+
+  useEffect(() => {
+    if (!router.isReady || typeof window === "undefined") {
+      return;
+    }
+
+    const publicRoutes = ["/login", "/seller/[login]"];
+    const isPublicRoute = publicRoutes.includes(router.pathname);
+    const authenticated = hasAuthSession();
+
+    if (!authenticated && !isPublicRoute) {
+      setAuthChecked(true);
+      router.replace("/login");
+      return;
+    }
+
+    if (authenticated && router.pathname === "/login") {
+      setAuthChecked(true);
+      router.replace("/");
+      return;
+    }
+
+    setAuthChecked(true);
+  }, [router.isReady, router.pathname]);
   useEffect(() => {
 
     // let cls = 0;
@@ -380,6 +405,10 @@ function App({ Component, pageProps }) {
   }
 
   // console.log(detailVisible);
+
+  if (!authChecked) {
+    return null;
+  }
 
   return (
     <>
