@@ -7,6 +7,37 @@ export const V2_DEFAULT_RANGE = {
   max: 1000000000,
 };
 
+const COMPACT_NUMERIC_FACET_UNITS = {
+  lumen_output: "lm",
+  input_voltage: "V",
+  output_current: "mA",
+  output_voltage: "V",
+};
+
+function extractChipNumericValue(rawValue, key) {
+  const raw = String(rawValue || "").toUpperCase().replace(/,/g, "");
+
+  if (key === "lumen_output") {
+    const match = raw.match(/(\d+(?:\.\d+)?)\s*LM(?!\s*\/)/);
+    return match ? Number(match[1]) : NaN;
+  }
+
+  if (key === "input_voltage" || key === "output_voltage") {
+    const match = raw.match(/(\d+(?:\.\d+)?)\s*V\b/);
+    return match ? Number(match[1]) : NaN;
+  }
+
+  if (key === "output_current") {
+    const match = raw.match(/(\d+(?:\.\d+)?)\s*(MA|A)\b/);
+    if (!match) return NaN;
+    const value = Number(match[1]);
+    return match[2] === "A" ? value * 1000 : value;
+  }
+
+  const fallback = raw.match(/\d+(?:\.\d+)?/);
+  return fallback ? Number(fallback[0]) : NaN;
+}
+
 export function looksLikeSku(value) {
   if (!value || typeof value !== "string") {
     return false;
@@ -182,6 +213,26 @@ export function getActiveFilterChips(filters, query, debugMode = false) {
         return;
       }
 
+      if (COMPACT_NUMERIC_FACET_UNITS[key]) {
+        const numericValues = value
+          .map((entry) => extractChipNumericValue(entry, key))
+          .filter((entry) => Number.isFinite(entry));
+
+        if (numericValues.length > 0) {
+          const min = Math.min(...numericValues);
+          const max = Math.max(...numericValues);
+          const unit = COMPACT_NUMERIC_FACET_UNITS[key];
+          chips.push({
+            id: `${key}-range`,
+            key,
+            value: `${formatNumericLabel(min)}-${formatNumericLabel(max)}${unit}`,
+            label: FILTER_LABEL_MAP[key] || prettifyLabel(key),
+            clearAll: true,
+          });
+          return;
+        }
+      }
+
       value.forEach((entry) => {
         if (entry !== null && entry !== undefined && String(entry).trim() !== "") {
           chips.push({
@@ -240,7 +291,7 @@ export function summarizeFiltersForMetrics(filters) {
       accumulator[key] = value.slice(0, 5);
     } else if (key.endsWith("_range") && isMeaningfulRange(value)) {
       accumulator[key] = value;
-    } else if (key === "in_stock" && value) {
+    } else if ((key === "in_stock" || key === "show_promotion") && value) {
       accumulator[key] = true;
     }
     return accumulator;
@@ -292,6 +343,7 @@ export function mapIntentResponseToState(response, isSystemManager) {
   });
 
   nextState.filters.in_stock = Boolean(intent?.filters?.in_stock);
+  nextState.filters.show_promotion = Boolean(intent?.filters?.show_promotion);
   nextState.filters.rate_range = {
     min:
       intent?.filters?.price_range?.min !== undefined
@@ -310,6 +362,26 @@ export function mapIntentResponseToState(response, isSystemManager) {
     max:
       intent?.filters?.stock_range?.max !== undefined
         ? String(intent.filters.stock_range.max)
+        : "",
+  };
+  nextState.filters.product_star_rating_range = {
+    min:
+      intent?.filters?.product_star_rating_range?.min !== undefined
+        ? String(intent.filters.product_star_rating_range.min)
+        : "",
+    max:
+      intent?.filters?.product_star_rating_range?.max !== undefined
+        ? String(intent.filters.product_star_rating_range.max)
+        : "",
+  };
+  nextState.filters.customer_count_range = {
+    min:
+      intent?.filters?.customer_count_range?.min !== undefined
+        ? String(intent.filters.customer_count_range.min)
+        : "",
+    max:
+      intent?.filters?.customer_count_range?.max !== undefined
+        ? String(intent.filters.customer_count_range.max)
         : "",
   };
 

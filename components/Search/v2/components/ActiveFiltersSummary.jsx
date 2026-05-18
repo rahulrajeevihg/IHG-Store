@@ -3,6 +3,7 @@ import { getActiveFilterChips } from "../utils/format";
 const CHIP_ACCENT = {
   query:                    "#3b82f6",
   in_stock:                 "#10b981",
+  show_promotion:           "#ef4444",
   brand:                    "#8b5cf6",
   category_list:            "#f59e0b",
   rate_range:               "#059669",
@@ -14,6 +15,9 @@ const CHIP_ACCENT = {
   color_temp_kelvin_range:  "#a78bfa",
   ip_rate:                  "#6366f1",
   ip_rating_numeric_range:  "#6366f1",
+  product_star_rating_range:"#f59e0b",
+  customer_count_range:     "#0ea5e9",
+  is_manufactured_item:     "#4f46e5",
   mounting:                 "#78716c",
   beam_angle:               "#10b981",
   lamp_type:                "#f97316",
@@ -71,7 +75,12 @@ export default function ActiveFiltersSummary({
             <button
               key={chipKey}
               type="button"
-              onClick={() => onClearFilter(chip.key, chip.key === "in_stock" ? null : chip.value)}
+              onClick={() =>
+                onClearFilter(
+                  chip.key,
+                  chip.key === "in_stock" || chip.clearAll ? null : chip.value
+                )
+              }
               className="filter-chip group inline-flex h-[32px] items-center overflow-hidden rounded-lg border border-[#e5e7eb] bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04)] transition-all duration-150 hover:border-[#111] hover:shadow-[0_2px_8px_rgba(0,0,0,0.1)]"
             >
               <span

@@ -71,8 +71,52 @@ import AiGuidedAssistantDialog from "@/components/AiGuidedAssistant/AiGuidedAssi
 const DENSITY_STORAGE_KEY = "v2:density";
 const DEV_MODE = process.env.NODE_ENV !== "production";
 const LIVE_SEARCH_DEBOUNCE_MS = 320;
+const SEARCH_EXECUTE_DEBOUNCE_MS = 220;
 const AI_DISPLAY_CONTRACT_ERROR =
   "AI search response is missing display metadata. Please refresh after the backend update or use standard search.";
+const INVENTORY_VALUE_ASC = "inventory_value:asc";
+const INVENTORY_VALUE_DESC = "inventory_value:desc";
+
+const getEffectiveUnitPrice = (document = {}) => {
+  const rate = Number(document?.rate);
+  const offerRate = Number(document?.offer_rate);
+  const hasValidPromo = offerRate > 0 && rate > 0 && offerRate < rate;
+  const unitPrice = hasValidPromo ? offerRate : rate;
+  return Number.isFinite(unitPrice) && unitPrice > 0 ? unitPrice : 0;
+};
+
+const getStockValue = (document = {}) => {
+  const stock = Number(document?.stock);
+  const qty = Number.isFinite(stock) && stock > 0 ? stock : 0;
+  return qty * getEffectiveUnitPrice(document);
+};
+
+const applyInventoryValueSortFallback = (hits = [], sortBy = "") => {
+  if (!Array.isArray(hits)) return [];
+  if (sortBy !== INVENTORY_VALUE_ASC && sortBy !== INVENTORY_VALUE_DESC) return hits;
+
+  const direction = sortBy === INVENTORY_VALUE_DESC ? -1 : 1;
+  return [...hits].sort((left, right) => {
+    const leftDoc = normalizeSearchHit(left);
+    const rightDoc = normalizeSearchHit(right);
+    const delta = getStockValue(leftDoc) - getStockValue(rightDoc);
+    if (delta === 0) return 0;
+    return delta * direction;
+  });
+};
+
+const FILTER_SOURCE_ALIASES = {
+  brand: ["brand", "brands"],
+  item_group: ["item_group", "item_groups"],
+  category_list: ["category_list", "categories"],
+  input_voltage: ["input_voltage", "input"],
+  lumen_output: ["lumen_output", "lumen"],
+  output_current: ["output_current", "current_output"],
+  output_voltage: ["output_voltage", "voltage_output"],
+  is_manufactured_item: ["is_manufactured_item", "manufactured_item"],
+};
+
+const getFilterSourceKeys = (key) => FILTER_SOURCE_ALIASES[key] || [key];
 
 export default function V2SearchPage({
   onFallback,
@@ -135,6 +179,8 @@ export default function V2SearchPage({
   const preserveAiSessionOnRouteSyncRef = useRef(false);
   const activeSearchController = useRef(null);
   const activeSuggestController = useRef(null);
+  const activeSearchFingerprintRef = useRef("");
+  const searchDebounceTimerRef = useRef(null);
   const detailCacheRef = useRef({});
   const suggestionsContainerRef = useRef(null);
   const guidedAutoQuestionKeyRef = useRef("");
@@ -164,8 +210,43 @@ export default function V2SearchPage({
 
   const visibleFilterOptions = useMemo(() => {
     return VISIBLE_FILTERS.reduce((accumulator, filter) => {
-      const masterOptions = mastersData?.[filter.key] || [];
-      const currentFacetMap = facetMap?.[filter.key] || {};
+      const sourceKeys = getFilterSourceKeys(filter.key);
+      let masterOptions = sourceKeys.flatMap((sourceKey) =>
+        Array.isArray(mastersData?.[sourceKey]) ? mastersData[sourceKey] : []
+      );
+      if (
+        filter.key === "category_list" &&
+        masterOptions.length === 0 &&
+        mastersData?.attributes &&
+        typeof mastersData.attributes === "object"
+      ) {
+        const categoryAttributeKeys = ["Product Category", "Category"];
+        for (const attrKey of categoryAttributeKeys) {
+          if (Array.isArray(mastersData.attributes[attrKey]) && mastersData.attributes[attrKey].length > 0) {
+            masterOptions = mastersData.attributes[attrKey];
+            break;
+          }
+        }
+      }
+      if (filter.key === "is_manufactured_item") {
+        masterOptions = masterOptions.map((value) => {
+          const stringValue = String(value);
+          if (stringValue === "1") {
+            return { value: "1", label: "Manufactured" };
+          }
+          if (stringValue === "0") {
+            return { value: "0", label: "Non-manufactured" };
+          }
+          return { value: stringValue, label: stringValue };
+        });
+      }
+      const currentFacetMap = sourceKeys.reduce((merged, sourceKey) => {
+        const sourceFacet = facetMap?.[sourceKey];
+        if (sourceFacet && typeof sourceFacet === "object") {
+          return { ...merged, ...sourceFacet };
+        }
+        return merged;
+      }, {});
       accumulator[filter.key] = buildMasterOptions(masterOptions, currentFacetMap);
       return accumulator;
     }, {});
@@ -384,10 +465,22 @@ export default function V2SearchPage({
           item_code_hint: skuSearch ? trimmedQuery : "",
           feature_flag_override: featureFlagOverride,
         };
+    const requestFingerprint = buildSearchFingerprint({
+      isAiSearch,
+      payload: requestPayload,
+    });
+
+    if (
+      activeSearchController.current &&
+      activeSearchFingerprintRef.current === requestFingerprint
+    ) {
+      return;
+    }
 
     if (activeSearchController.current) activeSearchController.current.abort();
     const controller = new AbortController();
     activeSearchController.current = controller;
+    activeSearchFingerprintRef.current = requestFingerprint;
 
     setLoading(true);
     setError("");
@@ -399,13 +492,19 @@ export default function V2SearchPage({
 
       const response = isAiSearch
         ? await aiSearchProductsV2(requestPayload, { signal: controller.signal })
-        : await searchProductsV2(requestPayload, { signal: controller.signal });
+        : await searchProductsV2(requestPayload, {
+            signal: controller.signal,
+            onRetry: () => {
+              setError("Search is taking longer than expected. Retrying…");
+            },
+          });
 
       if (isAiSearch) {
         assertAiDisplayResponse(response);
       }
 
-      const hits = Array.isArray(response?.hits) ? response.hits : [];
+      const rawHits = Array.isArray(response?.hits) ? response.hits : [];
+      const hits = applyInventoryValueSortFallback(rawHits, activeState.sort_by);
 
       setResults(hits);
       setFound(Number(response?.found) || 0);
@@ -496,7 +595,7 @@ export default function V2SearchPage({
           error: err,
         });
       }
-      const message = getSearchErrorMessage(err?.message);
+      const message = getSearchErrorMessage(err);
       if (isAiSearch && message === AI_DISPLAY_CONTRACT_ERROR) {
         clearAiSession();
       }
@@ -517,6 +616,9 @@ export default function V2SearchPage({
         return;
       }
     } finally {
+      if (activeSearchFingerprintRef.current === requestFingerprint) {
+        activeSearchFingerprintRef.current = "";
+      }
       setLoading(false);
     }
   };
@@ -543,8 +645,27 @@ export default function V2SearchPage({
       setLoading(false);
       return;
     }
-    executeSearch(searchState);
-  }, [searchState, hydrated, isSystemManager, searchDisabled]);
+    if (searchDebounceTimerRef.current) {
+      clearTimeout(searchDebounceTimerRef.current);
+      searchDebounceTimerRef.current = null;
+    }
+
+    const isAiSearch = Boolean(aiSession?.mode === "ai" && aiSession?.message);
+    if (isAiSearch) {
+      executeSearch(searchState);
+      return;
+    }
+
+    searchDebounceTimerRef.current = setTimeout(() => {
+      executeSearch(searchState);
+    }, SEARCH_EXECUTE_DEBOUNCE_MS);
+    return () => {
+      if (searchDebounceTimerRef.current) {
+        clearTimeout(searchDebounceTimerRef.current);
+        searchDebounceTimerRef.current = null;
+      }
+    };
+  }, [searchState, hydrated, isSystemManager, searchDisabled, aiSession]);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -731,6 +852,15 @@ export default function V2SearchPage({
     }));
   };
 
+  const setShowPromotion = (checked) => {
+    exitAiMode();
+    updateState((current) => ({
+      ...current,
+      page: 1,
+      filters: { ...current.filters, show_promotion: checked },
+    }));
+  };
+
   const clearFilters = () => {
     if (isAiMode) {
       clearAiSearch();
@@ -766,6 +896,14 @@ export default function V2SearchPage({
       }));
       return;
     }
+    if (key === "show_promotion") {
+      updateState((current) => ({
+        ...current,
+        page: 1,
+        filters: { ...current.filters, show_promotion: false },
+      }));
+      return;
+    }
     if (key.endsWith("_range")) {
       updateState((current) => ({
         ...current,
@@ -779,7 +917,10 @@ export default function V2SearchPage({
       page: 1,
       filters: {
         ...current.filters,
-        [key]: current.filters[key].filter((entry) => entry !== value),
+        [key]:
+          value === null
+            ? []
+            : current.filters[key].filter((entry) => entry !== value),
       },
     }));
   };
@@ -975,7 +1116,9 @@ export default function V2SearchPage({
         found: Number(response?.found) || 0,
       });
       setSearchInput(message);
-      setResults(Array.isArray(response?.hits) ? response.hits : []);
+      const rawHits = Array.isArray(response?.hits) ? response.hits : [];
+      const sortedHits = applyInventoryValueSortFallback(rawHits, searchState.sort_by);
+      setResults(sortedHits);
       setFound(Number(response?.found) || 0);
       setFacetMap(adaptFacetCounts(response?.facet_counts));
       setQueryDebug(response?.query_debug || null);
@@ -1260,6 +1403,7 @@ export default function V2SearchPage({
                 updateRangeFilter={updateRangeFilter}
                 clearFilters={clearFilters}
                 setInStock={setInStock}
+                setShowPromotion={setShowPromotion}
               />
             </div>
           </aside>
@@ -1538,15 +1682,26 @@ function buildAiDisplayChips(session) {
   return chips;
 }
 
-function getSearchErrorMessage(message) {
+function buildSearchFingerprint({ isAiSearch, payload }) {
+  return JSON.stringify({
+    mode: isAiSearch ? "ai" : "standard",
+    payload: payload || {},
+  });
+}
+
+function getSearchErrorMessage(errorOrMessage) {
   const fallback = "Unable to load search results.";
+  const message =
+    typeof errorOrMessage === "string"
+      ? errorOrMessage
+      : errorOrMessage?.message || "";
   if (!message || typeof message !== "string") {
     return fallback;
   }
 
   const lowered = message.toLowerCase();
   if (lowered.includes("timed out")) {
-    return "Search is taking too long to respond. Please try again.";
+    return "Search timed out. Please narrow filters and try again.";
   }
 
   if (lowered.includes("filter") && lowered.includes("validation")) {

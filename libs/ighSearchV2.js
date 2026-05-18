@@ -74,6 +74,8 @@ export const V2_SORT_OPTIONS = [
   { label: "Offer price high to low", value: "offer_rate:desc" },
   { label: "Stock low to high", value: "stock:asc" },
   { label: "Stock high to low", value: "stock:desc" },
+  { label: "Stock value low to high", value: "inventory_value:asc" },
+  { label: "Stock value high to low", value: "inventory_value:desc" },
   { label: "Mostly sold", value: "sold_last_30_days:desc" },
   { label: "Least sold", value: "sold_last_30_days:asc" },
   { label: "Discount low to high", value: "discount_percentage:asc" },
@@ -96,6 +98,7 @@ export const V2_FILTER_KEYS = [
   "power",
   "color_temp",
   "ip_rate",
+  "lumen_output",
   "beam_angle",
   "mounting",
   "body_finish",
@@ -106,6 +109,7 @@ export const V2_FILTER_KEYS = [
   "material",
   "warranty",
   "variant_of",
+  "is_manufactured_item",
 ];
 
 export const V2_RANGE_KEYS = [
@@ -121,6 +125,8 @@ export const V2_RANGE_KEYS = [
   "power_value_range",
   "color_temp_kelvin_range",
   "ip_rating_numeric_range",
+  "product_star_rating_range",
+  "customer_count_range",
 ];
 
 export const DEFAULT_V2_STATE = {
@@ -138,6 +144,7 @@ export const DEFAULT_V2_STATE = {
     power: [],
     color_temp: [],
     ip_rate: [],
+    lumen_output: [],
     beam_angle: [],
     mounting: [],
     body_finish: [],
@@ -148,7 +155,9 @@ export const DEFAULT_V2_STATE = {
     material: [],
     warranty: [],
     variant_of: [],
+    is_manufactured_item: [],
     in_stock: true,
+    show_promotion: false,
     rate_range: { min: "", max: "" },
     offer_rate_range: { min: "", max: "" },
     discount_percentage_range: { min: "", max: "" },
@@ -161,12 +170,28 @@ export const DEFAULT_V2_STATE = {
     power_value_range: { min: "", max: "" },
     color_temp_kelvin_range: { min: "", max: "" },
     ip_rating_numeric_range: { min: "", max: "" },
+    product_star_rating_range: { min: "", max: "" },
+    customer_count_range: { min: "", max: "" },
   },
 };
 
 const getAuthHeaders = () => ({
   "Content-Type": "application/json",
 });
+
+const SEARCH_TIMEOUT_CODE = "timeout";
+const SEARCH_NETWORK_CODE = "network";
+const SEARCH_SERVER_CODE = "server";
+
+const toRequestError = (message, metadata = {}) => {
+  const error = new Error(message);
+  error.code = metadata.code || "request_error";
+  error.attempt = metadata.attempt || 1;
+  error.duration_ms = metadata.duration_ms || 0;
+  error.status = metadata.status;
+  error.retrying = Boolean(metadata.retrying);
+  return error;
+};
 
 const createRequestController = (externalSignal, timeoutMs) => {
   const controller = new AbortController();
@@ -221,7 +246,10 @@ const parseJsonResponse = async (response) => {
       data?.message ||
       data?.exc ||
       `Request failed with status ${response.status}`;
-    throw new Error(errorMessage);
+    throw toRequestError(errorMessage, {
+      code: SEARCH_SERVER_CODE,
+      status: response.status,
+    });
   }
 
   return data?.message ?? data;
@@ -329,10 +357,70 @@ export const searchProductsV2 = async (payload, options = {}) => {
     normalizedPayload.filters = JSON.stringify(normalizedPayload.filters);
   }
 
-  return postApi("search_products_v2", normalizedPayload, {
-    timeoutMs: 25000,
-    ...options,
-  });
+  const runAttempt = async (attempt, timeoutMs) => {
+    const startedAt = Date.now();
+    try {
+      return await postApi("search_products_v2", normalizedPayload, {
+        ...options,
+        timeoutMs,
+      });
+    } catch (error) {
+      const durationMs = Date.now() - startedAt;
+      const timedOut = error?.message?.toLowerCase?.().includes("timed out");
+      const isAbort = error?.name === "AbortError";
+      const isNetwork = !error?.status && !timedOut && !isAbort;
+      const canRetry = attempt === 1 && (timedOut || isNetwork);
+      if (canRetry) {
+        if (typeof options?.onRetry === "function") {
+          try {
+            options.onRetry({
+              code: timedOut ? SEARCH_TIMEOUT_CODE : SEARCH_NETWORK_CODE,
+              attempt,
+              duration_ms: durationMs,
+            });
+          } catch {
+            // Ignore callback errors; request flow must continue.
+          }
+        }
+        throw toRequestError("Search is taking longer than expected. Retrying…", {
+          code: timedOut ? SEARCH_TIMEOUT_CODE : SEARCH_NETWORK_CODE,
+          attempt,
+          duration_ms: durationMs,
+          retrying: true,
+        });
+      }
+      if (timedOut) {
+        throw toRequestError("Search timed out. Please narrow filters and try again.", {
+          code: SEARCH_TIMEOUT_CODE,
+          attempt,
+          duration_ms: durationMs,
+          status: error?.status,
+        });
+      }
+      if (isNetwork) {
+        throw toRequestError("Unable to reach search service. Please try again.", {
+          code: SEARCH_NETWORK_CODE,
+          attempt,
+          duration_ms: durationMs,
+        });
+      }
+      throw toRequestError(error?.message || "Unable to load search results.", {
+        code: error?.code || SEARCH_SERVER_CODE,
+        attempt,
+        duration_ms: durationMs,
+        status: error?.status,
+      });
+    }
+  };
+
+  try {
+    return await runAttempt(1, 25000);
+  } catch (firstError) {
+    if (!firstError?.retrying) {
+      throw firstError;
+    }
+  }
+  return runAttempt(2, 35000);
 };
 
 export const suggestProductsV2 = async (payload, options = {}) =>
@@ -770,7 +858,7 @@ export const sanitizeV2FiltersForRequest = (filters) => {
   const safeFilters =
     filters && typeof filters === "object" ? filters : DEFAULT_V2_STATE.filters;
 
-  return Object.entries(safeFilters).reduce((accumulator, [key, value]) => {
+  const sanitized = Object.entries(safeFilters).reduce((accumulator, [key, value]) => {
     if (Array.isArray(value)) {
       accumulator[key] = value;
       return accumulator;
@@ -787,6 +875,74 @@ export const sanitizeV2FiltersForRequest = (filters) => {
     accumulator[key] = value;
     return accumulator;
   }, {});
+
+  // Backend promo filtering is offer-price based.
+  // Keep `show_promotion` for UI/state, and enforce an equivalent
+  // request-side numeric guard so promo toggle always has effect.
+  if (sanitized.show_promotion) {
+    const offerRateRange = sanitized.offer_rate_range || { min: "", max: "" };
+    const currentMin =
+      offerRateRange?.min !== undefined && offerRateRange?.min !== null
+        ? String(offerRateRange.min).trim()
+        : "";
+
+    if (currentMin === "" || Number(currentMin) <= 0) {
+      sanitized.offer_rate_range = {
+        ...offerRateRange,
+        min: "0.01",
+      };
+    }
+  }
+
+  // Compatibility bridge for mixed index schemas:
+  // some environments still index legacy field keys (e.g. `input`)
+  // while V2 UI uses canonical keys (e.g. `input_voltage`).
+  // Send both keys when values exist so filtering works across both.
+  if (Array.isArray(sanitized.input_voltage) && sanitized.input_voltage.length > 0) {
+    sanitized.input = [...sanitized.input_voltage];
+  }
+  if (Array.isArray(sanitized.color_temp) && sanitized.color_temp.length > 0) {
+    sanitized.color_temp_ = [...sanitized.color_temp];
+  }
+  if (Array.isArray(sanitized.warranty) && sanitized.warranty.length > 0) {
+    sanitized.warranty_ = [...sanitized.warranty];
+  }
+  if (
+    Array.isArray(sanitized.is_manufactured_item) &&
+    sanitized.is_manufactured_item.length > 0
+  ) {
+    sanitized.manufactured_item = [...sanitized.is_manufactured_item];
+  }
+
+  // Numeric range compatibility bridge:
+  // different deployments may still use legacy field keys in Typesense filters.
+  const cloneRange = (rangeValue) => ({
+    min: rangeValue?.min ?? "",
+    max: rangeValue?.max ?? "",
+  });
+
+  if (sanitized.product_star_rating_range) {
+    const ratingRange = cloneRange(sanitized.product_star_rating_range);
+    sanitized.star_rating_range = ratingRange;
+    sanitized.rating_range = ratingRange;
+  }
+  if (sanitized.customer_count_range) {
+    const customerRange = cloneRange(sanitized.customer_count_range);
+    sanitized.happy_customers_range = customerRange;
+    sanitized.invoice_count_range = customerRange;
+    sanitized.customer_invoice_count_range = customerRange;
+  }
+  if (sanitized.lumen_output && Array.isArray(sanitized.lumen_output)) {
+    sanitized.lumen = [...sanitized.lumen_output];
+  }
+  if (sanitized.output_current && Array.isArray(sanitized.output_current)) {
+    sanitized.current_output = [...sanitized.output_current];
+  }
+  if (sanitized.output_voltage && Array.isArray(sanitized.output_voltage)) {
+    sanitized.voltage_output = [...sanitized.output_voltage];
+  }
+
+  return sanitized;
 };
 
 export const mapAiIntentToV2State = (intent, sourcePrompt = "") => {
@@ -821,6 +977,7 @@ export const mapAiIntentToV2State = (intent, sourcePrompt = "") => {
   });
 
   nextState.filters.in_stock = Boolean(safeFilters.in_stock);
+  nextState.filters.show_promotion = Boolean(safeFilters.show_promotion);
   nextState.filters.rate_range = normalizeRange(safeFilters.price_range);
   nextState.filters.stock_range = normalizeRange(safeFilters.stock_range);
   nextState.filters.offer_rate_range = normalizeRange(safeFilters.offer_rate_range);
@@ -848,6 +1005,12 @@ export const mapAiIntentToV2State = (intent, sourcePrompt = "") => {
   );
   nextState.filters.ip_rating_numeric_range = normalizeRange(
     safeFilters.ip_rating_numeric_range
+  );
+  nextState.filters.product_star_rating_range = normalizeRange(
+    safeFilters.product_star_rating_range
+  );
+  nextState.filters.customer_count_range = normalizeRange(
+    safeFilters.customer_count_range
   );
 
   const promptDerivedPowerRange = buildPromptDerivedPowerRange(sourcePrompt);
@@ -880,6 +1043,7 @@ export const mapAppliedFiltersToV2Filters = (appliedFilters) => {
   });
 
   nextFilters.in_stock = Boolean(safeFilters.in_stock);
+  nextFilters.show_promotion = Boolean(safeFilters.show_promotion);
 
   V2_RANGE_KEYS.forEach((key) => {
     nextFilters[key] = normalizeRange(safeFilters[key]);
@@ -924,6 +1088,9 @@ export const stateFromQuery = (query, isSystemManager = false) => {
   if (query.in_stock !== undefined) {
     nextState.filters.in_stock = parseBooleanFlag(query.in_stock);
   }
+  if (query.show_promotion !== undefined) {
+    nextState.filters.show_promotion = parseBooleanFlag(query.show_promotion);
+  }
 
   const rangeMap = {
     rate_range: "rate",
@@ -938,6 +1105,8 @@ export const stateFromQuery = (query, isSystemManager = false) => {
     power_value_range: "power_value",
     color_temp_kelvin_range: "color_temp_kelvin",
     ip_rating_numeric_range: "ip_rating_numeric",
+    product_star_rating_range: "product_star_rating",
+    customer_count_range: "customer_count",
   };
 
   Object.entries(rangeMap).forEach(([stateKey, queryKey]) => {
@@ -989,6 +1158,9 @@ export const queryFromState = (state, isSystemManager = false) => {
   if (safeState.filters?.in_stock) {
     params.set("in_stock", "1");
   }
+  if (safeState.filters?.show_promotion) {
+    params.set("show_promotion", "1");
+  }
 
   const rangeMap = {
     rate_range: "rate",
@@ -1003,6 +1175,8 @@ export const queryFromState = (state, isSystemManager = false) => {
     power_value_range: "power_value",
     color_temp_kelvin_range: "color_temp_kelvin",
     ip_rating_numeric_range: "ip_rating_numeric",
+    product_star_rating_range: "product_star_rating",
+    customer_count_range: "customer_count",
   };
 
   Object.entries(rangeMap).forEach(([stateKey, queryKey]) => {
@@ -1038,7 +1212,17 @@ export const getMasterOptionValue = (option) => {
 };
 
 export const buildMasterOptions = (options = [], facetMap = {}) =>
-  (Array.isArray(options) ? options : [])
+  (() => {
+    const rawOptions = Array.isArray(options) ? options : [];
+    const fallbackFacetOptions =
+      rawOptions.length > 0
+        ? []
+        : Object.keys(facetMap || {}).sort(
+            (left, right) => Number(facetMap?.[right] || 0) - Number(facetMap?.[left] || 0)
+          );
+    const resolvedOptions = rawOptions.length > 0 ? rawOptions : fallbackFacetOptions;
+    return resolvedOptions;
+  })()
     .map((option) => {
       const value = getMasterOptionValue(option);
       if (!value) {

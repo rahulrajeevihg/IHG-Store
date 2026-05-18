@@ -20,7 +20,6 @@ import 'react-lazy-load-image-component/src/effects/blur.css';
 import 'rodal/lib/rodal.css'
 import 'react-multi-carousel/lib/styles.css';
 import 'tailwindcss/tailwind.css';
-const BrandCategory = dynamic(() => import('@/components/Common/BrandCategory'))
 import settig from '@/libs/websiteSettings'
 import ScrollToTopButton from '@/components/Common/ScrollToTop';
 import Image from 'next/image';
@@ -410,12 +409,6 @@ function App({ Component, pageProps }) {
 
               <div id='footer'>
                 {(masterValue && masterValue['item_group']) && (router.pathname != "/login" && !router.asPath.includes('profile') && router.pathname != "/[...list]") && <>
-                  <div className="bg-[#F0F0F0] py-[30px]" >
-
-                    <BrandCategory title={'Popular Categories'} keys={'item_group'} masterValue={masterValue} />
-                    <BrandCategory title={'Popular Brands'} keys={'brand'} masterValue={masterValue} sliceKey={30} />
-
-                  </div>
                   <div className='border-t border-t-[#ddd] w-full text-center bg-[#F0F0F0] py-2'>
                     © 2025 products.ihgind.com. All Rights Reserved.
                   </div>

@@ -1076,7 +1076,21 @@ export async function createProductDataIssue(payload) {
 
 export async function listProductDataIssues(filters = {}) {
     const api = methodUrl + 'igh_search.igh_search.api.list_product_data_issues';
-    const response = await postMethod(api, filters);
+    let response;
+    try {
+        response = await postMethod(api, filters);
+    } catch (error) {
+        const message = String(error?.message || "");
+        if (
+            message.includes("list_product_data_issues") &&
+            message.includes("has no attribute")
+        ) {
+            const e = new Error("product_data_issues_unavailable");
+            e.code = "product_data_issues_unavailable";
+            throw e;
+        }
+        throw error;
+    }
     const payload = response?.message || response || {};
     const issues = Array.isArray(payload.items)
         ? payload.items.map(normalizeProductDataIssueRow).filter(Boolean)

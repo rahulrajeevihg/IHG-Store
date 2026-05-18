@@ -17,6 +17,7 @@ function getPendingCount(summary = {}, items = []) {
 export default function IssueFloatingLauncher() {
   const router = useRouter();
   const [state, setState] = useState({ loading: true, pending: 0, closed: 0, total: 0 });
+  const [unavailable, setUnavailable] = useState(false);
 
   const hidden = useMemo(
     () => ["/login"].includes(router.pathname),
@@ -24,7 +25,7 @@ export default function IssueFloatingLauncher() {
   );
 
   useEffect(() => {
-    if (hidden) return;
+    if (hidden || unavailable) return;
     let active = true;
 
     const load = async () => {
@@ -41,7 +42,18 @@ export default function IssueFloatingLauncher() {
           closed: Number(summary.closed || items.filter((item) => item?.status === "closed").length || 0),
           total: Number(summary.total || items.length || 0),
         });
-      } catch (_) {
+      } catch (error) {
+        const message = String(error?.message || "");
+        if (
+          error?.code === "product_data_issues_unavailable" ||
+          (message.includes("list_product_data_issues") &&
+            message.includes("has no attribute"))
+        ) {
+          if (active) {
+            setUnavailable(true);
+          }
+          return;
+        }
         if (active) {
           setState({ loading: false, pending: 0, closed: 0, total: 0 });
         }
@@ -55,9 +67,9 @@ export default function IssueFloatingLauncher() {
       active = false;
       window.clearInterval(intervalId);
     };
-  }, [hidden]);
+  }, [hidden, unavailable]);
 
-  if (hidden) return null;
+  if (hidden || unavailable) return null;
 
   return (
     <Link

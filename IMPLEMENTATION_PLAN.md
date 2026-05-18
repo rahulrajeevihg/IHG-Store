@@ -11,11 +11,11 @@
 - Frontend: Next.js 14 (Pages Router), React 18, Redux Toolkit, Tailwind CSS
 - Backend: ERPNext / Frappe (Python), custom app `igh_search`
 - Search: Typesense (vector/keyword hybrid)
-- Proxy: Next.js API route at `/pages/api/erp/[...path].js` forwards all ERP calls cookie-preserving to `http://167.71.204.41`
+- Proxy: Next.js API route at `/pages/api/erp/[...path].js` forwards all ERP calls cookie-preserving to `http://erp.ihgind.com`
 
 **Key rule:** The `ecommerce_business_store` Frappe app is **NOT installed**. All backend logic lives in the `igh_search` custom app only.
 
-**Server:** `167.71.204.41` — ERPNext/Frappe instance. SSH access available.
+**Server:** `erp.ihgind.com` — ERPNext/Frappe instance. SSH access available.
 **Bench path:** `/home/frappe/frappe-bench`
 **App path:** `/home/frappe/frappe-bench/apps/igh_search/igh_search/igh_search/`
 **Currency:** AED (UAE Dirham)
@@ -89,7 +89,7 @@ SSH into server and run:
 
 ```bash
 # 1. Login to server
-ssh root@167.71.204.41
+ssh root@erp.ihgind.com
 # password: IhG@dEV$2025@12e
 
 # 2. Find exact app directory
@@ -103,7 +103,7 @@ cp $APP_DIR/api.py $APP_DIR/api.py.bak_$(date +%Y%m%d) 2>/dev/null || echo "no e
 
 # 4. Deploy the implementation
 # Either SCP the file:
-#   scp server/api_implementation.py root@167.71.204.41:$APP_DIR/api.py
+#   scp server/api_implementation.py root@erp.ihgind.com:$APP_DIR/api.py
 # Or paste content using heredoc (see section 1.2)
 
 # 5. Also ensure top-level wrapper exists at:
@@ -669,10 +669,10 @@ def move_all_tocart(*args, **kwargs):
 
 ## 1.4 API Test Commands
 
-Run these curl commands from the server or any machine that can reach `167.71.204.41`. Save them in a script:
+Run these curl commands from the server or any machine that can reach `erp.ihgind.com`. Save them in a script:
 
 ```bash
-BASE="http://167.71.204.41"
+BASE="http://erp.ihgind.com"
 COOKIE="/tmp/ihg_test.txt"
 
 # Login
@@ -824,7 +824,7 @@ return `http://${domain}:8000/app/quotation/${encodeURIComponent(quotationName)}
 return `http://${domain}/app/quotation/${encodeURIComponent(quotationName)}`;
 ```
 
-**Note:** If Frappe runs on port 8000 on this specific server, keep `:8000`. Test by visiting `http://167.71.204.41/app` in browser. If it opens ERPNext desk, remove `:8000`. If not, try `http://167.71.204.41:8000/app`.
+**Note:** If Frappe runs on port 8000 on this specific server, keep `:8000`. Test by visiting `http://erp.ihgind.com/app` in browser. If it opens ERPNext desk, remove `:8000`. If not, try `http://erp.ihgind.com:8000/app`.
 
 ## 2.3 Fix: Currency Formatter Inconsistency
 
@@ -1645,7 +1645,7 @@ useEffect(() => {
 
 **Current:**
 ```javascript
-export const domain = '167.71.204.41';
+export const domain = 'erp.ihgind.com';
 export const typesense_api_key = "gjbRIS6NQkArF5lJx08U7bVJgg8beTIFFvQVBf7xdKiIWNb8";
 export const system_api_key = 'c047ac7e8f8a565';
 export const system_api_secret = '6236f8c55e6fe0d';
@@ -1653,14 +1653,14 @@ export const system_api_secret = '6236f8c55e6fe0d';
 
 **Fix:** Create `.env.local` (never commit this file):
 ```
-NEXT_PUBLIC_ERP_DOMAIN=167.71.204.41
+NEXT_PUBLIC_ERP_DOMAIN=erp.ihgind.com
 NEXT_PUBLIC_TYPESENSE_API_KEY=gjbRIS6NQkArF5lJx08U7bVJgg8beTIFFvQVBf7xdKiIWNb8
 NEXT_PUBLIC_SITE_URL=https://ihg-sigma.vercel.app
 ```
 
 **Update `siteConfig.js`:**
 ```javascript
-export const domain = process.env.NEXT_PUBLIC_ERP_DOMAIN || '167.71.204.41';
+export const domain = process.env.NEXT_PUBLIC_ERP_DOMAIN || 'erp.ihgind.com';
 export const typesense_api_key = process.env.NEXT_PUBLIC_TYPESENSE_API_KEY || '';
 export const website = process.env.NEXT_PUBLIC_SITE_URL || '';
 export const system_api_key = process.env.NEXT_PUBLIC_SYSTEM_API_KEY || '';
@@ -1669,9 +1669,9 @@ export const system_api_secret = process.env.NEXT_PUBLIC_SYSTEM_API_SECRET || ''
 
 **Update `pages/api/erp/[...path].js` line 18:**
 ```javascript
-const ERP_BASE_URL = process.env.ERP_BASE_URL || 'http://167.71.204.41';
+const ERP_BASE_URL = process.env.ERP_BASE_URL || 'http://erp.ihgind.com';
 ```
-Add `ERP_BASE_URL=http://167.71.204.41` to `.env.local` (no `NEXT_PUBLIC_` since this is server-side only).
+Add `ERP_BASE_URL=http://erp.ihgind.com` to `.env.local` (no `NEXT_PUBLIC_` since this is server-side only).
 
 ## 5.2 Add `.env.local` to `.gitignore`
 
@@ -1755,7 +1755,7 @@ Strict order:
 
 ## Frontend → Backend URL mapping
 
-All frontend API calls go through the Next.js proxy at `/api/erp/` which forwards to `http://167.71.204.41`.
+All frontend API calls go through the Next.js proxy at `/api/erp/` which forwards to `http://erp.ihgind.com`.
 
 | Frontend function | HTTP method | Full URL after proxy | Backend Python function |
 |---|---|---|---|

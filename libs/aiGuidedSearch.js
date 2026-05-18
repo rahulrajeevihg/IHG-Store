@@ -6,6 +6,7 @@ export const GUIDED_ARRAY_FILTER_KEYS = [
   "product_type",
   "item_group",
   "ip_rate",
+  "lumen_output",
   "power",
   "color_temp",
   "body_finish",
@@ -64,6 +65,12 @@ export const GUIDED_QUESTION_META = {
     placeholder: "Example: IP20, IP44, IP65",
     optionSource: "ip_rate",
   },
+  lumen_output: {
+    title: "Do you need a specific lumen output?",
+    helper: "Useful when matching brightness requirements for a space.",
+    placeholder: "Example: 800lm, 1200lm, 2000lm",
+    optionSource: "lumen_output",
+  },
   in_stock: {
     title: "Should I keep this to in-stock products only?",
     helper: "This is usually the best choice for fast procurement.",
@@ -114,6 +121,7 @@ const LEGACY_RESULT_FIELD_MAP = {
   power: ["power"],
   color_temp: ["color_temp_", "color_temp"],
   ip_rate: ["ip_rate"],
+  lumen_output: ["lumen_output"],
   mounting: ["mounting"],
   beam_angle: ["beam_angle"],
   input_voltage: ["input", "input_voltage"],

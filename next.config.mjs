@@ -19,7 +19,7 @@ const nextConfig = {
       afterFiles: [
         // {
         //   source: '/api/:path*',
-        //   destination: 'http://167.71.204.41/api/:path*',
+        //   destination: 'http://erp.ihgind.com/api/:path*',
         // },
       ],
       fallback: [

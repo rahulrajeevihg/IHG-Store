@@ -19,6 +19,7 @@ const ERP_BASE_URL = process.env.ERP_BASE_URL || 'https://erp.ihgind.com';
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
 const MAX_UPSTREAM_REDIRECTS = 5;
 const MAX_FETCH_ATTEMPTS = 2;
+const UPSTREAM_TIMEOUT_MS = 30000;
 const POST_ONLY_MUTATION_METHODS = new Set([
   'insert_cart_items',
   'update_cartitem',
@@ -53,10 +54,22 @@ async function fetchUpstreamWithRetry(url, options) {
   let lastError;
 
   for (let attempt = 1; attempt <= MAX_FETCH_ATTEMPTS; attempt += 1) {
+    const timeoutController = new AbortController();
+    const timeoutId = setTimeout(() => {
+      timeoutController.abort(new DOMException('Upstream request timed out', 'TimeoutError'));
+    }, UPSTREAM_TIMEOUT_MS);
+
+    const mergedSignal = timeoutController.signal;
     try {
-      return await fetch(url, options);
+      return await fetch(url, {
+        ...options,
+        signal: mergedSignal,
+      });
     } catch (error) {
       lastError = error;
+      if (error?.name === 'TimeoutError' || error?.message?.toLowerCase?.().includes('timed out')) {
+        lastError.__proxy_timeout = true;
+      }
       console.error(
         `[ERP Proxy] Upstream fetch attempt ${attempt}/${MAX_FETCH_ATTEMPTS} failed:`,
         error?.message,
@@ -66,10 +79,37 @@ async function fetchUpstreamWithRetry(url, options) {
       if (attempt < MAX_FETCH_ATTEMPTS) {
         await new Promise((resolve) => setTimeout(resolve, 250 * attempt));
       }
+    } finally {
+      clearTimeout(timeoutId);
     }
   }
 
   throw lastError;
+}
+
+function normalizeSetCookieForProxy(cookieValue, req) {
+  if (!cookieValue || typeof cookieValue !== 'string') return cookieValue;
+
+  const host = (req?.headers?.host || '').split(':')[0]?.toLowerCase() || '';
+  const xfProto = req?.headers?.['x-forwarded-proto'];
+  const protoHeader = Array.isArray(xfProto) ? xfProto[0] : xfProto;
+  const isHttps = String(protoHeader || '').toLowerCase() === 'https';
+  const isLocalhost = host === 'localhost' || host === '127.0.0.1';
+
+  let normalized = cookieValue;
+
+  // Host-only cookies are safer for our proxy origin; Domain from ERP can break
+  // local/dev session persistence when proxying across hosts.
+  normalized = normalized.replace(/;\s*Domain=[^;]*/gi, '');
+
+  if (isLocalhost && !isHttps) {
+    // On local HTTP, Secure cookies may be ignored by some browsers.
+    normalized = normalized.replace(/;\s*Secure/gi, '');
+    // SameSite=None requires Secure; downgrade to Lax for localhost HTTP.
+    normalized = normalized.replace(/;\s*SameSite=None/gi, '; SameSite=Lax');
+  }
+
+  return normalized;
 }
 
 export default async function handler(req, res) {
@@ -166,9 +206,12 @@ export default async function handler(req, res) {
   }
 
   try {
+    const startedAt = Date.now();
+    const startedAtIso = new Date(startedAt).toISOString();
     console.log('[ERP Proxy] Forwarding to:', upstreamUrl);
     console.log('[ERP Proxy] Method:', req.method);
     console.log('[ERP Proxy] Headers:', forwardHeaders);
+    console.log('[ERP Proxy] started_at:', startedAtIso);
     if (body) console.log('[ERP Proxy] Body:', body.toString());
 
     let finalResponse = null;
@@ -247,7 +290,10 @@ export default async function handler(req, res) {
         ? [finalResponse.headers.get('set-cookie')]
         : [];
     if (setCookies.length > 0) {
-      res.setHeader('Set-Cookie', setCookies);
+      const normalizedCookies = setCookies
+        .map((cookieValue) => normalizeSetCookieForProxy(cookieValue, req))
+        .filter(Boolean);
+      res.setHeader('Set-Cookie', normalizedCookies);
     }
 
     // Forward response status
@@ -255,14 +301,30 @@ export default async function handler(req, res) {
 
     // Forward response body
     const responseBody = await finalResponse.text();
+    const durationMs = Date.now() - startedAt;
+    console.log('[ERP Proxy] completed', {
+      upstream_status: finalResponse.status,
+      duration_ms: durationMs,
+      started_at: startedAtIso,
+      upstream_path: upstreamPath,
+    });
     res.send(responseBody);
 
   } catch (err) {
+    const isTimeout = Boolean(err?.__proxy_timeout);
     console.error(
       '[ERP Proxy] Upstream request failed:',
       err?.message,
       err?.cause?.message || ''
     );
+    if (isTimeout) {
+      res.status(504).json({
+        message: 'Upstream ERP request timed out.',
+        code: 'upstream_timeout',
+        timeout_ms: UPSTREAM_TIMEOUT_MS,
+      });
+      return;
+    }
     res.status(502).json({
       message: 'ERP proxy error: could not reach upstream server.',
       error: err?.cause?.message || err?.message,

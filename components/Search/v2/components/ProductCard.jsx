@@ -33,9 +33,36 @@ export default function ProductCard({
     ? Number(document.discount_percentage) || Math.round(((rate - offer) / rate) * 100)
     : 0;
   const discountAmount = discounted ? rate - offer : 0;
+  const starRating = Number(
+    document.product_star_rating ??
+    document.star_rating ??
+    document.product_rating
+  );
+  const hasStarRating = Number.isFinite(starRating) && starRating > 0;
+  const customerCount = Number(
+    document.customer_count ??
+    document.invoice_count ??
+    document.happy_customers
+  );
+  const soldQty = Number(
+    document.total_sold_qty_lifetime ??
+    document.total_sold_qty ??
+    document.sold_qty_lifetime ??
+    document.sold_qty
+  );
+  const hasCustomerCount = Number.isFinite(customerCount) && customerCount > 0;
+  const hasSoldQty = Number.isFinite(soldQty) && soldQty > 0;
 
   const stock = Number(document.stock);
   const inStock = document.in_stock === true || document.in_stock === 1 || stock > 0;
+  const stockSeverity =
+    stock <= 0
+      ? "none"
+      : stock === 1
+      ? "critical"
+      : stock <= 5
+      ? "low"
+      : "healthy";
   const inactive = includeInactive && document.is_active === 0;
   const activePrice = discounted ? offer : rate;
   const hasPrice = activePrice > 0;
@@ -54,21 +81,29 @@ export default function ProductCard({
       onClick={() => onNavigate(document)}
       className="group relative flex flex-col overflow-hidden rounded-xl border border-[#e8eaed] bg-white shadow-[0_1px_3px_rgba(16,24,40,0.06)] transition-all duration-200 hover:-translate-y-0.5 hover:border-[#d0d5dd] hover:shadow-[0_8px_24px_rgba(16,24,40,0.1)] cursor-pointer"
     >
-      {/* PROMO badge — top-right corner */}
-      {discounted && (
-        <div className="absolute right-0 top-0 z-20 overflow-hidden rounded-tr-xl">
-          <div className="bg-[#dc2626] px-2.5 py-[4px] text-[9px] font-bold uppercase tracking-[0.1em] text-white rounded-bl-lg">
-            Promo
-          </div>
+      {/* Top-right badges */}
+      {(discounted || hasStarRating) && (
+        <div className="absolute right-0 top-0 z-20 flex flex-col items-end gap-1.5 p-1.5">
+          {discounted && (
+            <div className="overflow-hidden rounded-tr-xl">
+              <div className="bg-[#dc2626] px-2.5 py-[4px] text-[9px] font-bold uppercase tracking-[0.1em] text-white rounded-bl-lg">
+                Promo
+              </div>
+            </div>
+          )}
+          {hasStarRating && (
+            <div className="rounded-full border border-[#fcd34d] bg-[#fffbeb] px-2 py-[3px] text-[9px] font-bold text-[#b45309] shadow-sm">
+              ★ {starRating.toFixed(1)}
+            </div>
+          )}
         </div>
       )}
 
       {/* Status badges — top-left */}
-      {(exactSkuMatch || inactive || !inStock || (inStock && stock > 0 && stock <= 5)) && (
+      {(exactSkuMatch || inactive || !inStock) && (
         <div className="absolute left-2 top-2 z-20 flex flex-col gap-1 pointer-events-none">
           {exactSkuMatch && <Badge tone="accent">SKU</Badge>}
           {inactive      && <Badge tone="danger">Inactive</Badge>}
-          {inStock && stock > 0 && stock <= 5 && <Badge tone="warn">Low</Badge>}
           {!inStock      && <Badge tone="oos">OOS</Badge>}
         </div>
       )}
@@ -137,7 +172,7 @@ export default function ProductCard({
         </p>
 
         {/* Price */}
-        <div className="mt-0.5">
+        <div className="mt-0.5 min-h-[38px]">
           {hasPrice ? (
             <>
               <div className="flex flex-wrap items-baseline gap-1.5">
@@ -153,55 +188,90 @@ export default function ProductCard({
               {discounted && (
                 <div className="mt-1 flex flex-wrap items-center gap-1">
                   <span className="rounded-md bg-[#fef2f2] px-1.5 py-[2px] text-[9px] font-bold text-[#dc2626]">
-                    -{discountPct}%
+                    {discountPct}%
                   </span>
                   <span className="text-[9px] text-[#9ca3af]">
-                    Save {formatPrice(discountAmount)}
+                    Save {formatPrice(Math.round(discountAmount))}
                   </span>
                 </div>
               )}
             </>
           ) : (
-            <span className="text-[10px] text-[#9ca3af]">Price on request</span>
+            <span className="inline-flex min-h-[22px] items-end text-[10px] text-[#9ca3af]">Price on request</span>
           )}
         </div>
 
-        {/* Stock — highlighted */}
-        <div className="mt-1">
-          {inStock ? (
-            <span className="inline-flex items-center gap-1.5 rounded-lg bg-[#f0fdf4] border border-[#bbf7d0] px-2.5 py-[5px]">
-              <svg className="h-[13px] w-[13px] shrink-0 text-[#16a34a]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                <path d="M20 7H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2z" strokeLinejoin="round" />
-                <path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2" strokeLinejoin="round" />
-                <line x1="12" y1="12" x2="12" y2="12" strokeWidth="3" strokeLinecap="round" />
-              </svg>
-              <span className="text-[11px] font-bold text-[#16a34a]">
-                {stock > 0
-                  ? `${stock}${document.stock_uom ? ` ${document.stock_uom}` : ""}`
-                  : "In stock"}
+        {(hasCustomerCount || hasSoldQty) && (
+          <div className="mt-1 flex flex-wrap items-center gap-1.5">
+            {hasCustomerCount && (
+              <span className="rounded-full border border-[#bfdbfe] bg-[#eff6ff] px-2 py-[3px] text-[9px] font-semibold text-[#1d4ed8]">
+                {formatPlusCount(customerCount)} customers
               </span>
-            </span>
-          ) : (
-            <span className="inline-flex items-center gap-1.5 rounded-lg bg-[#fafafa] border border-[#e5e7eb] px-2.5 py-[5px]">
-              <svg className="h-[13px] w-[13px] shrink-0 text-[#9ca3af]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                <circle cx="12" cy="12" r="9" />
-                <path d="M8 12h8" strokeLinecap="round" />
-              </svg>
-              <span className="text-[11px] font-semibold text-[#9ca3af]">Out of stock</span>
-            </span>
-          )}
-        </div>
+            )}
+            {hasSoldQty && (
+              <span className="rounded-full border border-[#d9f99d] bg-[#f7fee7] px-2 py-[3px] text-[9px] font-semibold text-[#3f6212]">
+                {formatPlusCount(soldQty)} qty sold
+              </span>
+            )}
+          </div>
+        )}
+        <div className="mt-auto flex flex-col gap-2 pt-1">
+          {/* Stock — highlighted */}
+          <div className="min-h-[30px]">
+            {inStock ? (
+              <span
+                className={`inline-flex min-h-[30px] items-center gap-1.5 rounded-lg px-2.5 py-[5px] ${
+                  stockSeverity === "critical"
+                    ? "border border-[#fecaca] bg-[#fef2f2]"
+                    : stockSeverity === "low"
+                    ? "border border-[#fed7aa] bg-[#fff7ed]"
+                    : "border border-[#bbf7d0] bg-[#f0fdf4]"
+                }`}
+              >
+                <svg
+                  className={`h-[13px] w-[13px] shrink-0 ${
+                    stockSeverity === "critical"
+                      ? "text-[#dc2626]"
+                      : stockSeverity === "low"
+                      ? "text-[#ea580c]"
+                      : "text-[#16a34a]"
+                  }`}
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                >
+                  <path d="M20 7H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2z" strokeLinejoin="round" />
+                  <path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2" strokeLinejoin="round" />
+                  <line x1="12" y1="12" x2="12" y2="12" strokeWidth="3" strokeLinecap="round" />
+                </svg>
+                <span
+                  className={`text-[11px] font-bold ${
+                    stockSeverity === "critical"
+                      ? "text-[#dc2626]"
+                      : stockSeverity === "low"
+                      ? "text-[#ea580c]"
+                      : "text-[#16a34a]"
+                  }`}
+                >
+                  {stock > 0
+                    ? `${stock}${document.stock_uom ? ` ${document.stock_uom}` : ""}`
+                    : "In stock"}
+                </span>
+              </span>
+            ) : (
+              <span className="inline-flex min-h-[30px] items-center gap-1.5 rounded-lg border border-[#e5e7eb] bg-[#fafafa] px-2.5 py-[5px]">
+                <svg className="h-[13px] w-[13px] shrink-0 text-[#9ca3af]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <circle cx="12" cy="12" r="9" />
+                  <path d="M8 12h8" strokeLinecap="round" />
+                </svg>
+                <span className="text-[11px] font-semibold text-[#9ca3af]">Out of stock</span>
+              </span>
+            )}
+          </div>
 
-        {/* Add button */}
-        <div className="mt-2">
-          <button
-            type="button"
-            onClick={(e) => { e.stopPropagation(); onReportIssue && onReportIssue(document); }}
-            className="mb-2 inline-flex items-center gap-1.5 rounded-full border border-[#e6ebf1] bg-[#fbfcfe] px-2.5 py-1 text-[9px] font-semibold uppercase tracking-[0.12em] text-[#6b7280] transition hover:border-[#111827] hover:text-[#111827]"
-          >
-            <FlagIcon />
-            Report issue
-          </button>
+          {/* Add button */}
+          <div>
           {salesMode ? (
             <div className="relative h-[33px]">
               <div
@@ -250,6 +320,7 @@ export default function ProductCard({
               {isShortlisted ? "✓ Added" : "Add"}
             </button>
           )}
+          </div>
         </div>
 
       </div>
@@ -262,7 +333,6 @@ function Badge({ tone, children }) {
   const cls = {
     accent: "bg-[#1b6dff] text-white",
     danger: "bg-[#b42318] text-white",
-    warn:   "bg-[#d97706] text-white",
     oos:    "bg-white/90 text-[#6b7280] border border-[#e5e5e5]",
   };
   return (
@@ -403,4 +473,13 @@ function ProductPlaceholder({ document }) {
       </div>
     </div>
   );
+}
+
+function formatPlusCount(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return "0";
+  if (n >= 1000) return `${Math.floor(n / 100) * 100}+`;
+  if (n >= 100) return `${Math.floor(n / 10) * 10}+`;
+  if (n >= 50) return `${Math.floor(n / 5) * 5}+`;
+  return `${Math.floor(n)}`;
 }

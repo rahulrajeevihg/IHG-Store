@@ -18,46 +18,10 @@ export default function SearchHero({
   fallbackMessage,
   aiExplanation,
 }) {
-  const formattedFound = loading ? "…" : Number(found || 0).toLocaleString();
-  const latencyLabel = searchLatencyMs !== null ? formatLatency(searchLatencyMs) : null;
-
   return (
     <section className="sticky top-0 z-20 border-b border-[#e7edf3] bg-[#fbfcfe]">
       <div className="mx-auto max-w-[1700px] px-[12px] py-[10px]">
         <div className="rounded-[18px] border border-[#e7edf3] bg-white shadow-[0_10px_28px_rgba(15,23,42,0.05)]">
-          <div className="flex flex-wrap items-center justify-between gap-x-[18px] gap-y-[10px] border-b border-[#eef2f6] px-[18px] py-[14px]">
-            <div className="flex min-w-0 flex-col gap-[7px]">
-              <div className="flex items-center gap-[8px] text-[11px] font-semibold text-[#7b8794]">
-                <span className="uppercase tracking-[0.18em]">Catalog</span>
-                <ChevronRight />
-                <span className="uppercase tracking-[0.18em] text-[#111827]">All products</span>
-              </div>
-              <div className="flex flex-wrap items-center gap-[10px]">
-                <h1 className="text-[18px] font-semibold tracking-[-0.03em] text-[#111827]">
-                  Product Catalog
-                </h1>
-                <span className="inline-flex items-center rounded-full bg-[#f4f7fb] px-[10px] py-[4px] text-[11px] font-semibold text-[#5b6472]">
-                  Browse fast. Filter precisely.
-                </span>
-              </div>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-[10px]">
-              <MetricCard
-                label="Live results"
-                value={`${formattedFound} products`}
-                tone="default"
-              />
-              {latencyLabel && (
-                <MetricCard
-                  label="Response time"
-                  value={latencyLabel}
-                  tone="success"
-                />
-              )}
-            </div>
-          </div>
-
           <div className="px-[18px] py-[16px]">
             <div
               className="relative flex items-stretch"
@@ -179,47 +143,11 @@ export default function SearchHero({
   );
 }
 
-function MetricCard({ label, value, tone = "default" }) {
-  const toneClass =
-    tone === "success"
-      ? "border-[#d9f3df] bg-[#f4fbf6] text-[#166534]"
-      : "border-[#e8edf3] bg-[#f8fafc] text-[#4b5563]";
-
-  return (
-    <div className={`inline-flex items-center gap-[8px] rounded-[12px] border px-[10px] py-[7px] ${toneClass}`}>
-      {tone === "success" && (
-        <span className="h-[7px] w-[7px] rounded-full bg-[#16a34a]" aria-hidden="true" />
-      )}
-      <div className="flex flex-col leading-none">
-        <span className="text-[10px] font-semibold uppercase tracking-[0.14em] opacity-70">
-          {label}
-        </span>
-        <span className="mt-[5px] text-[13px] font-semibold tracking-[-0.02em] text-[#111827]">
-          {value}
-        </span>
-      </div>
-    </div>
-  );
-}
-
-function formatLatency(ms) {
-  if (ms >= 1000) return `${(ms / 1000).toFixed(1)}s`;
-  return `${ms}ms`;
-}
-
 function SearchIcon() {
   return (
     <svg className="h-[16px] w-[16px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
       <circle cx="11" cy="11" r="7" />
       <path d="m21 21-4.3-4.3" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function ChevronRight() {
-  return (
-    <svg className="h-[11px] w-[11px] text-[#9ca3af]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <path d="m9 6 6 6-6 6" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }

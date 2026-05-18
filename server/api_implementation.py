@@ -19,10 +19,20 @@ No new Doctypes required.
 
 import json
 import uuid
+from collections import defaultdict
 
 import frappe
 from frappe import _
 from frappe.utils import flt, cstr, getdate, nowdate
+from igh_search.igh_search.lumen_normalization import (
+    build_lumen_overlap_filter,
+    normalize_lumen_fields,
+)
+
+try:
+    import requests
+except Exception:  # pragma: no cover
+    requests = None
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -111,6 +121,474 @@ def _cart_totals(items):
 def _require_login():
     if not frappe.session.user or frappe.session.user == "Guest":
         frappe.throw(_("Authentication required"), frappe.AuthenticationError)
+
+
+def _apply_lumen_normalization(item_doc):
+    """
+    Normalize lumen_output text into numeric filter fields.
+    Safe to call during sync/backfill/update pipelines.
+    """
+    normalized = normalize_lumen_fields(item_doc.get("lumen_output"))
+    for key, value in normalized.items():
+        item_doc[key] = value
+    return item_doc
+
+
+@frappe.whitelist()
+def backfill_lumen_normalization(limit=500, offset=0, commit=0):
+    """
+    Backfill helper for ERP Item records.
+    Expected custom fields on Item:
+      lumen_raw, lumen_min, lumen_max, lumen_unit, lumen_values, lumen_parse_status
+    """
+    _require_login()
+
+    limit = int(limit or 500)
+    offset = int(offset or 0)
+    rows = frappe.get_all(
+        "Item",
+        fields=["name", "lumen_output"],
+        start=offset,
+        page_length=limit,
+        order_by="modified desc",
+    )
+
+    status_counts = {"parsed": 0, "partial": 0, "invalid": 0, "unsupported": 0}
+    updated = 0
+
+    for row in rows:
+        normalized = normalize_lumen_fields(row.get("lumen_output"))
+        status = normalized.get("lumen_parse_status") or "invalid"
+        status_counts[status] = status_counts.get(status, 0) + 1
+
+        frappe.db.set_value(
+            "Item",
+            row["name"],
+            {
+                "lumen_raw": normalized["lumen_raw"],
+                "lumen_min": normalized["lumen_min"],
+                "lumen_max": normalized["lumen_max"],
+                "lumen_unit": normalized["lumen_unit"],
+                "lumen_values": json.dumps(normalized["lumen_values"] or []),
+                "lumen_parse_status": normalized["lumen_parse_status"],
+            },
+            update_modified=False,
+        )
+        updated += 1
+
+    if int(commit or 0):
+        frappe.db.commit()
+
+    return {"status": "success", "updated": updated, "status_counts": status_counts}
+
+
+def build_typesense_filter_with_lumen(base_filter, lumen_unit=None, lumen_min=None, lumen_max=None):
+    clause = build_lumen_overlap_filter(lumen_unit, lumen_min, lumen_max)
+    if not clause:
+        return base_filter or ""
+    return f"{base_filter} && {clause}" if base_filter else clause
+
+
+def _calculate_star_rating(total_sold_qty):
+    """
+    Business rule (lifetime, excluding internal customers):
+      qty <= 50    -> 3.5
+      qty >= 500   -> 5.0
+      between      -> linear interpolation, rounded to nearest 0.1
+    """
+    qty = flt(total_sold_qty or 0)
+    if qty <= 50:
+        return 3.5
+    if qty >= 500:
+        return 5.0
+
+    rating = 3.5 + ((qty - 50.0) / 450.0) * 1.5
+    return round(rating, 1)
+
+
+def _fetch_sales_metrics_by_item(item_codes):
+    if not item_codes:
+        return {}
+
+    rows = frappe.db.sql(
+        """
+        SELECT
+            sii.item_code AS item_code,
+            SUM(COALESCE(sii.qty, 0)) AS total_sold_qty,
+            COUNT(DISTINCT si.name) AS invoice_count
+        FROM `tabSales Invoice Item` sii
+        INNER JOIN `tabSales Invoice` si
+            ON si.name = sii.parent
+        WHERE
+            sii.item_code IN %(item_codes)s
+            AND si.docstatus = 1
+            AND COALESCE(si.is_internal_customer, 0) = 0
+        GROUP BY sii.item_code
+        """,
+        {"item_codes": tuple(item_codes)},
+        as_dict=True,
+    )
+
+    metrics = {}
+    for row in rows:
+        qty = flt(row.get("total_sold_qty") or 0)
+        invoices = int(row.get("invoice_count") or 0)
+        metrics[row["item_code"]] = {
+            "total_sold_qty_lifetime": qty,
+            "customer_count": invoices,
+            "product_star_rating": _calculate_star_rating(qty),
+        }
+    return metrics
+
+
+def _fetch_manufactured_item_set(item_codes):
+    if not item_codes:
+        return set()
+
+    rows = frappe.db.sql(
+        """
+        SELECT DISTINCT sed.item_code AS item_code
+        FROM `tabStock Entry Detail` sed
+        INNER JOIN `tabStock Entry` se
+            ON se.name = sed.parent
+        WHERE
+            sed.item_code IN %(item_codes)s
+            AND COALESCE(sed.is_finished_item, 0) = 1
+            AND se.docstatus = 1
+            AND se.stock_entry_type = 'Manufacture'
+        """,
+        {"item_codes": tuple(item_codes)},
+        as_dict=True,
+    )
+    return {row["item_code"] for row in rows if row.get("item_code")}
+
+
+def _compute_item_intelligence(item_codes):
+    item_codes = [cstr(code).strip() for code in (item_codes or []) if cstr(code).strip()]
+    if not item_codes:
+        return {}
+
+    sales_metrics = _fetch_sales_metrics_by_item(item_codes)
+    manufactured_items = _fetch_manufactured_item_set(item_codes)
+
+    result = {}
+    for item_code in item_codes:
+        base = sales_metrics.get(
+            item_code,
+            {
+                "total_sold_qty_lifetime": 0.0,
+                "customer_count": 0,
+                "product_star_rating": _calculate_star_rating(0),
+            },
+        )
+        base["is_manufactured_item"] = 1 if item_code in manufactured_items else 0
+        result[item_code] = base
+
+    return result
+
+
+@frappe.whitelist()
+def backfill_product_intelligence(limit=500, offset=0, commit=0):
+    """
+    Backfill helper that computes product intelligence and pushes directly
+    to Typesense (no Item custom fields required).
+
+    Params:
+      limit, offset: pagination over active Item records
+      commit: kept for API compatibility; ignored here
+      dry_run: if 1, only returns payload preview/counts
+      collection: optional Typesense collection name override
+      typesense_host/typesense_api_key: optional runtime overrides
+    """
+    _require_login()
+
+    limit = int(limit or 500)
+    offset = int(offset or 0)
+    dry_run = int(frappe.form_dict.get("dry_run") or 0)
+    collection_override = cstr(frappe.form_dict.get("collection") or "").strip()
+    host_override = cstr(frappe.form_dict.get("typesense_host") or "").strip()
+    api_key_override = cstr(frappe.form_dict.get("typesense_api_key") or "").strip()
+
+    items = frappe.get_all(
+        "Item",
+        fields=["item_code"],
+        filters={"disabled": 0},
+        start=offset,
+        page_length=limit,
+        order_by="name asc",
+    )
+    item_codes = [row.get("item_code") for row in items if row.get("item_code")]
+    intelligence = _compute_item_intelligence(item_codes)
+
+    rating_buckets = defaultdict(int)
+    manufactured_count = 0
+    docs = []
+
+    for item_code in item_codes:
+        metrics = intelligence.get(item_code, {})
+
+        rating_value = flt(metrics.get("product_star_rating") or 0)
+        rating_buckets[str(rating_value)] += 1
+        if int(metrics.get("is_manufactured_item") or 0) == 1:
+            manufactured_count += 1
+
+        docs.append(
+            {
+                "id": item_code,
+                "item_code": item_code,
+                "total_sold_qty_lifetime": flt(metrics.get("total_sold_qty_lifetime") or 0),
+                "product_star_rating": rating_value,
+                "customer_count": int(metrics.get("customer_count") or 0),
+                "is_manufactured_item": int(metrics.get("is_manufactured_item") or 0),
+            }
+        )
+
+    if not dry_run and docs:
+        _update_product_intelligence_to_typesense(
+            docs,
+            collection_override=collection_override,
+            host_override=host_override,
+            api_key_override=api_key_override,
+        )
+
+    return {
+        "status": "success",
+        "updated": len(docs),
+        "dry_run": bool(dry_run),
+        "manufactured_items": manufactured_count,
+        "sample": docs[:5],
+        "rating_distribution": dict(sorted(rating_buckets.items(), key=lambda x: float(x[0]))),
+    }
+
+
+def _resolve_typesense_config(collection_override="", host_override="", api_key_override=""):
+    conf = frappe.conf
+    host = host_override or conf.get("typesense_host") or conf.get("TYPESENSE_HOST")
+    api_key = api_key_override or conf.get("typesense_api_key") or conf.get("TYPESENSE_API_KEY")
+    collection = (
+        collection_override
+        or conf.get("igh_search_v2_default_collection")
+        or conf.get("typesense_collection")
+        or conf.get("TYPESENSE_COLLECTION")
+        or "product_v2"
+    )
+
+    if (not host or not api_key) and frappe.db.exists("DocType", "Typesense Settings"):
+        settings = frappe.get_doc("Typesense Settings")
+        protocol = settings.protocol if settings.protocol in ("http", "https") else "https"
+        if not host:
+            host = f"{protocol}://{settings.host}:{settings.port}"
+        if not api_key:
+            try:
+                api_key = settings.get_password("api_key")
+            except Exception:
+                api_key = ""
+
+    host = cstr(host or "").strip().rstrip("/")
+    api_key = cstr(api_key or "").strip()
+    collection = cstr(collection or "").strip()
+
+    if not host or not api_key or not collection:
+        frappe.throw(
+            _(
+                "Typesense config missing. Please set typesense_host, typesense_api_key and typesense_collection in site_config.json "
+                "or pass overrides in the API call."
+            )
+        )
+
+    return {"host": host, "api_key": api_key, "collection": collection}
+
+
+def _update_product_intelligence_to_typesense(
+    docs,
+    collection_override="",
+    host_override="",
+    api_key_override="",
+):
+    if requests is None:
+        frappe.throw(_("Python package `requests` is required for Typesense sync."))
+
+    config = _resolve_typesense_config(
+        collection_override=collection_override,
+        host_override=host_override,
+        api_key_override=api_key_override,
+    )
+
+    headers = {
+        "X-TYPESENSE-API-KEY": config["api_key"],
+        "Content-Type": "application/json",
+    }
+    failures = []
+    skipped_missing = 0
+
+    def resolve_doc_id_by_item_code(item_code):
+        try:
+            response = requests.get(
+                f"{config['host']}/collections/{config['collection']}/documents/search",
+                params={
+                    "q": cstr(item_code),
+                    "query_by": "item_code",
+                    "per_page": 5,
+                    "include_fields": "id,item_code",
+                },
+                headers={"X-TYPESENSE-API-KEY": config["api_key"]},
+                timeout=20,
+            )
+            if response.status_code >= 400:
+                return None
+            payload = response.json()
+            for hit in payload.get("hits", []):
+                document = hit.get("document", {})
+                if cstr(document.get("item_code")) == cstr(item_code):
+                    return cstr(document.get("id") or "")
+            return None
+        except Exception:
+            return None
+    for doc in docs:
+        doc_id = cstr(doc.get("id") or doc.get("item_code") or "").strip()
+        if not doc_id:
+            continue
+
+        payload = {
+            "product_star_rating": doc.get("product_star_rating"),
+            "customer_count": doc.get("customer_count"),
+            "is_manufactured_item": doc.get("is_manufactured_item"),
+            "total_sold_qty_lifetime": doc.get("total_sold_qty_lifetime"),
+        }
+        url = f"{config['host']}/collections/{config['collection']}/documents/{doc_id}"
+        response = requests.patch(url, headers=headers, data=json.dumps(payload), timeout=30)
+        if response.status_code == 404:
+            resolved_doc_id = resolve_doc_id_by_item_code(doc.get("item_code") or doc_id)
+            if resolved_doc_id:
+                retry_url = f"{config['host']}/collections/{config['collection']}/documents/{resolved_doc_id}"
+                retry_response = requests.patch(
+                    retry_url, headers=headers, data=json.dumps(payload), timeout=30
+                )
+                if retry_response.status_code < 400:
+                    continue
+                failures.append(
+                    {
+                        "id": doc_id,
+                        "resolved_id": resolved_doc_id,
+                        "status": retry_response.status_code,
+                        "error": cstr(retry_response.text)[:400],
+                    }
+                )
+                continue
+            skipped_missing += 1
+            continue
+        if response.status_code >= 400:
+            failures.append(
+                {
+                    "id": doc_id,
+                    "status": response.status_code,
+                    "error": cstr(response.text)[:400],
+                }
+            )
+
+    if failures:
+        frappe.throw(
+            _("Typesense update failed for {0} document(s). Sample: {1}").format(
+                len(failures), json.dumps(failures[:5])
+            )
+        )
+
+    return {"updated": len(docs) - skipped_missing, "failed": 0, "skipped_missing": skipped_missing}
+
+
+@frappe.whitelist()
+def sync_product_intelligence_to_typesense(
+    limit=2000,
+    offset=0,
+    chunk_size=250,
+    dry_run=0,
+    collection="",
+    typesense_host="",
+    typesense_api_key="",
+):
+    """
+    Nightly/on-demand sync endpoint:
+    computes product intelligence and pushes to Typesense directly.
+    """
+    _require_login()
+
+    limit = max(1, int(limit or 2000))
+    offset = max(0, int(offset or 0))
+    chunk_size = max(1, int(chunk_size or 250))
+    dry_run = int(dry_run or 0)
+
+    rows = frappe.get_all(
+        "Item",
+        fields=["item_code"],
+        filters={"disabled": 0},
+        start=offset,
+        page_length=limit,
+        order_by="name asc",
+    )
+    item_codes = [r.get("item_code") for r in rows if r.get("item_code")]
+    if not item_codes:
+        return {"status": "success", "updated": 0, "dry_run": bool(dry_run), "chunks": 0}
+
+    total_updated = 0
+    chunks = 0
+    for start in range(0, len(item_codes), chunk_size):
+        chunk_codes = item_codes[start : start + chunk_size]
+        metrics_map = _compute_item_intelligence(chunk_codes)
+        docs = []
+        for item_code in chunk_codes:
+            metrics = metrics_map.get(item_code, {})
+            docs.append(
+                {
+                    "id": item_code,
+                    "item_code": item_code,
+                    "total_sold_qty_lifetime": flt(metrics.get("total_sold_qty_lifetime") or 0),
+                    "product_star_rating": flt(metrics.get("product_star_rating") or 3.5),
+                    "customer_count": int(metrics.get("customer_count") or 0),
+                    "is_manufactured_item": int(metrics.get("is_manufactured_item") or 0),
+                }
+            )
+        if not dry_run:
+            _update_product_intelligence_to_typesense(
+                docs,
+                collection_override=collection,
+                host_override=typesense_host,
+                api_key_override=typesense_api_key,
+            )
+        total_updated += len(docs)
+        chunks += 1
+
+    return {
+        "status": "success",
+        "updated": total_updated,
+        "dry_run": bool(dry_run),
+        "chunks": chunks,
+        "offset": offset,
+        "limit": limit,
+    }
+
+
+@frappe.whitelist()
+def run_nightly_product_intelligence_sync(**kwargs):
+    """
+    Wrapper intended for scheduler usage (nightly cron).
+    Syncs all active items in chunks.
+    """
+    rows = frappe.get_all(
+        "Item",
+        fields=["name"],
+        filters={"disabled": 0},
+        page_length=1,
+    )
+    # Quick no-op shortcut
+    if not rows:
+        return {"status": "success", "updated": 0, "chunks": 0}
+
+    return sync_product_intelligence_to_typesense(
+        limit=200000,
+        offset=0,
+        chunk_size=250,
+        dry_run=0,
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -481,10 +959,9 @@ def get_all_masters(**kwargs):
     # Item-level attribute values
     attr_rows = frappe.db.sql(
         """
-        SELECT ia.attribute, iav.attribute_value AS value
-        FROM   `tabItem Attribute` ia
-        JOIN   `tabItem Attribute Value` iav ON iav.parent = ia.name
-        ORDER  BY ia.attribute, iav.attribute_value
+        SELECT iav.parent AS attribute, iav.attribute_value AS value
+        FROM   `tabItem Attribute Value` iav
+        ORDER  BY iav.parent, iav.attribute_value
         LIMIT  3000
         """,
         as_dict=True,
@@ -493,10 +970,18 @@ def get_all_masters(**kwargs):
     for r in attr_rows:
         attributes.setdefault(r.attribute, []).append(r.value)
 
+    # Product intelligence master options for frontend filters.
+    star_rating_options = [f"{value:.1f}" for value in [3.5, 3.7, 3.9, 4.1, 4.3, 4.5, 4.7, 4.9, 5.0]]
+    happy_customer_options = ["50", "75", "100"]
+    manufactured_item_options = ["1", "0"]
+
     return {
         "brands":      [b.name for b in brands],
         "item_groups": [g.name for g in item_groups],
         "attributes":  attributes,
+        "product_star_rating": star_rating_options,
+        "customer_count": happy_customer_options,
+        "is_manufactured_item": manufactured_item_options,
     }
 
 

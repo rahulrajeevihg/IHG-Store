@@ -5,7 +5,7 @@
 #  Usage:  bash test_apis.sh
 # ─────────────────────────────────────────────────────────────────────────────
 
-BASE="http://167.71.204.41"
+BASE="http://erp.ihgind.com"
 ADMIN_USER="Administrator"
 ADMIN_PASS="IhG@dEV\$2025@12e"   # dollar signs escaped for bash
 COOKIE_JAR="/tmp/ihg_test_cookies.txt"

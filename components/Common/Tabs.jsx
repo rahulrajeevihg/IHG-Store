@@ -110,26 +110,6 @@ export default function Tabs({ stockDetails, productDetails }) {
               <p className="text-[13px] text-[#9ca3af] italic">No description available.</p>
             )}
 
-            {/* Last activity pills */}
-            {(productDetails?.last_sold > 0 || productDetails?.last_brought > 0) && (
-              <div className="flex flex-wrap gap-2">
-                {productDetails.last_sold > 0 && (
-                  <div className="inline-flex items-center gap-2 rounded-md border border-[#fee2e2] bg-[#fef2f2] px-3 py-1.5">
-                    <span className="size-[6px] rounded-full bg-[#dc2626]" />
-                    <span className="text-[12px] font-semibold text-[#dc2626]">{productDetails.last_sold} days</span>
-                    <span className="text-[12px] text-[#6b7280]">since last sold</span>
-                  </div>
-                )}
-                {productDetails.last_brought > 0 && (
-                  <div className="inline-flex items-center gap-2 rounded-md border border-[#d1fae5] bg-[#f0fdf4] px-3 py-1.5">
-                    <span className="size-[6px] rounded-full bg-[#16a34a]" />
-                    <span className="text-[12px] font-semibold text-[#16a34a]">{productDetails.last_brought} days</span>
-                    <span className="text-[12px] text-[#6b7280]">since last bought</span>
-                  </div>
-                )}
-              </div>
-            )}
-
             {/* Spec grid */}
             {specs.length > 0 && (
               <div>
@@ -174,7 +154,6 @@ export default function Tabs({ stockDetails, productDetails }) {
                           <td className="px-3 py-2.5 text-[#374151]">{row.warehouse}</td>
                           <td className="px-3 py-2.5 text-right">
                             <span className={`inline-flex items-center gap-1 font-semibold ${isLow ? "text-[#d97706]" : "text-[#111]"}`}>
-                              {isLow && <span className="size-1.5 rounded-full bg-[#d97706]" />}
                               {qty}
                             </span>
                           </td>

@@ -12,14 +12,25 @@ const ICONS = {
   power:         <BoltIcon />,
   color_temp:    <SunIcon />,
   ip_rate:       <ShieldIcon />,
+  lumen_output:  <LumenIcon />,
   mounting:      <PinIcon />,
   beam_angle:    <AngleIcon />,
   lamp_type:     <BulbIcon />,
   body_finish:   <DropletIcon />,
   material:      <LayersIcon />,
   input_voltage: <PlugIcon />,
+  output_current:<PlugIcon />,
+  output_voltage:<PlugIcon />,
   warranty:      <AwardIcon />,
+  is_manufactured_item: <FactoryIcon />,
 };
+
+const COMPACT_RANGE_LIKE_FACET_KEYS = new Set([
+  "lumen_output",
+  "input_voltage",
+  "output_current",
+  "output_voltage",
+]);
 
 /* ─── main component ────────────────────────────────────────────── */
 export default function FilterPanel({
@@ -29,12 +40,13 @@ export default function FilterPanel({
   updateRangeFilter,
   clearFilters,
   setInStock,
+  setShowPromotion,
 }) {
   const open = true;
 
   const sections = useMemo(
     () =>
-      VISIBLE_FILTERS.filter((filter) => !["power", "color_temp"].includes(filter.key)).map((f) => {
+      VISIBLE_FILTERS.filter((filter) => !["power", "color_temp", "lumen_output", "input_voltage", "output_current", "output_voltage"].includes(filter.key)).map((f) => {
         const sel = new Set(filters[f.key] || []);
         const options = (visibleFilterOptions[f.key] || []).filter((opt) => {
           if (sel.has(opt.value)) return true;
@@ -50,7 +62,10 @@ export default function FilterPanel({
     () =>
       Object.entries(filters || {}).reduce((count, [key, value]) => {
         if (Array.isArray(value)) {
-          return count + value.length;
+          if (!value.length) {
+            return count;
+          }
+          return count + (COMPACT_RANGE_LIKE_FACET_KEYS.has(key) ? 1 : value.length);
         }
         if (typeof value === "boolean") {
           return count + (value ? 1 : 0);
@@ -73,10 +88,31 @@ export default function FilterPanel({
     [visibleFilterOptions.color_temp]
   );
 
+  const lumenOutputSliderBounds = useMemo(
+    () => buildGenericNumericBounds(visibleFilterOptions.lumen_output || [], { min: 100, max: 10000, step: 50 }, "lumen_output"),
+    [visibleFilterOptions.lumen_output]
+  );
+
+  const inputVoltageSliderBounds = useMemo(
+    () => buildGenericNumericBounds(visibleFilterOptions.input_voltage || [], { min: 1, max: 480, step: 1 }, "input_voltage"),
+    [visibleFilterOptions.input_voltage]
+  );
+
+  const outputCurrentSliderBounds = useMemo(
+    () => buildGenericNumericBounds(visibleFilterOptions.output_current || [], { min: 10, max: 5000, step: 10 }, "output_current"),
+    [visibleFilterOptions.output_current]
+  );
+
+  const outputVoltageSliderBounds = useMemo(
+    () => buildGenericNumericBounds(visibleFilterOptions.output_voltage || [], { min: 1, max: 480, step: 1 }, "output_voltage"),
+    [visibleFilterOptions.output_voltage]
+  );
+
   const groupedSections = useMemo(() => {
     const PRIMARY = new Set(["brand", "category_list", "product_type"]);
     const TECHNICAL = new Set([
       "ip_rate",
+      "lumen_output",
       "beam_angle",
       "mounting",
       "input_voltage",
@@ -86,6 +122,7 @@ export default function FilterPanel({
       "body_finish",
       "material",
       "warranty",
+      "is_manufactured_item",
     ]);
 
     return {
@@ -138,6 +175,20 @@ export default function FilterPanel({
             />
           </div>
 
+          {/* PROMO toggle */}
+          <div className="px-2 py-3 flex items-center justify-between rounded-xl border border-[#edf1f5] bg-white">
+            <div className="flex items-center gap-3">
+              <div className={`p-1.5 rounded-lg ${filters.show_promotion ? "bg-red-50 text-red-600" : "bg-gray-100 text-gray-400"}`}>
+                <PercentIcon />
+              </div>
+              <span className="text-[13px] font-semibold text-gray-700">Promo Only</span>
+            </div>
+            <Toggle
+              checked={Boolean(filters.show_promotion)}
+              onChange={(v) => setShowPromotion(v)}
+            />
+          </div>
+
           {/* PRICE range */}
           <FilterSection
             label="Price Range"
@@ -166,6 +217,107 @@ export default function FilterPanel({
                   className="h-10 w-full rounded-lg border border-gray-100 bg-gray-50/50 pl-11 pr-3 text-[12px] text-gray-900 outline-none focus:border-red-600 focus:bg-white focus:ring-4 focus:ring-red-600/5 transition-all"
                 />
               </div>
+            </div>
+          </FilterSection>
+
+          {/* STOCK range */}
+          <FilterSection
+            label="Stock Range"
+            icon={<StockIcon />}
+            active={!!(filters.stock_range?.min || filters.stock_range?.max)}
+          >
+            <div className="flex items-center gap-2 mt-1">
+              <div className="relative flex-1 group">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[10px] font-bold text-gray-400 group-focus-within:text-red-600 transition-colors">QTY</span>
+                <input
+                  type="number"
+                  placeholder="Min"
+                  value={filters.stock_range?.min || ""}
+                  onChange={(e) => updateRangeFilter("stock_range", "min", e.target.value)}
+                  className="h-10 w-full rounded-lg border border-gray-100 bg-gray-50/50 pl-11 pr-3 text-[12px] text-gray-900 outline-none focus:border-red-600 focus:bg-white focus:ring-4 focus:ring-red-600/5 transition-all"
+                />
+              </div>
+              <div className="h-[1px] w-3 bg-gray-200" />
+              <div className="relative flex-1 group">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[10px] font-bold text-gray-400 group-focus-within:text-red-600 transition-colors">QTY</span>
+                <input
+                  type="number"
+                  placeholder="Max"
+                  value={filters.stock_range?.max || ""}
+                  onChange={(e) => updateRangeFilter("stock_range", "max", e.target.value)}
+                  className="h-10 w-full rounded-lg border border-gray-100 bg-gray-50/50 pl-11 pr-3 text-[12px] text-gray-900 outline-none focus:border-red-600 focus:bg-white focus:ring-4 focus:ring-red-600/5 transition-all"
+                />
+              </div>
+            </div>
+          </FilterSection>
+
+          <FilterSection
+            label="Star Rating"
+            icon={<StarIcon />}
+            active={!!(filters.product_star_rating_range?.min || filters.product_star_rating_range?.max)}
+          >
+            <div className="flex items-center gap-2 mt-1">
+              <div className="relative flex-1 group">
+                <input
+                  type="number"
+                  min="3.5"
+                  max="5"
+                  step="0.1"
+                  placeholder="Min"
+                  value={filters.product_star_rating_range?.min || ""}
+                  onChange={(e) => updateRangeFilter("product_star_rating_range", "min", e.target.value)}
+                  className="h-10 w-full rounded-lg border border-gray-100 bg-gray-50/50 pl-3 pr-8 text-[12px] text-gray-900 outline-none focus:border-red-600 focus:bg-white focus:ring-4 focus:ring-red-600/5 transition-all"
+                />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] font-semibold text-[#9ca3af]">★</span>
+              </div>
+              <div className="h-[1px] w-3 bg-gray-200" />
+              <div className="relative flex-1 group">
+                <input
+                  type="number"
+                  min="3.5"
+                  max="5"
+                  step="0.1"
+                  placeholder="Max"
+                  value={filters.product_star_rating_range?.max || ""}
+                  onChange={(e) => updateRangeFilter("product_star_rating_range", "max", e.target.value)}
+                  className="h-10 w-full rounded-lg border border-gray-100 bg-gray-50/50 pl-3 pr-8 text-[12px] text-gray-900 outline-none focus:border-red-600 focus:bg-white focus:ring-4 focus:ring-red-600/5 transition-all"
+                />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] font-semibold text-[#9ca3af]">★</span>
+              </div>
+            </div>
+          </FilterSection>
+
+          <FilterSection
+            label="Happy Customers"
+            icon={<UsersIcon />}
+            active={!!(filters.customer_count_range?.min || filters.customer_count_range?.max)}
+          >
+            <div className="mt-1 flex flex-wrap gap-2">
+              {["50", "75", "100"].map((threshold) => {
+                const activeThreshold = String(filters.customer_count_range?.min || "") === threshold;
+                return (
+                  <button
+                    key={threshold}
+                    type="button"
+                    onClick={() => {
+                      if (activeThreshold) {
+                        updateRangeFilter("customer_count_range", "min", "");
+                        updateRangeFilter("customer_count_range", "max", "");
+                        return;
+                      }
+                      updateRangeFilter("customer_count_range", "min", threshold);
+                      updateRangeFilter("customer_count_range", "max", "");
+                    }}
+                    className={`rounded-full border px-3 py-1 text-[11px] font-semibold transition-colors ${
+                      activeThreshold
+                        ? "border-red-600 bg-red-50 text-red-600"
+                        : "border-[#e5e7eb] bg-white text-[#374151] hover:border-[#111]"
+                    }`}
+                  >
+                    {threshold}+ happy
+                  </button>
+                );
+              })}
             </div>
           </FilterSection>
 
@@ -209,6 +361,58 @@ export default function FilterPanel({
               updateRangeFilter("color_temp_kelvin_range", "min", "");
               updateRangeFilter("color_temp_kelvin_range", "max", "");
             }}
+          />
+
+          <NumericFacetRangeSection
+            title="Lumen Output"
+            unit="lm"
+            facetKey="lumen_output"
+            icon={ICONS.lumen_output}
+            bounds={lumenOutputSliderBounds}
+            options={visibleFilterOptions.lumen_output || []}
+            selectedValues={filters.lumen_output || []}
+            onChange={(values) =>
+              updateMultiFilter("lumen_output", values.map((value) => ({ value })))
+            }
+          />
+
+          <NumericFacetRangeSection
+            title="Input"
+            unit="V"
+            facetKey="input_voltage"
+            icon={ICONS.input_voltage}
+            bounds={inputVoltageSliderBounds}
+            options={visibleFilterOptions.input_voltage || []}
+            selectedValues={filters.input_voltage || []}
+            onChange={(values) =>
+              updateMultiFilter("input_voltage", values.map((value) => ({ value })))
+            }
+          />
+
+          <NumericFacetRangeSection
+            title="Output Current"
+            unit="mA"
+            facetKey="output_current"
+            icon={ICONS.output_current}
+            bounds={outputCurrentSliderBounds}
+            options={visibleFilterOptions.output_current || []}
+            selectedValues={filters.output_current || []}
+            onChange={(values) =>
+              updateMultiFilter("output_current", values.map((value) => ({ value })))
+            }
+          />
+
+          <NumericFacetRangeSection
+            title="Output Voltage"
+            unit="V"
+            facetKey="output_voltage"
+            icon={ICONS.output_voltage}
+            bounds={outputVoltageSliderBounds}
+            options={visibleFilterOptions.output_voltage || []}
+            selectedValues={filters.output_voltage || []}
+            onChange={(values) =>
+              updateMultiFilter("output_voltage", values.map((value) => ({ value })))
+            }
           />
 
           {/* FACET sections grouped */}
@@ -297,6 +501,7 @@ function PowerRangeSection({ bounds, value, active, rawValueCount, onChange, onC
               min={effectiveMin}
               max={displayMax}
               step={step}
+              unit="W"
               onChange={(nextValue) => setRange(nextValue, displayMax)}
             />
             <NumericInput
@@ -305,6 +510,7 @@ function PowerRangeSection({ bounds, value, active, rawValueCount, onChange, onC
               min={displayMin}
               max={effectiveMax}
               step={step}
+              unit="W"
               onChange={(nextValue) => setRange(displayMin, nextValue)}
             />
           </div>
@@ -366,7 +572,7 @@ function PowerRangeSection({ bounds, value, active, rawValueCount, onChange, onC
   );
 }
 
-function NumericInput({ label, value, min, max, step, onChange }) {
+function NumericInput({ label, value, min, max, step, unit = "W", onChange }) {
   const [draft, setDraft] = useState(String(value ?? ""));
 
   useEffect(() => {
@@ -414,10 +620,146 @@ function NumericInput({ label, value, min, max, step, onChange }) {
           className="h-10 w-full rounded-lg border border-gray-100 bg-gray-50/50 pl-3 pr-10 text-[12px] text-gray-900 outline-none focus:border-red-600 focus:bg-white focus:ring-4 focus:ring-red-600/5 transition-all"
         />
         <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] font-semibold text-[#9ca3af]">
-          W
+          {unit}
         </span>
       </div>
     </label>
+  );
+}
+
+function NumericFacetRangeSection({ title, unit, facetKey, icon, bounds, options, selectedValues, onChange }) {
+  const [open, setOpen] = useState(false);
+  const parsedOptions = useMemo(
+    () => parseNumericFacetOptions(options, facetKey),
+    [options, facetKey]
+  );
+  const effectiveMin = bounds.min;
+  const effectiveMax = bounds.max;
+  const step = bounds.step;
+  const [draftRange, setDraftRange] = useState({ min: effectiveMin, max: effectiveMax });
+
+  useEffect(() => {
+    setDraftRange((current) => {
+      const nextMin = clampRangeValue(current.min, effectiveMin, effectiveMax, effectiveMin);
+      const nextMax = clampRangeValue(current.max, effectiveMin, effectiveMax, effectiveMax);
+      return { min: Math.min(nextMin, nextMax), max: Math.max(nextMin, nextMax) };
+    });
+  }, [effectiveMin, effectiveMax]);
+
+  useEffect(() => {
+    if ((selectedValues || []).length === 0) {
+      setDraftRange({ min: effectiveMin, max: effectiveMax });
+    }
+  }, [selectedValues, effectiveMin, effectiveMax]);
+
+  const displayMin = clampRangeValue(draftRange.min, effectiveMin, effectiveMax, effectiveMin);
+  const displayMax = clampRangeValue(draftRange.max, effectiveMin, effectiveMax, effectiveMax);
+  const active = (selectedValues || []).length > 0;
+
+  const setRange = (nextMin, nextMax) => {
+    const minValue = Math.min(Number(nextMin), Number(nextMax));
+    const maxValue = Math.max(Number(nextMin), Number(nextMax));
+    setDraftRange({ min: minValue, max: maxValue });
+    const matchingValues = parsedOptions
+      .filter((entry) => entry.min >= minValue && entry.max <= maxValue)
+      .map((entry) => entry.value);
+    onChange(matchingValues);
+  };
+
+  return (
+    <div className="rounded-lg border border-transparent bg-white">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className={`flex h-[46px] w-full items-center justify-between px-2 group rounded-lg transition-colors ${open ? "bg-[#f6f8fb]" : "hover:bg-[#f8fafc]"}`}
+      >
+        <div className="flex items-center gap-3">
+          <span className={`transition-colors ${active ? "text-red-600" : "text-gray-400 group-hover:text-gray-900"}`}>
+            {icon}
+          </span>
+          <div className="flex items-center gap-2">
+            <span className="text-[13px] font-semibold text-[#1f2937]">{title}</span>
+            {active && (
+              <span className="rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-bold text-red-600">
+                {formatSliderNumber(displayMin)}-{formatSliderNumber(displayMax)}{unit}
+              </span>
+            )}
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          {active && (
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                setDraftRange({ min: effectiveMin, max: effectiveMax });
+                onChange([]);
+              }}
+              className="rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-red-500 hover:bg-red-50"
+            >
+              Clear
+            </button>
+          )}
+          <ChevronIcon rotated={open} />
+        </div>
+      </button>
+      <div className={`grid transition-all duration-200 ${open ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"}`}>
+        <div className="overflow-hidden px-2 pb-3">
+          <div className="mb-3 grid grid-cols-2 gap-2">
+            <NumericInput
+              label="Min"
+              value={displayMin}
+              min={effectiveMin}
+              max={displayMax}
+              step={step}
+              unit={unit}
+              onChange={(nextValue) => setRange(nextValue, displayMax)}
+            />
+            <NumericInput
+              label="Max"
+              value={displayMax}
+              min={displayMin}
+              max={effectiveMax}
+              step={step}
+              unit={unit}
+              onChange={(nextValue) => setRange(displayMin, nextValue)}
+            />
+          </div>
+          <div className="relative px-1 py-3">
+            <div className="absolute left-1 right-1 top-1/2 h-1 -translate-y-1/2 rounded-full bg-[#e5e7eb]" />
+            <div
+              className="absolute top-1/2 h-1 -translate-y-1/2 rounded-full bg-[#111]"
+              style={{
+                left: `${toPercent(displayMin, effectiveMin, effectiveMax)}%`,
+                right: `${100 - toPercent(displayMax, effectiveMin, effectiveMax)}%`,
+              }}
+            />
+            <input
+              type="range"
+              min={effectiveMin}
+              max={effectiveMax}
+              step={step}
+              value={displayMin}
+              onChange={(event) => setRange(Math.min(Number(event.target.value), displayMax), displayMax)}
+              className="absolute left-0 top-1/2 h-0 w-full -translate-y-1/2 bg-transparent z-[1]"
+            />
+            <input
+              type="range"
+              min={effectiveMin}
+              max={effectiveMax}
+              step={step}
+              value={displayMax}
+              onChange={(event) => setRange(displayMin, Math.max(Number(event.target.value), displayMin))}
+              className="absolute left-0 top-1/2 h-1 w-full -translate-y-1/2 bg-transparent"
+            />
+          </div>
+          <div className="mt-4 flex items-center justify-between text-[11px] font-medium text-[#6b7280]">
+            <span>{formatSliderNumber(effectiveMin)}{unit}</span>
+            <span>{formatSliderNumber(effectiveMax)}{unit}</span>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -495,6 +837,7 @@ function ColorTemperatureRangeSection({ bounds, value, active, rawValueCount, on
               min={effectiveMin}
               max={displayMax}
               step={step}
+              unit="K"
               onChange={(nextValue) => setRange(nextValue, displayMax)}
             />
             <NumericInput
@@ -503,6 +846,7 @@ function ColorTemperatureRangeSection({ bounds, value, active, rawValueCount, on
               min={displayMin}
               max={effectiveMax}
               step={step}
+              unit="K"
               onChange={(nextValue) => setRange(displayMin, nextValue)}
             />
           </div>
@@ -629,6 +973,110 @@ function buildKelvinSliderBounds(options = []) {
     max: Math.max(max, min + 100),
     step: 100,
   };
+}
+
+function buildGenericNumericBounds(options = [], fallback = { min: 0, max: 100, step: 1 }, facetKey = "") {
+  const values = parseNumericFacetOptions(options, facetKey).flatMap((entry) => [entry.min, entry.max]);
+
+  if (!values.length) {
+    return fallback;
+  }
+
+  const min = Math.floor(Math.min(...values));
+  const max = Math.ceil(Math.max(...values));
+  const hasDecimals = values.some((value) => !Number.isInteger(value));
+
+  return {
+    min,
+    max: Math.max(max, min + 1),
+    step: hasDecimals ? 0.1 : fallback.step || 1,
+  };
+}
+
+function extractFacetRange(rawValue = "", facetKey = "") {
+  const raw = String(rawValue || "").toUpperCase().replace(/,/g, "");
+  const hasCompositeSeparator = /[\/,]/.test(raw);
+  const readMatches = (regex, mapper = (value) => value) => {
+    const values = [];
+    let match = regex.exec(raw);
+    while (match) {
+      const numericValue = mapper(Number(match[1]), match[2]);
+      if (Number.isFinite(numericValue)) {
+        values.push(numericValue);
+      }
+      match = regex.exec(raw);
+    }
+    return values;
+  };
+
+  if (facetKey === "lumen_output") {
+    // Ignore mixed units like lm/W, lm/m, comma-separated RGB parts, etc.
+    if (hasCompositeSeparator || /\bLM\s*\//.test(raw) || /\bX\s*\d+\s*LM/.test(raw)) {
+      return null;
+    }
+    const values = readMatches(/(\d+(?:\.\d+)?)\s*LM(?!\s*\/)/g);
+    if (values.length > 0) {
+      return { min: Math.min(...values), max: Math.max(...values), numbers: values };
+    }
+  }
+
+  if (facetKey === "input_voltage" || facetKey === "output_voltage") {
+    // Keep voltage-only forms; skip combined descriptors like mA/VDC.
+    if (hasCompositeSeparator || /MA\b/.test(raw)) {
+      return null;
+    }
+    const values = readMatches(/(\d+(?:\.\d+)?)\s*V\b/g);
+    if (values.length > 0) {
+      return { min: Math.min(...values), max: Math.max(...values), numbers: values };
+    }
+  }
+
+  if (facetKey === "output_current") {
+    // Keep current-only forms; skip combined descriptors like mA/VDC.
+    if (hasCompositeSeparator || /V(?:AC|DC)?\b/.test(raw)) {
+      return null;
+    }
+    const values = readMatches(/(\d+(?:\.\d+)?)\s*(MA|A)\b/g, (value, unit) =>
+      unit === "A" ? value * 1000 : value
+    );
+    if (values.length > 0) {
+      return { min: Math.min(...values), max: Math.max(...values), numbers: values };
+    }
+  }
+
+  const fallbackValues = (raw.match(/\d+(?:\.\d+)?/g) || [])
+    .map(Number)
+    .filter((entry) => Number.isFinite(entry));
+  if (!fallbackValues.length) {
+    return null;
+  }
+  return {
+    min: Math.min(...fallbackValues),
+    max: Math.max(...fallbackValues),
+    numbers: fallbackValues,
+  };
+}
+
+function parseNumericFacetOptions(options = [], facetKey = "") {
+  return (Array.isArray(options) ? options : [])
+    .map((option) => {
+      const value = String(option?.value || "").trim();
+      const label = String(option?.label || value).trim();
+      const cleanedLabel = label.replace(/\(\d+\)\s*$/, "").trim();
+      const extracted = extractFacetRange(value || cleanedLabel, facetKey);
+      if (!extracted) {
+        return null;
+      }
+
+      return {
+        value,
+        label,
+        numbers: extracted.numbers,
+        min: extracted.min,
+        max: extracted.max,
+      };
+    })
+    .filter((entry) => entry && entry.value && entry.numbers.length > 0);
 }
 
 function clampRangeValue(value, min, max, fallback) {
@@ -1022,6 +1470,14 @@ function PlugIcon() {
     </svg>
   );
 }
+function LumenIcon() {
+  return (
+    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M12 2v3M12 19v3M4.93 4.93l2.12 2.12M16.95 16.95l2.12 2.12M2 12h3M19 12h3M4.93 19.07l2.12-2.12M16.95 7.05l2.12-2.12" />
+      <circle cx="12" cy="12" r="4" />
+    </svg>
+  );
+}
 function AwardIcon() {
   return (
     <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -1036,10 +1492,45 @@ function StockIcon() {
     </svg>
   );
 }
+function FactoryIcon() {
+  return (
+    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M2 20h20" />
+      <path d="M4 20V9l5 3V9l5 3V7l5 3v10" />
+      <path d="M8 20v-4h3v4" />
+    </svg>
+  );
+}
+function StarIcon() {
+  return (
+    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <polygon points="12 2 15.1 8.3 22 9.2 17 14.1 18.2 21 12 17.7 5.8 21 7 14.1 2 9.2 8.9 8.3 12 2" />
+    </svg>
+  );
+}
+function UsersIcon() {
+  return (
+    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+      <circle cx="9" cy="7" r="4" />
+      <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+      <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+    </svg>
+  );
+}
 function PriceIcon() {
   return (
     <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
       <path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+    </svg>
+  );
+}
+function PercentIcon() {
+  return (
+    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <line x1="19" y1="5" x2="5" y2="19" />
+      <circle cx="7" cy="7" r="2" />
+      <circle cx="17" cy="17" r="2" />
     </svg>
   );
 }

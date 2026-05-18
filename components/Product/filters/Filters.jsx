@@ -92,6 +92,28 @@ export default function Filters({ mastersData, filtersList, ProductFilter, close
     "Obsolete"
   ]
 
+  const LUMEN_UNIT_FILTERS = [
+    { key: "lm", label: "Luminous Flux (lm)" },
+    { key: "lm/m", label: "Lumen per Meter (lm/m)" },
+    { key: "lm/w", label: "Efficiency (lm/W)" },
+    { key: "lm/led", label: "Lumen per LED (lm/LED)" },
+    { key: "lm/pcs", label: "Lumen per Piece (lm/pcs)" },
+    { key: "lm/module", label: "Lumen per Module (lm/module)" },
+  ];
+
+  const updateLumenRange = (unitKey, part, rawValue) => {
+    setFilters((prev) => ({
+      ...prev,
+      lumen_ranges: {
+        ...(prev.lumen_ranges || {}),
+        [unitKey]: {
+          ...((prev.lumen_ranges && prev.lumen_ranges[unitKey]) || { min: "", max: "" }),
+          [part]: rawValue,
+        },
+      },
+    }));
+  };
+
   const multiSelectOptions = [
     { type: "brand", label: "Brands", options: mastersData.brand || [] },
     { type: "category_list", label: "Category List", options: mastersData.category_list || [] },
@@ -187,6 +209,33 @@ export default function Filters({ mastersData, filtersList, ProductFilter, close
             } label={'Stock'} label_classname={label_classname} />
         </div>
 
+        <div className='py-2'>
+          <h5 className={`${label_classname} mb-2`}>Lumen Filters by Unit</h5>
+          <div className='space-y-2'>
+            {LUMEN_UNIT_FILTERS.map((unit) => (
+              <div key={unit.key} className='border border-[#00000012] rounded-[6px] p-2'>
+                <label className='text-[12px] font-semibold text-[#4b5563]'>{unit.label}</label>
+                <div className='mt-1 grid grid-cols-2 gap-2'>
+                  <input
+                    type='number'
+                    value={filters?.lumen_ranges?.[unit.key]?.min ?? ""}
+                    onChange={(e) => updateLumenRange(unit.key, "min", e.target.value)}
+                    className={input_classname}
+                    placeholder='Min'
+                  />
+                  <input
+                    type='number'
+                    value={filters?.lumen_ranges?.[unit.key]?.max ?? ""}
+                    onChange={(e) => updateLumenRange(unit.key, "max", e.target.value)}
+                    className={input_classname}
+                    placeholder='Max'
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
         {/* <div className='py-4 md:py-2'>
           <RangeSlider MIN={0} MAX={350} ranges={stockRange} setRanges={setStockRange} label={'Stock'} label_classname={label_classname} />
         </div> */}
@@ -280,6 +329,33 @@ export default function Filters({ mastersData, filtersList, ProductFilter, close
               setRanges={(ranges) =>
                 setFilters({ ...filters, stock_range: ranges })
               } label={'Stock'} label_classname={label_classname} />
+          </div>
+
+          <div className='py-2'>
+            <h5 className={`${label_classname} mb-2`}>Lumen Filters by Unit</h5>
+            <div className='space-y-2'>
+              {LUMEN_UNIT_FILTERS.map((unit) => (
+                <div key={unit.key} className='border border-[#00000012] rounded-[6px] p-2'>
+                  <label className='text-[12px] font-semibold text-[#4b5563]'>{unit.label}</label>
+                  <div className='mt-1 grid grid-cols-2 gap-2'>
+                    <input
+                      type='number'
+                      value={filters?.lumen_ranges?.[unit.key]?.min ?? ""}
+                      onChange={(e) => updateLumenRange(unit.key, "min", e.target.value)}
+                      className={input_classname}
+                      placeholder='Min'
+                    />
+                    <input
+                      type='number'
+                      value={filters?.lumen_ranges?.[unit.key]?.max ?? ""}
+                      onChange={(e) => updateLumenRange(unit.key, "max", e.target.value)}
+                      className={input_classname}
+                      placeholder='Max'
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
 
           {/* <div className='my-3 flex flex-col'>
