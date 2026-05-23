@@ -220,6 +220,13 @@ export default function V2SearchPage({
   };
 
   const reconcileHitsWithLiveStock = async (rawHits = []) => {
+    // Live stock for the full page is now reconciled server-side inside
+    // search_products_v2 (one batched SQL via get_authoritative_stock_snapshot).
+    // The old client-side per-item fan-out (up to LIVE_STOCK_RECONCILE_LIMIT
+    // get_product_details calls) is redundant and was a major source of
+    // /list slowness. Disabled by default; set NEXT_PUBLIC_CLIENT_STOCK_RECONCILE=1
+    // to restore it.
+    if (process.env.NEXT_PUBLIC_CLIENT_STOCK_RECONCILE !== "1") return;
     const hits = Array.isArray(rawHits) ? rawHits : [];
     if (!hits.length) return;
 

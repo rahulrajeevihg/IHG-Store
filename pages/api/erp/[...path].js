@@ -473,7 +473,14 @@ export default async function handler(req, res) {
     // Forward response body
     let responseBody = await finalResponse.text();
     const matchedStockMethod = getMethodNameFromPath(upstreamPath || '');
+    // Proxy-side stock reconciliation is OFF by default. The backend
+    // search_products_v2 now reconciles the full returned page in a single
+    // batched SQL (get_authoritative_stock_snapshot), so the old behaviour of
+    // firing up to STOCK_RECONCILE_MAX_HITS sequential get_product_details
+    // calls here only added latency. Set ERP_PROXY_STOCK_RECONCILE=1 to restore.
+    const proxyStockReconcileEnabled = process.env.ERP_PROXY_STOCK_RECONCILE === '1';
     const shouldAttemptStockReconcile =
+      proxyStockReconcileEnabled &&
       Boolean(matchedStockMethod) &&
       finalResponse.status === 200 &&
       String(finalResponse.headers.get('content-type') || '').includes('application/json');
