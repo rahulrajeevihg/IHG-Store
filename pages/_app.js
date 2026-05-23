@@ -13,6 +13,8 @@ import { useRouter } from 'next/router'
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { Provider } from 'react-redux'
+import { TourProvider } from '@/components/Tour'
+import { LMSProvider } from '@/components/LMS'
 // import nProgress from "nprogress";
 // import "nprogress/nprogress.css"
 
@@ -407,8 +409,14 @@ function App({ Component, pageProps }) {
   // console.log(detailVisible);
 
   if (!authChecked) {
-    return null;
+    return (
+      <div className="min-h-screen w-full flex items-center justify-center bg-white text-[#475569] text-[14px]">
+        Loading workspace...
+      </div>
+    );
   }
+
+  const hideGlobalChrome = router.pathname === "/";
 
   return (
     <>
@@ -418,14 +426,16 @@ function App({ Component, pageProps }) {
         <ErrorBoundary >
           <Provider store={store}>
             <ToastContainer position={'bottom-right'} autoClose={2000} />
-            <RootLayout >
+            <LMSProvider>
+              <TourProvider>
+                <RootLayout >
               {website_settings && website_settings.app_settings.favicon &&
                 <Head>
                   {/* <link rel="shortcut icon" href={check_Image(website_settings.app_settings.favicon)} /> */}
                   <link rel="shortcut icon" href={'/logo.png'} />
                 </Head>}
 
-              {router.pathname != "/login" && router.pathname != "/seller/[login]" && <WebHeader website_settings={website_settings && website_settings} categoryData={categoryData} navigateDetail={navigateDetail} />}
+              {router.pathname != "/login" && router.pathname != "/seller/[login]" && !hideGlobalChrome && <WebHeader website_settings={website_settings && website_settings} categoryData={categoryData} navigateDetail={navigateDetail} />}
               {/* <main className={`${poppins.className} min-h-screen w-full`}> */}
               {/* router.pathname == "/pr/[...detail]" ? pageKey : null */}
               {/* <div key={pageKey} className="page fade-enter fade-enter-active"> */}
@@ -435,10 +445,10 @@ function App({ Component, pageProps }) {
               </div>
               {/* </main> */}
               <div className='lg:hidden'>
-                {router.pathname != "/login" && <BottomTabs tabs={tabs} getActiveTab={getActiveTab} activeTab={activeTab} />}
+                {router.pathname != "/login" && !hideGlobalChrome && <BottomTabs tabs={tabs} getActiveTab={getActiveTab} activeTab={activeTab} />}
               </div>
 
-              {router.pathname != "/login" && !router.asPath.includes('profile') && <div className="fixed lg:hidden bottom-[90px] right-[20px]">
+              {router.pathname != "/login" && !router.asPath.includes('profile') && !hideGlobalChrome && <div className="fixed lg:hidden bottom-[90px] right-[20px]">
                 <div onClick={() => router.push('/scanner')} className={`size-[50px] bg-[#000] rounded-[50%] flex items-center justify-center`}>
                   <Image height={25} width={25} className='size-[25px]' src={'/scanner-fixed.svg'} alt="Scanner" ></Image>
                 </div>
@@ -446,7 +456,7 @@ function App({ Component, pageProps }) {
 
 
               <div id='footer'>
-                {(masterValue && masterValue['item_group']) && (router.pathname != "/login" && !router.asPath.includes('profile') && router.pathname != "/[...list]") && <>
+                {(masterValue && masterValue['item_group']) && (router.pathname != "/login" && !router.asPath.includes('profile') && router.pathname != "/[...list]" && !hideGlobalChrome) && <>
                   <div className='border-t border-t-[#ddd] w-full text-center bg-[#F0F0F0] py-2'>
                     © 2025 products.ihgind.com. All Rights Reserved.
                   </div>
@@ -455,9 +465,11 @@ function App({ Component, pageProps }) {
               </div>
 
               <div className='md:hidden'>
-                <ScrollToTopButton />
+                {!hideGlobalChrome && <ScrollToTopButton />}
               </div>
-            </RootLayout>
+                </RootLayout>
+              </TourProvider>
+            </LMSProvider>
           </Provider>
         </ErrorBoundary>
       </div>

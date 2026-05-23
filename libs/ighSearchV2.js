@@ -94,6 +94,7 @@ export const V2_FILTER_KEYS = [
   "brand",
   "item_group",
   "category_list",
+  "series",
   "product_type",
   "power",
   "color_temp",
@@ -140,6 +141,7 @@ export const DEFAULT_V2_STATE = {
     brand: [],
     item_group: [],
     category_list: [],
+    series: [],
     product_type: [],
     power: [],
     color_temp: [],
@@ -321,7 +323,7 @@ export const getIsSystemManager = () => {
 };
 
 export const buildFeatureFlagOverride = (searchV2Requested) =>
-  searchV2Requested && getIsSystemManager() ? 1 : 0;
+  searchV2Requested ? 1 : 0;
 
 export const probeSearchV2Availability = async (
   featureFlagOverride = 0,
@@ -368,6 +370,7 @@ export const searchProductsV2 = async (payload, options = {}) => {
       const durationMs = Date.now() - startedAt;
       const timedOut = error?.message?.toLowerCase?.().includes("timed out");
       const isAbort = error?.name === "AbortError";
+      if (isAbort) throw error;
       const isNetwork = !error?.status && !timedOut && !isAbort;
       const canRetry = attempt === 1 && (timedOut || isNetwork);
       if (canRetry) {
@@ -1211,28 +1214,49 @@ export const getMasterOptionValue = (option) => {
   return "";
 };
 
-export const buildMasterOptions = (options = [], facetMap = {}) =>
-  (() => {
-    const rawOptions = Array.isArray(options) ? options : [];
-    const fallbackFacetOptions =
-      rawOptions.length > 0
-        ? []
-        : Object.keys(facetMap || {}).sort(
-            (left, right) => Number(facetMap?.[right] || 0) - Number(facetMap?.[left] || 0)
-          );
-    const resolvedOptions = rawOptions.length > 0 ? rawOptions : fallbackFacetOptions;
-    return resolvedOptions;
-  })()
-    .map((option) => {
-      const value = getMasterOptionValue(option);
-      if (!value) {
-        return null;
-      }
+export const buildMasterOptions = (options = [], facetMap = {}) => {
+  const rawOptions = Array.isArray(options) ? options : [];
+  const fallbackFacetOptions =
+    rawOptions.length > 0
+      ? []
+      : Object.keys(facetMap || {}).sort(
+          (left, right) => Number(facetMap?.[right] || 0) - Number(facetMap?.[left] || 0)
+        );
+  const resolvedOptions = rawOptions.length > 0 ? rawOptions : fallbackFacetOptions;
 
-      const count = facetMap[String(value)] || 0;
+  // Masters can contain repeated values (for example attribute-backed categories).
+  // Deduplicate early so facets remain searchable and selection state is stable.
+  const seen = new Map();
+  resolvedOptions.forEach((option) => {
+    const value = getMasterOptionValue(option);
+    const normalizedKey = String(value || "").trim().toLowerCase();
+    if (!normalizedKey) return;
+    if (!seen.has(normalizedKey)) {
+      seen.set(normalizedKey, String(value).trim());
+    }
+  });
+
+  const normalizedFacetCounts = Object.entries(facetMap || {}).reduce(
+    (accumulator, [facetValue, count]) => {
+      const key = String(facetValue || "").trim().toLowerCase();
+      if (!key) {
+        return accumulator;
+      }
+      accumulator[key] = (accumulator[key] || 0) + Number(count || 0);
+      return accumulator;
+    },
+    {}
+  );
+
+  return Array.from(seen.values())
+    .map((value) => {
+      const direct = Number(facetMap?.[value] || 0);
+      const fallback = Number(normalizedFacetCounts[value.toLowerCase()] || 0);
+      const count = direct > 0 ? direct : fallback;
       return {
         value,
         label: count > 0 ? `${value} (${count})` : value,
       };
     })
     .filter(Boolean);
+};

@@ -93,6 +93,7 @@ export default function SalesAddToCartModal({ product, onClose, onConfirm }) {
       `}</style>
 
       <div
+        data-tour="sales-atc-modal"
         onClick={(e) => e.stopPropagation()}
         className="satc_card relative flex w-full max-w-[760px] max-h-[92vh] overflow-hidden bg-white rounded-[12px] shadow-[0_24px_60px_rgba(0,0,0,0.22)] flex-col md:flex-row"
       >
@@ -215,6 +216,7 @@ export default function SalesAddToCartModal({ product, onClose, onConfirm }) {
                   −
                 </button>
                 <input
+                  data-tour="sales-atc-qty-input"
                   ref={inputRef}
                   type="number"
                   min="1"
@@ -244,6 +246,7 @@ export default function SalesAddToCartModal({ product, onClose, onConfirm }) {
           </div>
 
           <button
+            data-tour="sales-atc-confirm"
             type="button"
             onClick={handleAdd}
             disabled={!inStock || adding}

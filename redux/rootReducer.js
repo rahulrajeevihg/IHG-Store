@@ -10,6 +10,9 @@ import { resetStore } from '/redux/rootAction'
 import FiltersList from './slice/filtersList';
 import HomeFilter from './slice/homeFilter';
 import ProductDetails from './slice/productDetail';
+import tour from './slice/tourSlice';
+import lms from './slice/lmsSlice';
+import productQuery from './slice/productQuerySlice';
 
 const rootReducer = combineReducers({
     webSettings: websiteSettings,
@@ -21,7 +24,10 @@ const rootReducer = combineReducers({
     ProductListFilters:ProductListFilters,
     FiltersList: FiltersList,
     HomeFilter: HomeFilter,
-    ProductDetails: ProductDetails
+    ProductDetails: ProductDetails,
+    tour: tour,
+    lms: lms,
+    productQuery: productQuery,
 });
 
 const resettableReducer = (state, action) => {

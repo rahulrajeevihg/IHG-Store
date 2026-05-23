@@ -10,6 +10,7 @@ import {
     checkMobile,
     typesense_search_items,
     get_product_details,
+    get_product_related_context,
 } from "@/libs/api";
 import Image from "next/image";
 import dynamic from "next/dynamic";
@@ -36,16 +37,17 @@ import { useSelector, useDispatch } from "react-redux";
 import { setCartItems } from "@/redux/slice/cartSettings";
 import Head from "next/head";
 import { toast } from "react-toastify";
-import ViewAll from "@/components/Common/ViewAll";
 import Tabs from "@/components/Common/Tabs";
-import IssueReportModal from "@/components/ProductDataIssues/IssueReportModal";
-import IssueStatusBadge from "@/components/ProductDataIssues/IssueStatusBadge";
+import QueryStatusBadge from "@/components/ProductQuery/QueryStatusBadge";
+import { openRaiseQuery } from "@/redux/slice/productQuerySlice";
+import RelatedIntelligenceSections from "@/components/Detail/RelatedIntelligenceSections";
 
 const Detail = () => {
     // const Detail = ({ productDetail, detail }) => {
     const router = useRouter();
     const [details, setDetails] = useState({});
-    const [productDetail, setProductDetail] = useState()
+    const [productDetail, setProductDetail] = useState();
+    const [relatedContext, setRelatedContext] = useState(null);
 
     useEffect(() => {
         // let breadcrumb = [{ name: "Home", route: "/" }];
@@ -65,8 +67,10 @@ const Detail = () => {
         // productDetail["breadcrumb"] = breadcrumb;
         const detail = localStorage['product_detail']
         if (detail && JSON.parse(detail) && (JSON.parse(detail).item_code) === getPrRoute()) {
+            const parsedDetail = JSON.parse(detail);
             // console.log("deta", JSON.parse(detail))
-            setProductDetail({ ...JSON.parse(detail) })
+            setProductDetail({ ...parsedDetail })
+            fetchRelatedContext(parsedDetail.item_code);
             // console.log('deta', JSON.parse(detail))
         } else {
             getProductDetail()
@@ -107,6 +111,20 @@ const Detail = () => {
         return productRoute
     }
 
+    const fetchRelatedContext = async (itemCode) => {
+        if (!itemCode) {
+            setRelatedContext(null);
+            return;
+        }
+        try {
+            const context = await get_product_related_context(itemCode, 8);
+            setRelatedContext(context || null);
+        } catch (error) {
+            console.error("fetchRelatedContext error", error);
+            setRelatedContext(null);
+        }
+    };
+
     const getProductDetail = async () => {
         const queryParams = new URLSearchParams({
             q: "*",
@@ -122,94 +140,18 @@ const Detail = () => {
         let productDetail = data.hits && data.hits.length > 0 ? data.hits[0].document : {};
         if (productDetail) {
             setProductDetail(productDetail)
+            fetchRelatedContext(productDetail.item_code || getPrRoute());
         }
     }
-
-    const [relatedProductData, setRelatedData] = useState([])
 
     const getDetail = async () => {
         const resp = await get_product_details(getPrRoute());
         const details = (await resp.message) || {};
+        setDetails(details && typeof details === "object" ? details : {});
 
-        if (details && details.stock && details.stock.length > 0) {
-            setDetails(details);
-        } else {
-            setDetails([]);
-        }
-
-        if (details.related_products) {
-            let relatedSections = {};
-        
-            const relatedKeys = {
-                bought_together: "Bought Together",
-                must_use: "Must Use",
-                add_on: "Add On",
-                category_list: "category_list"
-            };
-        
-            const keysToFetch = Object.values(relatedKeys);
-        
-            keysToFetch.forEach((key) => {
-                const values = details.related_products[key] || [];
-                const filterQuery = values.map((code) => `item_code:="${code}"`).join(" || ");
-                relatedSections[key] = { query: filterQuery, data: [] };
-            });
-        
-            // console.log("Initial relatedSections:", relatedSections);
-        
-            const fetchData = async () => {
-                for (const key in relatedSections) {
-                    const queryParams = new URLSearchParams({
-                        q: "*",
-                        query_by: "item_name,item_description,brand",
-                        query_by_weights: "1,2,3",
-                        filter_by: relatedSections[key].query
-                    });
-        
-                    const data = await typesense_search_items(queryParams);
-                    // console.log(`Data for ${key}:`, data.hits);
-        
-                    relatedSections[key].data = data.hits || [];
-                }
-        
-                // console.log("Final relatedSections:", relatedSections);
-                setRelatedData(relatedSections);
-            };
-        
-            fetchData();
-        } else {
-            setRelatedData({});
-        }
-        
-
-
-
-
-
-
-
-
-        // console.log(relatedProductData, 'rela')
-        // console.log('relatedSections', relatedProductData)
         // const resp = await get_product_details(router.query.detail);
         // const details = await resp.message || []
     };
-
-
-    const filterData = (arr1, arr2) => {
-        const arr = []
-
-        for (let i = 0; i < arr1.length; i++) {
-            for (let j = 0; j < arr2.length; j++) {
-                if (arr1[i] == arr2[j]['document']['item_code']) {
-                    arr.push(arr2[j])
-                }
-            }
-        }
-
-        // console.log('arr', arr1, arr2, arr)
-        return arr
-    }
 
 
 
@@ -254,7 +196,7 @@ const Detail = () => {
                         productDetail={productDetail}
                         toast={toast}
                         details={details}
-                        relatedProductData={relatedProductData}
+                        relatedContext={relatedContext}
                     />
                 )}
             </div>
@@ -264,7 +206,7 @@ const Detail = () => {
 
 // export default function Detail({metaData, productDetail}) {
 
-const DetailPage = ({ productDetail, toast, details, relatedProductData }) => {
+const DetailPage = ({ productDetail, toast, details, relatedContext }) => {
     let [data, setData] = useState();
     let [additionalInfo, setAdditionalInfo] = useState({});
     let [sample, setSample] = useState(1);
@@ -285,7 +227,16 @@ const DetailPage = ({ productDetail, toast, details, relatedProductData }) => {
     let cardref = useRef();
     let [apiCall, setApicall] = useState(true);
     let [pageLoading, setPageLoading] = useState(false);
-    const [issueModalOpen, setIssueModalOpen] = useState(false);
+    const stockRows = Array.isArray(details?.stock_rows)
+        ? details.stock_rows
+        : Array.isArray(details?.stock)
+            ? details.stock
+            : [];
+    const totalStock = Number(
+        details?.total_stock ??
+            stockRows.reduce((accumulator, row) => accumulator + Number(row?.actual_qty || 0), 0)
+    );
+    const isInStock = details?.in_stock !== undefined ? Boolean(details.in_stock) : totalStock > 0;
 
     // console.log("product", productDetail)
     useEffect(() => {
@@ -319,16 +270,6 @@ const DetailPage = ({ productDetail, toast, details, relatedProductData }) => {
 
 
     }, [apiCall, data, details,]);
-
-
-    const [relatedData, setRelatedData] = useState([])
-    useEffect(() => {
-        // console.log("rel", relatedProductData)
-        setRelatedData(relatedProductData)
-    }, [relatedProductData])
-
-    //   console.log(data,'data')
-    // console.log("dedata", relatedData);
 
     const productQty = (data) => {
         if (data) {
@@ -799,7 +740,7 @@ const DetailPage = ({ productDetail, toast, details, relatedProductData }) => {
 
     return (
         <>
-            <div ref={cardref} className="main-width fade-in lg:w-[90%] max-w-[1300px]">
+            <div ref={cardref} className="main-width fade-in overflow-x-hidden lg:w-[90%] max-w-[1300px]">
                 {loader ? (
                     <Skeleton />
                 ) : (
@@ -842,7 +783,7 @@ const DetailPage = ({ productDetail, toast, details, relatedProductData }) => {
                                 </div>
 
                                 <div
-                                    className={`lg:flex lg:m-[15px_0] gap-[10px] justify-between `}
+                                    className={`lg:flex lg:m-[15px_0] gap-[10px] justify-between overflow-x-hidden`}
                                 >
                                     <div className="flex lg:flex-[0_0_calc(50%_-_10px)] fade-in lg:sticky lg:top-[150px] lg:h-[450px] border p-3">
                                         <div className="w-full">
@@ -950,7 +891,7 @@ const DetailPage = ({ productDetail, toast, details, relatedProductData }) => {
                                         )}
                                     </div>
 
-                                    <div className="flex-[0_0_calc(50%_-_10px)] lg:px-[20px] md:p-[20px_10px_10px] md:rounded-[20px_20px_0_0]">
+                                    <div className="min-w-0 flex-[0_0_calc(50%_-_10px)] lg:px-[20px] md:p-[20px_10px_10px] md:rounded-[20px_20px_0_0]">
                                         {!isMobile ? (
                                             <>
                                                 {/* <h6 className='text-[12px] font-semibold primary_color capitalize'>{data.centre}</h6> */}
@@ -967,7 +908,6 @@ const DetailPage = ({ productDetail, toast, details, relatedProductData }) => {
                                                         }}
                                                     />
                                                 )}
-
                                                 <div className="flex items-center gap-3">
 
                                                     <div
@@ -978,9 +918,9 @@ const DetailPage = ({ productDetail, toast, details, relatedProductData }) => {
                                                     </div>
                                                 </div>
 
-                                                {data.stock && data.stock > 0 ? (
+                                                {isInStock ? (
                                                     <p className="text-base text-[#1A9A62] lg:text-[16px] md:text-[13px] font-semibold mt-[5px]">
-                                                        IN STOCK ({data.stock} NOS)
+                                                        IN STOCK ({Number(totalStock || 0).toLocaleString()} NOS)
                                                     </p>
                                                 ) : (
                                                     <p className="text-base lg:text-[16px] md:text-[13px] font-semibold mt-[5px] text-[#d11111]">
@@ -990,12 +930,12 @@ const DetailPage = ({ productDetail, toast, details, relatedProductData }) => {
                                                 <div className="mt-4 flex flex-wrap items-center gap-3">
                                                     <button
                                                         type="button"
-                                                        onClick={() => setIssueModalOpen(true)}
+                                                        onClick={() => dispatch(openRaiseQuery(data))}
                                                         className="inline-flex h-10 items-center rounded-xl border border-[#dbe5ef] bg-white px-4 text-[12px] font-semibold uppercase tracking-[0.08em] text-[#111827] transition hover:border-[#111827] hover:bg-[#f8fafc]"
                                                     >
                                                         Report Data Issue
                                                     </button>
-                                                    <IssueStatusBadge itemCode={data.item_code} />
+                                                    <QueryStatusBadge itemCode={data.item_code} />
                                                 </div>
                                             </>
                                         ) : (
@@ -1007,9 +947,9 @@ const DetailPage = ({ productDetail, toast, details, relatedProductData }) => {
                                                         <h3 className="text-[18px] py-[4px] font-semibold line-clamp-2 capitalize">
                                                             {data.item_name}
                                                         </h3>
-                                                        {data.stock && data.stock > 0 ? (
+                                                        {isInStock ? (
                                                             <p className="text-base text-[#1A9A62] font-semibold py-[4px]">
-                                                                IN STOCK ({data.stock} NOS)
+                                                                IN STOCK ({Number(totalStock || 0).toLocaleString()} NOS)
                                                             </p>
                                                         ) : (
                                                             <p className="text-base font-semibold text-[#d11111] py-[4px]">
@@ -1019,12 +959,12 @@ const DetailPage = ({ productDetail, toast, details, relatedProductData }) => {
                                                         <div className="mt-3 flex flex-wrap items-center gap-2">
                                                             <button
                                                                 type="button"
-                                                                onClick={() => setIssueModalOpen(true)}
+                                                                onClick={() => dispatch(openRaiseQuery(data))}
                                                                 className="inline-flex h-9 items-center rounded-xl border border-[#dbe5ef] bg-white px-3 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#111827] transition hover:border-[#111827] hover:bg-[#f8fafc]"
                                                             >
                                                                 Report Issue
                                                             </button>
-                                                            <IssueStatusBadge itemCode={data.item_code} compact />
+                                                            <QueryStatusBadge itemCode={data.item_code} compact />
                                                         </div>
                                                         {/* {data.stock && <p>{data.stock}</p>} */}
                                                     </div>
@@ -1036,7 +976,6 @@ const DetailPage = ({ productDetail, toast, details, relatedProductData }) => {
                                                         __html: data.item_description,
                                                     }}
                                                 />
-
                                                 <div className="flex flex-row mt-[4px] items-center justify-between gap-3">
                                                     {(data.offer_rate) ? <h6 className='bg-[#009f58] text-[#fff] p-[3px_10px] text-[10px]'>{parseInt((data.rate - data.offer_rate) / data.rate * 100)}<span className='px-[0px] text-[#fff] text-[10px]'>% (AED {parseFloat(data.rate - data.offer_rate).toFixed(2)}) off</span> </h6> : <></>}
                                                     <div
@@ -1048,13 +987,12 @@ const DetailPage = ({ productDetail, toast, details, relatedProductData }) => {
                                             </>
                                         )}
 
-                                        {data ||
-                                            (details && details.stock && details.stock.length != 0) ? (
+                                        {data ? (
                                             <>
                                                 {/* <Accordions items={accordionData} product={data} setData={(val)=>{setDataAValue(val)}} /> */}
                                                 <Tabs
-                                                    stockDetails={details.stock}
-                                                    productDetails={data}
+                                                    stockDetails={stockRows}
+                                                    productDetails={{ ...data, total_stock: totalStock }}
                                                 />
                                             </>
                                         ) : (
@@ -1062,51 +1000,11 @@ const DetailPage = ({ productDetail, toast, details, relatedProductData }) => {
                                         )}
                                     </div>
                                 </div>
-
-
-                                {relatedData && Object.keys(relatedData).length > 0 && (() => {
-                                    const hasBoughtTogether = relatedData["Bought Together"]?.data?.length > 0;
-                                    const hasMustUse = relatedData["Must Use"]?.data?.length > 0;
-                                    const hasAddOn = relatedData["Add On"]?.data?.length > 0;
-                                    const hasCategoryList = relatedData["category_list"]?.data?.length > 0;
-
-                                    const filteredData = Object.entries(relatedData).filter(([key, value]) => {
-                                        if (!value.data.length) return false;
-                                        if (key === "category_list" && (hasBoughtTogether || hasMustUse || hasAddOn)) return false;
-                                        return true;
-                                    });
-
-                                    if (filteredData.length === 0) return null;
-
-                                    return (
-                                        <>
-                                            {filteredData.map(([key, value]) => (
-                                                <div key={key} className="m-[15px_0] md:px-[10px]">
-                                                    {(key === "Bought Together" || key === "category_list") ? (
-                                                        <h2 className="text-[16px] lg:text-[18px] mb-[10px] font-semibold text-[#000]">
-                                                            Related Products
-                                                        </h2>
-                                                    ) : (
-                                                        <h2 className="text-[16px] lg:text-[18px] mb-[10px] font-semibold text-[#000]">
-                                                            {key.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase())}
-                                                        </h2>
-                                                    )}
-
-                                                    <ProductBox
-                                                        productList={value.data}
-                                                        scroll_button={isMobile}
-                                                        rowStyle={true}
-                                                        scroll_id={`related_products_${key}`}
-                                                        rowCount={"flex-[0_0_calc(20%_-_8px)]"}
-                                                    />
-                                                </div>
-                                            ))}
-                                        </>
-                                    );
-                                })()}
-
-
-
+                                <RelatedIntelligenceSections
+                                    itemCode={data.item_code}
+                                    relatedContext={relatedContext}
+                                    className="m-[15px_0] overflow-x-hidden md:px-[10px]"
+                                />
 
                                 {data.recently_viewed_products &&
                                     data.recently_viewed_products.length != 0 &&
@@ -1250,11 +1148,6 @@ const DetailPage = ({ productDetail, toast, details, relatedProductData }) => {
             {/* Shop By Brands */}
 
             {/* <Brands customCss={'lg:w-[90%] max-w-[1300px]'} /> */}
-            <IssueReportModal
-                open={issueModalOpen}
-                onClose={() => setIssueModalOpen(false)}
-                product={data}
-            />
         </>
     );
 };

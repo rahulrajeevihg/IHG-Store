@@ -27,7 +27,7 @@ export default function SearchHero({
               className="relative flex items-stretch"
               ref={suggestionsContainerRef}
             >
-              <div className="group relative flex h-[56px] w-full items-stretch rounded-[16px] border border-[#d8e1ea] bg-[#fcfdff] transition-all duration-200 focus-within:border-[#111827] focus-within:bg-white focus-within:shadow-[0_0_0_4px_rgba(15,23,42,0.06)]">
+              <div data-tour="search-bar" className="group relative flex h-[56px] w-full items-stretch rounded-[16px] border border-[#d8e1ea] bg-[#fcfdff] transition-all duration-200 focus-within:border-[#111827] focus-within:bg-white focus-within:shadow-[0_0_0_4px_rgba(15,23,42,0.06)]">
                 <span className="inline-flex shrink-0 items-center pl-[18px] text-[#64748b]">
                   <SearchIcon />
                 </span>
@@ -63,6 +63,7 @@ export default function SearchHero({
                 )}
                 <span className="my-[12px] w-px shrink-0 bg-[#e6ebf1]" aria-hidden="true" />
                 <button
+                  data-tour="ai-search-button"
                   type="button"
                   onClick={onOpenAi}
                   className="group/ai inline-flex shrink-0 items-center gap-[7px] rounded-r-none px-[14px] text-[11px] font-semibold uppercase tracking-[0.14em] text-[#1f2937] transition hover:bg-[#f5f8fc]"
@@ -74,6 +75,7 @@ export default function SearchHero({
                   <span className="hidden sm:inline">Ask AI</span>
                 </button>
                 <button
+                  data-tour="search-submit-button"
                   type="button"
                   onClick={() => onSubmit()}
                   className="m-[6px] inline-flex shrink-0 items-center rounded-[12px] bg-[#111827] px-[18px] text-[11px] font-semibold uppercase tracking-[0.14em] text-white transition hover:bg-black"

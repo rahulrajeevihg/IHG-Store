@@ -20,10 +20,11 @@ No new Doctypes required.
 import json
 import uuid
 from collections import defaultdict
+from datetime import timedelta
 
 import frappe
 from frappe import _
-from frappe.utils import flt, cstr, getdate, nowdate
+from frappe.utils import flt, cstr, getdate, nowdate, now_datetime
 from igh_search.igh_search.lumen_normalization import (
     build_lumen_overlap_filter,
     normalize_lumen_fields,
@@ -859,6 +860,279 @@ def get_recent_quotations(**kwargs):
             r["customer_name"] = r["party_name"]
 
     return {"status": "success", "data": rows}
+
+
+def _get_sales_window_meta():
+    now_dt = now_datetime()
+    today_start = now_dt.replace(hour=0, minute=0, second=0, microsecond=0)
+    week_start = today_start - timedelta(days=today_start.weekday())  # Monday start
+    month_start = today_start.replace(day=1)
+    timezone = (
+        frappe.db.get_single_value("System Settings", "time_zone")
+        or frappe.utils.get_system_timezone()
+        or "UTC"
+    )
+
+    return {
+        "timezone": timezone,
+        "generated_at": now_dt.strftime("%Y-%m-%d %H:%M:%S"),
+        "today_start": today_start.strftime("%Y-%m-%d %H:%M:%S"),
+        "week_start": week_start.strftime("%Y-%m-%d %H:%M:%S"),
+        "month_start": month_start.strftime("%Y-%m-%d %H:%M:%S"),
+        "now_ts": now_dt.strftime("%Y-%m-%d %H:%M:%S"),
+    }
+
+
+@frappe.whitelist()
+def get_sales_dashboard_reports(**kwargs):
+    _require_login()
+
+    meta = _get_sales_window_meta()
+    params = {
+        "today_start": meta["today_start"],
+        "week_start": meta["week_start"],
+        "month_start": meta["month_start"],
+        "now_ts": meta["now_ts"],
+    }
+
+    today_sold_items = frappe.db.sql(
+        """
+        SELECT
+            sii.item_code AS item_code,
+            COALESCE(sii.item_name, sii.item_code) AS item_name,
+            COALESCE(it.image, '') AS image,
+            SUM((CASE WHEN COALESCE(si.is_return, 0) = 1 THEN -1 ELSE 1 END) * ABS(COALESCE(sii.qty, 0))) AS net_qty,
+            SUM((CASE WHEN COALESCE(si.is_return, 0) = 1 THEN -1 ELSE 1 END) * ABS(COALESCE(sii.net_amount, sii.amount, 0))) AS net_value,
+            SUM(CASE WHEN COALESCE(si.is_return, 0) = 1 THEN -1 ELSE 1 END) AS line_occurrences
+        FROM `tabSales Invoice Item` sii
+        INNER JOIN `tabSales Invoice` si
+            ON si.name = sii.parent
+        LEFT JOIN `tabItem` it
+            ON it.item_code = sii.item_code
+        WHERE
+            si.docstatus = 1
+            AND TIMESTAMP(si.posting_date, COALESCE(si.posting_time, '00:00:00')) >= %(today_start)s
+            AND TIMESTAMP(si.posting_date, COALESCE(si.posting_time, '00:00:00')) <= %(now_ts)s
+        GROUP BY sii.item_code, COALESCE(sii.item_name, sii.item_code), COALESCE(it.image, '')
+        HAVING SUM((CASE WHEN COALESCE(si.is_return, 0) = 1 THEN -1 ELSE 1 END) * ABS(COALESCE(sii.qty, 0))) > 0
+        ORDER BY net_qty DESC, net_value DESC
+        LIMIT 10
+        """,
+        params,
+        as_dict=True,
+    )
+
+    month_top_count = frappe.db.sql(
+        """
+        SELECT
+            sii.item_code AS item_code,
+            COALESCE(sii.item_name, sii.item_code) AS item_name,
+            COALESCE(it.image, '') AS image,
+            SUM((CASE WHEN COALESCE(si.is_return, 0) = 1 THEN -1 ELSE 1 END) * ABS(COALESCE(sii.qty, 0))) AS net_qty,
+            SUM((CASE WHEN COALESCE(si.is_return, 0) = 1 THEN -1 ELSE 1 END) * ABS(COALESCE(sii.net_amount, sii.amount, 0))) AS net_value,
+            SUM(CASE WHEN COALESCE(si.is_return, 0) = 1 THEN -1 ELSE 1 END) AS line_occurrences
+        FROM `tabSales Invoice Item` sii
+        INNER JOIN `tabSales Invoice` si
+            ON si.name = sii.parent
+        LEFT JOIN `tabItem` it
+            ON it.item_code = sii.item_code
+        WHERE
+            si.docstatus = 1
+            AND TIMESTAMP(si.posting_date, COALESCE(si.posting_time, '00:00:00')) >= %(month_start)s
+            AND TIMESTAMP(si.posting_date, COALESCE(si.posting_time, '00:00:00')) <= %(now_ts)s
+        GROUP BY sii.item_code, COALESCE(sii.item_name, sii.item_code), COALESCE(it.image, '')
+        HAVING SUM((CASE WHEN COALESCE(si.is_return, 0) = 1 THEN -1 ELSE 1 END) * ABS(COALESCE(sii.qty, 0))) > 0
+        ORDER BY line_occurrences DESC, net_qty DESC, net_value DESC
+        LIMIT 10
+        """,
+        params,
+        as_dict=True,
+    )
+
+    month_top_qty = frappe.db.sql(
+        """
+        SELECT
+            sii.item_code AS item_code,
+            COALESCE(sii.item_name, sii.item_code) AS item_name,
+            COALESCE(it.image, '') AS image,
+            SUM((CASE WHEN COALESCE(si.is_return, 0) = 1 THEN -1 ELSE 1 END) * ABS(COALESCE(sii.qty, 0))) AS net_qty,
+            SUM((CASE WHEN COALESCE(si.is_return, 0) = 1 THEN -1 ELSE 1 END) * ABS(COALESCE(sii.net_amount, sii.amount, 0))) AS net_value,
+            SUM(CASE WHEN COALESCE(si.is_return, 0) = 1 THEN -1 ELSE 1 END) AS line_occurrences
+        FROM `tabSales Invoice Item` sii
+        INNER JOIN `tabSales Invoice` si
+            ON si.name = sii.parent
+        LEFT JOIN `tabItem` it
+            ON it.item_code = sii.item_code
+        WHERE
+            si.docstatus = 1
+            AND TIMESTAMP(si.posting_date, COALESCE(si.posting_time, '00:00:00')) >= %(month_start)s
+            AND TIMESTAMP(si.posting_date, COALESCE(si.posting_time, '00:00:00')) <= %(now_ts)s
+        GROUP BY sii.item_code, COALESCE(sii.item_name, sii.item_code), COALESCE(it.image, '')
+        HAVING SUM((CASE WHEN COALESCE(si.is_return, 0) = 1 THEN -1 ELSE 1 END) * ABS(COALESCE(sii.qty, 0))) > 0
+        ORDER BY net_qty DESC, line_occurrences DESC, net_value DESC
+        LIMIT 10
+        """,
+        params,
+        as_dict=True,
+    )
+
+    week_credit_note_stock_items = frappe.db.sql(
+        """
+        SELECT
+            sii.item_code AS item_code,
+            COALESCE(sii.item_name, sii.item_code) AS item_name,
+            COALESCE(it.image, '') AS image,
+            SUM(ABS(COALESCE(sii.qty, 0))) AS return_qty,
+            SUM(ABS(COALESCE(sii.net_amount, sii.amount, 0))) AS return_value,
+            COUNT(*) AS return_lines
+        FROM `tabSales Invoice Item` sii
+        INNER JOIN `tabSales Invoice` si
+            ON si.name = sii.parent
+        LEFT JOIN `tabItem` it
+            ON it.item_code = sii.item_code
+        WHERE
+            si.docstatus = 1
+            AND COALESCE(si.is_return, 0) = 1
+            AND COALESCE(si.update_stock, 0) = 1
+            AND TIMESTAMP(si.posting_date, COALESCE(si.posting_time, '00:00:00')) >= %(week_start)s
+            AND TIMESTAMP(si.posting_date, COALESCE(si.posting_time, '00:00:00')) <= %(now_ts)s
+        GROUP BY sii.item_code, COALESCE(sii.item_name, sii.item_code), COALESCE(it.image, '')
+        ORDER BY return_qty DESC, return_value DESC
+        LIMIT 10
+        """,
+        params,
+        as_dict=True,
+    )
+
+    week_new_arrived_items = frappe.db.sql(
+        """
+        SELECT
+            pri.item_code AS item_code,
+            COALESCE(pri.item_name, pri.item_code) AS item_name,
+            COALESCE(it.image, '') AS image,
+            SUM(ABS(COALESCE(pri.qty, 0))) AS received_qty,
+            SUM(ABS(COALESCE(pri.amount, 0))) AS received_value,
+            COUNT(*) AS receipt_lines
+        FROM `tabPurchase Receipt Item` pri
+        INNER JOIN `tabPurchase Receipt` pr
+            ON pr.name = pri.parent
+        LEFT JOIN `tabItem` it
+            ON it.item_code = pri.item_code
+        WHERE
+            pr.docstatus = 1
+            AND TIMESTAMP(pr.posting_date, COALESCE(pr.posting_time, '00:00:00')) >= %(week_start)s
+            AND TIMESTAMP(pr.posting_date, COALESCE(pr.posting_time, '00:00:00')) <= %(now_ts)s
+        GROUP BY pri.item_code, COALESCE(pri.item_name, pri.item_code), COALESCE(it.image, '')
+        ORDER BY received_qty DESC, received_value DESC
+        LIMIT 10
+        """,
+        params,
+        as_dict=True,
+    )
+
+    salesperson_items = frappe.db.sql(
+        """
+        SELECT
+            st.sales_person AS sales_person,
+            SUM(
+                (CASE WHEN COALESCE(si.is_return, 0) = 1 THEN -1 ELSE 1 END)
+                * ABS(COALESCE(sii.qty, 0))
+                * (CASE WHEN COALESCE(st.allocated_percentage, 0) <= 0 THEN 1 ELSE COALESCE(st.allocated_percentage, 0) / 100 END)
+            ) AS sold_item_count,
+            SUM(
+                (CASE WHEN COALESCE(si.is_return, 0) = 1 THEN -1 ELSE 1 END)
+                * ABS(COALESCE(sii.net_amount, sii.amount, 0))
+                * (CASE WHEN COALESCE(st.allocated_percentage, 0) <= 0 THEN 1 ELSE COALESCE(st.allocated_percentage, 0) / 100 END)
+            ) AS value
+        FROM `tabSales Team` st
+        INNER JOIN `tabSales Invoice` si
+            ON si.name = st.parent
+            AND st.parenttype = 'Sales Invoice'
+        INNER JOIN `tabSales Invoice Item` sii
+            ON sii.parent = si.name
+        WHERE
+            si.docstatus = 1
+            AND TIMESTAMP(si.posting_date, COALESCE(si.posting_time, '00:00:00')) >= %(month_start)s
+            AND TIMESTAMP(si.posting_date, COALESCE(si.posting_time, '00:00:00')) <= %(now_ts)s
+        GROUP BY st.sales_person
+        """,
+        params,
+        as_dict=True,
+    )
+
+    salesperson_invoice_totals = frappe.db.sql(
+        """
+        SELECT
+            st.sales_person AS sales_person,
+            SUM(
+                (CASE WHEN COALESCE(si.is_return, 0) = 1 THEN -1 ELSE 1 END)
+                * ABS(COALESCE(si.grand_total, 0))
+                * (CASE WHEN COALESCE(st.allocated_percentage, 0) <= 0 THEN 1 ELSE COALESCE(st.allocated_percentage, 0) / 100 END)
+            ) AS total_sales
+        FROM `tabSales Team` st
+        INNER JOIN `tabSales Invoice` si
+            ON si.name = st.parent
+            AND st.parenttype = 'Sales Invoice'
+        WHERE
+            si.docstatus = 1
+            AND TIMESTAMP(si.posting_date, COALESCE(si.posting_time, '00:00:00')) >= %(month_start)s
+            AND TIMESTAMP(si.posting_date, COALESCE(si.posting_time, '00:00:00')) <= %(now_ts)s
+        GROUP BY st.sales_person
+        """,
+        params,
+        as_dict=True,
+    )
+
+    salesperson_map = {}
+    for row in salesperson_items:
+        salesperson = cstr(row.get("sales_person") or "").strip()
+        if not salesperson:
+            continue
+        salesperson_map[salesperson] = {
+            "sales_person": salesperson,
+            "sold_item_count": flt(row.get("sold_item_count") or 0),
+            "value": flt(row.get("value") or 0),
+            "total_sales": 0.0,
+        }
+
+    for row in salesperson_invoice_totals:
+        salesperson = cstr(row.get("sales_person") or "").strip()
+        if not salesperson:
+            continue
+        if salesperson not in salesperson_map:
+            salesperson_map[salesperson] = {
+                "sales_person": salesperson,
+                "sold_item_count": 0.0,
+                "value": 0.0,
+                "total_sales": 0.0,
+            }
+        salesperson_map[salesperson]["total_sales"] = flt(row.get("total_sales") or 0)
+
+    salesperson_report_mtd = sorted(
+        list(salesperson_map.values()),
+        key=lambda row: row.get("total_sales", 0),
+        reverse=True,
+    )
+
+    return {
+        "status": "success",
+        "meta": {
+            "timezone": meta["timezone"],
+            "generated_at": meta["generated_at"],
+            "today_start": meta["today_start"],
+            "week_start": meta["week_start"],
+            "month_start": meta["month_start"],
+            "now_ts": meta["now_ts"],
+        },
+        "today_sold_items": today_sold_items,
+        "month_top_items": {
+            "count_wise": month_top_count,
+            "qty_wise": month_top_qty,
+        },
+        "week_credit_note_stock_items": week_credit_note_stock_items,
+        "week_new_arrived_items": week_new_arrived_items,
+        "salesperson_report_mtd": salesperson_report_mtd,
+    }
 
 
 # ─────────────────────────────────────────────────────────────────────────────

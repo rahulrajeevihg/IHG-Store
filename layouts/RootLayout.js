@@ -2,7 +2,8 @@ import { useEffect } from 'react'
 import { useDispatch } from 'react-redux';
 import { setDetail } from '@/redux/slice/customerInfo'
 import { get_customer_info } from '@/libs/api';
-import IssueFloatingLauncher from '@/components/ProductDataIssues/IssueFloatingLauncher';
+import QueryLauncher from '@/components/ProductQuery/QueryLauncher';
+import ProductQueryOverlays from '@/components/ProductQuery/ProductQueryOverlays';
 
 export default function RootLayout({ children }) {
 
@@ -28,7 +29,8 @@ export default function RootLayout({ children }) {
   return (
     <>
       <main id='main' className='md:min-h-screen your-element md:w-full fade-in'>{children}</main>
-      <IssueFloatingLauncher />
+      <QueryLauncher />
+      <ProductQueryOverlays />
     </>
   )
 }

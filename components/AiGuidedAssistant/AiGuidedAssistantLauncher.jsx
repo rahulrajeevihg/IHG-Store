@@ -1,6 +1,7 @@
 export default function AiGuidedAssistantLauncher({ onClick, pending = false, className = "" }) {
   return (
     <button
+      data-tour="ai-guided-launcher"
       type="button"
       onClick={onClick}
       className={`fixed bottom-[154px] right-[18px] z-[121] inline-flex min-w-[56px] items-center gap-3 rounded-[18px] border border-[#dbe5ef] bg-white px-3 py-3 shadow-[0_18px_32px_rgba(15,23,42,0.14)] transition hover:-translate-y-0.5 hover:shadow-[0_24px_38px_rgba(15,23,42,0.18)] md:right-[20px] md:min-w-[190px] md:px-4 ${className}`}

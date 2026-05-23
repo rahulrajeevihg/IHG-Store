@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>SalesPulse Dashboard</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "tertiary-fixed-dim": "#ffb59a",
+                        "on-primary-fixed": "#001453",
+                        "primary-container": "#1e40af",
+                        "on-primary-fixed-variant": "#173bab",
+                        "secondary-fixed": "#eaddff",
+                        "on-secondary": "#ffffff",
+                        "secondary-container": "#8a4cfc",
+                        "on-primary": "#ffffff",
+                        "on-surface-variant": "#444653",
+                        "surface-container-highest": "#e0e3e5",
+                        "secondary-fixed-dim": "#d2bbff",
+                        "background": "#f7f9fb",
+                        "surface-tint": "#3755c3",
+                        "on-surface": "#191c1e",
+                        "inverse-primary": "#b8c4ff",
+                        "on-secondary-fixed-variant": "#5a00c6",
+                        "primary-fixed-dim": "#b8c4ff",
+                        "surface-container": "#eceef0",
+                        "primary": "#00288e",
+                        "on-tertiary-fixed": "#380d00",
+                        "on-error": "#ffffff",
+                        "surface-bright": "#f7f9fb",
+                        "inverse-surface": "#2d3133",
+                        "outline": "#757684",
+                        "error-container": "#ffdad6",
+                        "on-secondary-fixed": "#25005a",
+                        "surface": "#f7f9fb",
+                        "outline-variant": "#c4c5d5",
+                        "surface-variant": "#e0e3e5",
+                        "on-tertiary-container": "#ffa583",
+                        "on-secondary-container": "#fffbff",
+                        "on-primary-container": "#a8b8ff",
+                        "on-error-container": "#93000a",
+                        "surface-container-low": "#f2f4f6",
+                        "on-background": "#191c1e",
+                        "primary-fixed": "#dde1ff",
+                        "inverse-on-surface": "#eff1f3",
+                        "error": "#ba1a1a",
+                        "on-tertiary-fixed-variant": "#802a00",
+                        "surface-container-high": "#e6e8ea",
+                        "tertiary-fixed": "#ffdbce",
+                        "secondary": "#712ae2",
+                        "surface-dim": "#d8dadc",
+                        "tertiary-container": "#872d00",
+                        "surface-container-lowest": "#ffffff",
+                        "tertiary": "#611e00",
+                        "on-tertiary": "#ffffff"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "sm": "12px",
+                        "base": "8px",
+                        "lg": "48px",
+                        "xl": "80px",
+                        "md": "24px",
+                        "gutter": "24px",
+                        "margin-desktop": "64px",
+                        "margin-mobile": "16px",
+                        "xs": "4px"
+                    },
+                    "fontFamily": {
+                        "headline-md": ["Hanken Grotesk"],
+                        "body-md": ["Hanken Grotesk"],
+                        "body-lg": ["Hanken Grotesk"],
+                        "headline-lg-mobile": ["Hanken Grotesk"],
+                        "label-sm": ["Hanken Grotesk"],
+                        "headline-xl": ["Hanken Grotesk"],
+                        "label-md": ["Hanken Grotesk"],
+                        "headline-lg": ["Hanken Grotesk"]
+                    },
+                    "fontSize": {
+                        "headline-md": ["24px", { "lineHeight": "32px", "fontWeight": "600" }],
+                        "body-md": ["16px", { "lineHeight": "24px", "fontWeight": "400" }],
+                        "body-lg": ["18px", { "lineHeight": "28px", "fontWeight": "400" }],
+                        "headline-lg-mobile": ["28px", { "lineHeight": "36px", "fontWeight": "600" }],
+                        "label-sm": ["12px", { "lineHeight": "16px", "fontWeight": "600" }],
+                        "headline-xl": ["48px", { "lineHeight": "56px", "letterSpacing": "-0.02em", "fontWeight": "700" }],
+                        "label-md": ["14px", { "lineHeight": "20px", "letterSpacing": "0.01em", "fontWeight": "500" }],
+                        "headline-lg": ["32px", { "lineHeight": "40px", "letterSpacing": "-0.01em", "fontWeight": "600" }]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        body {
+            background-color: #f7f9fb;
+            background-image: 
+                radial-gradient(at 0% 0%, hsla(253,16%,7%,0.05) 0, transparent 50%), 
+                radial-gradient(at 50% 0%, hsla(225,39%,30%,0.05) 0, transparent 50%), 
+                radial-gradient(at 100% 0%, hsla(339,49%,30%,0.05) 0, transparent 50%);
+            background-attachment: fixed;
+            min-height: 100vh;
+        }
+        .glass-card {
+            background-color: rgba(255, 255, 255, 0.6);
+            backdrop-filter: blur(24px);
+            -webkit-backdrop-filter: blur(24px);
+            border: 1px solid rgba(255, 255, 255, 0.4);
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.05);
+        }
+        .glass-button {
+            background-color: rgba(255, 255, 255, 0.4);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.4);
+            transition: all 0.2s ease;
+        }
+        .glass-button:hover {
+            background-color: rgba(255, 255, 255, 0.6);
+        }
+    </style>
+</head>
+<body class="font-body-md text-on-surface antialiased pt-[72px]">
+<!-- TopNavBar -->
+<header class="fixed top-0 left-0 w-full z-50 flex items-center justify-between px-margin-desktop h-[72px] bg-white/60 dark:bg-black/60 backdrop-blur-[20px] border-b border-white/40 dark:border-white/10 shadow-[0_4px_30px_rgba(0,0,0,0.1)]">
+<div class="flex items-center gap-md">
+<span class="text-headline-md font-headline-md font-bold text-primary dark:text-primary-fixed-dim">SalesPulse</span>
+</div>
+<div class="flex items-center gap-md">
+<!-- Search bar would go here if implemented -->
+<button class="p-2 glass-button rounded-full flex items-center justify-center">
+<span class="material-symbols-outlined text-primary dark:text-primary-fixed-dim" data-icon="notifications">notifications</span>
+</button>
+<button class="p-2 glass-button rounded-full flex items-center justify-center">
+<span class="material-symbols-outlined text-primary dark:text-primary-fixed-dim" data-icon="settings">settings</span>
+</button>
+<img alt="User Profile Avatar" class="w-10 h-10 rounded-full border-2 border-white/40 object-cover" data-alt="A close-up headshot of a professional young man with a slight smile. He is wearing a dark suit and a crisp white shirt, set against a bright, modern, and blurred office background, complementing a premium light-mode UI aesthetic." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBIyqrcOcFGrNXdmQlDdy3AB87_vSTxKtPn5RwItWBBcaCxYBE0IumIlLseOLrXfHD7mcGUwtbXaFRA8BkW1pWZHC3Su1Ata4cOXTLxev0-EyOs_NrAkt0HIAnT4JLT1PLH5y78eBBHXzzUJKPtzcYhDsAeTehrxDZ45tZICu48kqcZEzkHALs9IAOFLIfHmPZkbxJjFIRWAhxqqQI3yinf70uaZb8hBKupYht8el-IHh7K4TzfgbG8ftKdl842rvosecIi_hgBQjg"/>
+</div>
+</header>
+<main class="max-w-7xl mx-auto px-margin-mobile md:px-margin-desktop py-lg grid grid-cols-1 md:grid-cols-12 gap-gutter">
+<!-- Left Column -->
+<div class="md:col-span-8 flex flex-col gap-gutter">
+<!-- Top Row: Profile & Outstanding -->
+<div class="grid grid-cols-1 md:grid-cols-2 gap-gutter">
+<!-- Sales Person Profile -->
+<div class="glass-card rounded-[24px] p-md flex items-center gap-md">
+<div class="relative">
+<img alt="Sales Person Profile" class="w-20 h-20 rounded-full object-cover border-2 border-white/60 shadow-sm" data-alt="A portrait of a confident middle-aged male sales professional in business attire, smiling warmly. The background is softly blurred in high-key lighting, maintaining a clean and optimistic glassmorphism light-mode style." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBZYcj_mSAJbAHmA-DKCse87dMPkp1qGZOADs3VKmtL41Bu9vcA8YQHERP42wXQiqSFJ_XMl_k9OtRzeEFxNfNGus9OsyWKYdbOw1o47BXtZkp6Xhz5j6zEP3UqGalka49_Neq0XNBx8xGa8MnRDdhrEwO8oQv3FkUqFMm5xRFiYZ14z96pvMAAxzBQKvuKV_6EmIPLcbeHEvaJ6UNW2ch_7NBCnd4EiUUnUJZd9rZ0_QBNQlUp30HcZ98ZaH0gQwoDRScGFLgobhQ"/>
+<div class="absolute -bottom-2 -right-2 bg-secondary text-on-secondary w-8 h-8 rounded-full flex items-center justify-center font-bold text-label-sm border-2 border-white shadow-md">
+                            #1
+                        </div>
+</div>
+<div>
+<h2 class="text-headline-md font-headline-md text-on-surface">Mark Jonson</h2>
+<p class="text-body-md font-body-md text-on-surface-variant">Lead Sales Manager</p>
+</div>
+</div>
+<!-- Outstanding Payments -->
+<div class="glass-card rounded-[24px] p-md flex flex-col justify-center bg-primary/10 border-primary/20 relative overflow-hidden">
+<div class="absolute -right-4 -top-4 w-24 h-24 bg-primary/20 rounded-full blur-2xl"></div>
+<div class="absolute -left-4 -bottom-4 w-16 h-16 bg-secondary/20 rounded-full blur-xl"></div>
+<div class="relative z-10">
+<p class="text-label-md font-label-md text-on-surface-variant uppercase tracking-wider mb-2">Outstanding Payments</p>
+<h3 class="text-headline-lg font-headline-lg text-primary">$24,580.00</h3>
+</div>
+</div>
+</div>
+<!-- Performance Metrics -->
+<div class="glass-card rounded-[24px] p-md">
+<h3 class="text-headline-md font-headline-md mb-md text-on-surface">Performance Metrics</h3>
+<div class="space-y-4">
+<div>
+<div class="flex justify-between text-label-md font-label-md mb-2">
+<span class="text-on-surface">Target Sales</span>
+<span class="text-primary font-bold">75%</span>
+</div>
+<div class="w-full bg-surface-container-highest rounded-full h-3">
+<div class="bg-primary h-3 rounded-full" style="width: 75%"></div>
+</div>
+</div>
+<div>
+<div class="flex justify-between text-label-md font-label-md mb-2">
+<span class="text-on-surface">Monthly Quota</span>
+<span class="text-secondary font-bold">60%</span>
+</div>
+<div class="w-full bg-surface-container-highest rounded-full h-3">
+<div class="bg-secondary h-3 rounded-full" style="width: 60%"></div>
+</div>
+</div>
+</div>
+</div>
+<!-- Category Quick Go -->
+<div class="glass-card rounded-[24px] p-md">
+<div class="flex justify-between items-center mb-md">
+<h3 class="text-headline-md font-headline-md text-on-surface">Category Quick Go</h3>
+<button class="glass-button px-4 py-2 rounded-lg text-label-md font-label-md text-primary font-semibold flex items-center gap-2">
+                        Explore All Products
+                        <span class="material-symbols-outlined text-sm" data-icon="arrow_forward">arrow_forward</span>
+</button>
+</div>
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+<!-- Spot Light -->
+<div class="glass-button rounded-xl p-4 flex flex-col items-center justify-center gap-2 cursor-pointer text-center">
+<span class="material-symbols-outlined text-primary text-3xl" data-icon="lightbulb">lightbulb</span>
+<span class="text-label-md font-label-md text-on-surface font-medium">Spot Light</span>
+</div>
+<!-- Wall Light -->
+<div class="glass-button rounded-xl p-4 flex flex-col items-center justify-center gap-2 cursor-pointer text-center">
+<span class="material-symbols-outlined text-secondary text-3xl" data-icon="wall_lamp">wall_lamp</span>
+<span class="text-label-md font-label-md text-on-surface font-medium">Wall Light</span>
+</div>
+<!-- Outdoor -->
+<div class="glass-button rounded-xl p-4 flex flex-col items-center justify-center gap-2 cursor-pointer text-center">
+<span class="material-symbols-outlined text-tertiary text-3xl" data-icon="deck">deck</span>
+<span class="text-label-md font-label-md text-on-surface font-medium">Outdoor</span>
+</div>
+<!-- Smart Home -->
+<div class="glass-button rounded-xl p-4 flex flex-col items-center justify-center gap-2 cursor-pointer text-center">
+<span class="material-symbols-outlined text-primary-container text-3xl" data-icon="home_iot_device">home_iot_device</span>
+<span class="text-label-md font-label-md text-on-surface font-medium">Smart Home</span>
+</div>
+</div>
+</div>
+<!-- Top Selling Products Table -->
+<div class="glass-card rounded-[24px] p-md overflow-hidden">
+<div class="flex justify-between items-center mb-md">
+<h3 class="text-headline-md font-headline-md text-on-surface">Top Selling Products</h3>
+<div class="flex bg-white/40 p-1 rounded-lg backdrop-blur-md">
+<button class="px-4 py-1 text-label-sm font-label-sm bg-white shadow-sm rounded-md text-primary font-bold">Today</button>
+<button class="px-4 py-1 text-label-sm font-label-sm text-on-surface-variant hover:text-primary">Week</button>
+<button class="px-4 py-1 text-label-sm font-label-sm text-on-surface-variant hover:text-primary">Month</button>
+</div>
+</div>
+<div class="overflow-x-auto">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="border-b border-white/30">
+<th class="py-3 text-label-md font-label-md text-on-surface-variant font-semibold">Product</th>
+<th class="py-3 text-label-md font-label-md text-on-surface-variant font-semibold">SKU</th>
+<th class="py-3 text-label-md font-label-md text-on-surface-variant font-semibold text-right">Qty</th>
+<th class="py-3 text-label-md font-label-md text-on-surface-variant font-semibold text-right">Revenue</th>
+</tr>
+</thead>
+<tbody class="text-body-md font-body-md">
+<tr class="border-b border-white/10 hover:bg-white/20 transition-colors">
+<td class="py-3 font-medium text-on-surface">Aero Desk Lamp</td>
+<td class="py-3 text-on-surface-variant">LMP-A23</td>
+<td class="py-3 text-right">145</td>
+<td class="py-3 text-right font-semibold text-primary">$12,450</td>
+</tr>
+<tr class="border-b border-white/10 hover:bg-white/20 transition-colors">
+<td class="py-3 font-medium text-on-surface">Zenith Wall Sconce</td>
+<td class="py-3 text-on-surface-variant">WLL-Z90</td>
+<td class="py-3 text-right">89</td>
+<td class="py-3 text-right font-semibold text-primary">$8,900</td>
+</tr>
+<tr class="hover:bg-white/20 transition-colors">
+<td class="py-3 font-medium text-on-surface">Lumina Floor Lamp</td>
+<td class="py-3 text-on-surface-variant">FLR-L11</td>
+<td class="py-3 text-right">62</td>
+<td class="py-3 text-right font-semibold text-primary">$15,500</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<!-- Bottom Banner -->
+<div class="glass-card rounded-[24px] overflow-hidden relative h-48 md:h-64 group cursor-pointer">
+<div class="absolute inset-0 bg-cover bg-center transition-transform duration-700 group-hover:scale-105" style="background-image: url('https://lh3.googleusercontent.com/aida/ADBb0ujcVtzCaDRQETitWttKHrTN7s1HnEVDQMcK2viZhCtivNAcXaacCv81al7s78GE7HPBpkvKs9q_pS1zxyL9zAxN3mTSlAyYB0mTJmUEAxnmJZeb4nVERElDwIvaa3opnmWts1abYT-WHZKtHnnRuu1-iJgTdO5135XiCvYOhxdum8Rks41XuEDPSaQhygC4oXBSH_l67-s3E8ta_WM32kgMvfKoOIzZ9xeBM0HhGWFKyL73YNZgesmmr2M');"></div>
+<div class="absolute inset-0 bg-gradient-to-r from-primary/80 to-transparent"></div>
+<div class="absolute inset-0 p-lg flex flex-col justify-center">
+<h2 class="text-headline-lg font-headline-lg text-white mb-2 max-w-sm">Browse Catalogs &amp; Profiles</h2>
+<button class="glass-button w-max px-6 py-2 rounded-lg text-white font-semibold text-label-md font-label-md mt-4 backdrop-blur-xl bg-white/20 border-white/30 flex items-center gap-2">
+                        View Now
+                        <span class="material-symbols-outlined text-sm" data-icon="arrow_forward">arrow_forward</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Right Column: Sidebar -->
+<div class="md:col-span-4 flex flex-col gap-gutter">
+<!-- New Arrivals -->
+<div class="glass-card rounded-[24px] p-md flex flex-col h-full">
+<h3 class="text-headline-md font-headline-md text-on-surface mb-md flex items-center gap-2">
+<span class="material-symbols-outlined text-primary" data-icon="new_releases">new_releases</span>
+                    New Arrivals
+                </h3>
+<div class="flex-grow space-y-4">
+<!-- Item 1 -->
+<div class="flex items-center gap-3 p-2 rounded-lg hover:bg-white/40 transition-colors cursor-pointer">
+<div class="w-12 h-12 rounded-md bg-surface-container-highest overflow-hidden border border-white/50">
+<img alt="Minimalist Lamp" class="w-full h-full object-cover" data-alt="A sleek, modern minimalist table lamp with a geometric design, casting a soft warm light against a clean, bright white background. High contrast, studio lighting." src="https://lh3.googleusercontent.com/aida-public/AB6AXuC42eyoiGO6UF-5aJoH9ZnbbBQeWz0L73SpJJnvmzMftKCVNPrIz4ve9P68b-Hf9ThsyxUpkmLkVP_1-0pRCjd9vOUs79PoZ41jJxFneIojmG5N0cv8NaKFCa0hb-Ni8OUyzS57KMm2LQbqsC_vM6XXB34N1Uwr0uZikiiC3s8u6VFeG8VuZ4xw-HIzA9xZGFBgrdbg5wH2ZV9ymzXiYTlIQAZ_hIacehbf6qtom-bf5-Q_Fb32f4pxqIq-mw5xZwf538x0H4fWNJM"/>
+</div>
+<div class="flex-grow">
+<h4 class="text-label-md font-label-md font-bold text-on-surface">Nova Pendant</h4>
+<p class="text-label-sm font-label-sm text-on-surface-variant">Added 2 days ago</p>
+</div>
+<span class="text-primary font-semibold text-label-md">$120</span>
+</div>
+<!-- Item 2 -->
+<div class="flex items-center gap-3 p-2 rounded-lg hover:bg-white/40 transition-colors cursor-pointer">
+<div class="w-12 h-12 rounded-md bg-surface-container-highest overflow-hidden border border-white/50">
+<img alt="Outdoor Sconce" class="w-full h-full object-cover" data-alt="A contemporary outdoor wall sconce featuring a matte black finish and frosted glass, mounted on a subtly textured white wall in bright daylight." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAmsKLQCrCrxgv_Y7G7lF2xiMd0F90b672ik5US3NHfGq9g6dgUcvuc_cmoYHQv8gz0SkaV9nRMxj1bwjrgRD9zSMAYKd9JDeNakPM-OL00VUaE_Z11PejXVxNYO3GpNRulTgXczFHZ-MMGRGML6n9q_aGglzjol50n3kKX0Mq5Cz_2Fr6mDQHef88f-YE7opfPlEZbpAIpdqbtLJHSYL24xZmc8MW1tBlZVbGj33_Jh__U9R0txBb4ZeeAllJ3DT7BAtl5rkBnuMU"/>
+</div>
+<div class="flex-grow">
+<h4 class="text-label-md font-label-md font-bold text-on-surface">Vela Sconce</h4>
+<p class="text-label-sm font-label-sm text-on-surface-variant">Added 4 days ago</p>
+</div>
+<span class="text-primary font-semibold text-label-md">$85</span>
+</div>
+<!-- Item 3 -->
+<div class="flex items-center gap-3 p-2 rounded-lg hover:bg-white/40 transition-colors cursor-pointer">
+<div class="w-12 h-12 rounded-md bg-surface-container-highest overflow-hidden border border-white/50">
+<img alt="Smart Bulb" class="w-full h-full object-cover" data-alt="A futuristic smart LED bulb resting on a reflective white surface, emitting a soft multi-colored glow, highlighting a clean, tech-forward aesthetic." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDDnfRBkk8taqhrJ_U7XvDgPz3zx6oPjUqkISurF-1mZwAtjx6sE3C_gT0jVjqlIhY6e6Xp5yd2IH06zo59CjH15R-Z-Y38lLFuvBF0rkBK2IOgnxifeisfHOE1WOcjKrAP63b6pEIFsbtJ8cDmu05_3OJO4ZxuowQBHrHTIRK_7_5aIb86nc70BCyflVYJHJs0OCBKtCTwiakKgoGsPX4_yVN3jMehUA58ZlgWKFaleUiU16kO0s7M3bi6EvY_tiXd8GS-mNLDWls"/>
+</div>
+<div class="flex-grow">
+<h4 class="text-label-md font-label-md font-bold text-on-surface">Smart LED v2</h4>
+<p class="text-label-sm font-label-sm text-on-surface-variant">Added 1 week ago</p>
+</div>
+<span class="text-primary font-semibold text-label-md">$45</span>
+</div>
+</div>
+<button class="w-full mt-md py-3 glass-button rounded-xl text-primary font-semibold text-label-md font-label-md border-primary/20 hover:border-primary/50">
+                    Show More Arrivals
+                </button>
+</div>
+<!-- Credit Note Items -->
+<div class="glass-card rounded-[24px] p-md flex flex-col">
+<h3 class="text-headline-md font-headline-md text-on-surface mb-md flex items-center gap-2">
+<span class="material-symbols-outlined text-secondary" data-icon="receipt_long">receipt_long</span>
+                    Credit Note Items
+                </h3>
+<div class="space-y-3">
+<div class="p-3 rounded-lg bg-white/30 border border-white/40 backdrop-blur-sm flex justify-between items-center">
+<div>
+<p class="text-label-md font-label-md font-bold text-on-surface">CN-2023-089</p>
+<p class="text-label-sm font-label-sm text-on-surface-variant">Customer: TechCorp</p>
+</div>
+<span class="text-error font-semibold text-label-md">-$450.00</span>
+</div>
+<div class="p-3 rounded-lg bg-white/30 border border-white/40 backdrop-blur-sm flex justify-between items-center">
+<div>
+<p class="text-label-md font-label-md font-bold text-on-surface">CN-2023-091</p>
+<p class="text-label-sm font-label-sm text-on-surface-variant">Customer: DesignStudio</p>
+</div>
+<span class="text-error font-semibold text-label-md">-$120.00</span>
+</div>
+</div>
+<button class="w-full mt-md py-3 glass-button rounded-xl text-secondary font-semibold text-label-md font-label-md border-secondary/20 hover:border-secondary/50">
+                    View All Credit Notes
+                </button>
+</div>
+</div>
+</main>
+<!-- Footer -->
+<footer class="w-full py-md px-margin-desktop flex flex-col md:flex-row justify-between items-center gap-base bg-white/40 dark:bg-black/20 backdrop-blur-[12px] border-t border-white/20 dark:border-white/5 mt-xl">
+<p class="text-body-md font-body-md text-on-surface dark:text-on-surface-variant">© 2024 SalesPulse Analytics. All rights reserved.</p>
+<div class="flex gap-md">
+<a class="text-label-sm font-label-sm text-on-surface-variant dark:text-outline-variant hover:text-primary dark:hover:text-primary-fixed-dim transition-colors duration-200" href="#">Privacy Policy</a>
+<a class="text-label-sm font-label-sm text-on-surface-variant dark:text-outline-variant hover:text-primary dark:hover:text-primary-fixed-dim transition-colors duration-200" href="#">Terms of Service</a>
+<a class="text-label-sm font-label-sm text-on-surface-variant dark:text-outline-variant hover:text-primary dark:hover:text-primary-fixed-dim transition-colors duration-200" href="#">Help Center</a>
+<a class="text-label-sm font-label-sm text-on-surface-variant dark:text-outline-variant hover:text-primary dark:hover:text-primary-fixed-dim transition-colors duration-200" href="#">API Status</a>
+</div>
+</footer>
+</body></html>

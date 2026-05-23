@@ -247,7 +247,7 @@ export default function CartSidebar({ onClose, onQuotationCreated }) {
         </div>
 
         {/* Item list */}
-        <div className="flex-1 overflow-y-auto px-[14px]" style={{ maxHeight: 'calc(100vh - 460px)' }}>
+        <div data-tour="cart-modal-items" className="flex-1 overflow-y-auto px-[14px]" style={{ maxHeight: 'calc(100vh - 460px)' }}>
           {cartItems.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-[40px] text-center">
               <svg className="h-[36px] w-[36px] text-[#e5e7eb] mb-[10px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
@@ -274,7 +274,7 @@ export default function CartSidebar({ onClose, onQuotationCreated }) {
 
         {/* Totals */}
         {cartItems.length > 0 && (
-          <div className="px-[14px] pt-[10px] pb-[6px] border-t border-[#f3f4f6]">
+          <div data-tour="cart-modal-total" className="px-[14px] pt-[10px] pb-[6px] border-t border-[#f3f4f6]">
             <div className="flex justify-between text-[11px] text-[#6b7280] mb-[4px]">
               <span>Subtotal</span>
               <span>AED {subtotal.toFixed(2)}</span>
@@ -373,6 +373,7 @@ export default function CartSidebar({ onClose, onQuotationCreated }) {
                   </button>
                 )}
                 <button
+                  data-tour="cart-modal-checkout"
                   onClick={handleCreateQuotation}
                   disabled={isCreating || !selectedOpp || cartItems.length === 0}
                   className={`flex-1 py-[8px] text-[11px] font-bold uppercase tracking-[0.1em] transition-colors flex items-center justify-center gap-[6px] ${

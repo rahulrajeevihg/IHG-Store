@@ -17,6 +17,7 @@ import {
   formatStarRating,
   getBusinessSignals,
 } from "@/libs/businessSignals";
+import { formatStockQty, resolveInStock, resolveStockQty } from "./utils/stock";
 
 export default function V2QuickViewDrawer({
   open,
@@ -144,6 +145,8 @@ export default function V2QuickViewDrawer({
   ]);
 
   const summary = detail || item || {};
+  const stockQty = resolveStockQty(summary);
+  const inStock = resolveInStock(summary);
   const businessSignals = getBusinessSignals(summary);
 
   return (
@@ -173,7 +176,7 @@ export default function V2QuickViewDrawer({
                 leaveFrom="translate-x-0"
                 leaveTo="translate-x-full"
               >
-                <Dialog.Panel className="pointer-events-auto w-screen max-w-[620px] bg-[linear-gradient(180deg,#fffdf8_0%,#f9f2e8_100%)] shadow-[0_32px_80px_rgba(26,18,4,0.26)]">
+                <Dialog.Panel data-tour="quickview-drawer" className="pointer-events-auto w-screen max-w-[620px] bg-[linear-gradient(180deg,#fffdf8_0%,#f9f2e8_100%)] shadow-[0_32px_80px_rgba(26,18,4,0.26)]">
                   <div className="flex h-full flex-col overflow-y-auto">
                     <div className="border-b border-[#ece7de] bg-white/65 px-[22px] py-[18px] backdrop-blur">
                       <div className="flex items-start justify-between gap-[12px]">
@@ -210,7 +213,7 @@ export default function V2QuickViewDrawer({
                         <>
                           <div className="overflow-hidden rounded-[30px] border border-[#eadfcd] bg-[linear-gradient(180deg,#fffdf9_0%,#fff7ec_100%)] shadow-[0_20px_44px_rgba(59,39,8,0.08)]">
                             <div className="border-b border-[#efe3d2] bg-[radial-gradient(circle_at_top,_#fffefb,_#f7efe3_75%)] px-[18px] pb-[16px] pt-[18px]">
-                              <div className="mb-[14px] flex h-[280px] items-center justify-center overflow-hidden rounded-[24px] border border-[#ece7de] bg-white shadow-[inset_0_1px_0_rgba(255,255,255,0.6)]">
+                              <div data-tour="quickview-image" className="mb-[14px] flex h-[280px] items-center justify-center overflow-hidden rounded-[24px] border border-[#ece7de] bg-white shadow-[inset_0_1px_0_rgba(255,255,255,0.6)]">
                                 <ImageLoader
                                   height={260}
                                   width={260}
@@ -254,7 +257,7 @@ export default function V2QuickViewDrawer({
 
                             <div className="px-[18px] py-[18px]">
                               <div className="grid gap-[12px] md:grid-cols-2">
-                                <div className="rounded-[22px] border border-[#eadfcd] bg-white p-[16px]">
+                                <div data-tour="quickview-price" className="rounded-[22px] border border-[#eadfcd] bg-white p-[16px]">
                                   <p className="text-[11px] font-semibold uppercase tracking-[0.45px] text-[#8f7d62]">
                                     {promoActive(summary) ? "Promo Price" : "Price"}
                                   </p>
@@ -277,18 +280,18 @@ export default function V2QuickViewDrawer({
                                   <p className="text-[11px] font-semibold uppercase tracking-[0.45px] text-[#8f7d62]">
                                     Availability
                                   </p>
-                                  <p className={`mt-[6px] text-[26px] font-semibold ${stockInDrawer(summary) ? "text-[#171717]" : "text-[#9ca3af]"}`}>
-                                    {stockInDrawer(summary) ? (Number(summary.stock) > 0 ? Number(summary.stock) : "In") : "Out"}
+                                  <p className={`mt-[6px] text-[26px] font-semibold ${inStock ? "text-[#171717]" : "text-[#9ca3af]"}`}>
+                                    {inStock ? (stockQty > 0 ? formatStockQty(stockQty) : "In") : "Out"}
                                   </p>
                                   <p className="mt-[4px] text-[13px] text-[#5f5548]">
-                                    {stockInDrawer(summary)
-                                      ? `In stock${Number(summary.stock) > 0 && summary.stock_uom ? `: ${summary.stock_uom}` : ""}`
+                                    {inStock
+                                      ? `In stock${stockQty > 0 && summary.stock_uom ? `: ${summary.stock_uom}` : ""}`
                                       : "Out of stock"}
                                   </p>
                                 </div>
                               </div>
 
-                              <div className="mt-[14px] grid gap-[10px] rounded-[22px] border border-[#eadfcd] bg-white p-[16px] text-[13px] text-[#444] md:grid-cols-2">
+                              <div data-tour="quickview-stock-table" className="mt-[14px] grid gap-[10px] rounded-[22px] border border-[#eadfcd] bg-white p-[16px] text-[13px] text-[#444] md:grid-cols-2">
                                 <Info label="Brand" value={summary.brand || "-"} />
                                 <Info
                                   label="Category"
@@ -301,8 +304,8 @@ export default function V2QuickViewDrawer({
                                 <Info
                                   label="Stock"
                                   value={
-                                    stockInDrawer(summary)
-                                      ? `${Number(summary.stock) > 0 ? `${Number(summary.stock)} ` : ""}${summary.stock_uom || "in stock"}`
+                                    inStock
+                                      ? `${stockQty > 0 ? `${formatStockQty(stockQty)} ` : ""}${summary.stock_uom || "in stock"}`
                                       : "Out of stock"
                                   }
                                 />
@@ -344,6 +347,7 @@ export default function V2QuickViewDrawer({
                                   {isWishlisted ? "Saved" : "Save"}
                                 </button>
                                 <button
+                                  data-tour="quickview-navigate"
                                   type="button"
                                   onClick={() => onNavigate(summary)}
                                   className="rounded-[16px] border border-[#d8cfbf] bg-[#fff8ec] px-[14px] py-[12px] text-[13px] font-semibold text-[#594d3a]"
@@ -354,7 +358,7 @@ export default function V2QuickViewDrawer({
                             </div>
                           </div>
 
-                          <div className="mt-[18px] overflow-hidden rounded-[28px] border border-[#eadfcd] bg-white shadow-[0_18px_40px_rgba(59,39,8,0.05)]">
+                          <div data-tour="quickview-similar" className="mt-[18px] overflow-hidden rounded-[28px] border border-[#eadfcd] bg-white shadow-[0_18px_40px_rgba(59,39,8,0.05)]">
                             <button
                               type="button"
                               onClick={() => setShowSimilar((current) => !current)}
@@ -511,10 +515,6 @@ function discountPct(summary) {
   const offer = Number(summary?.offer_rate);
   const rate = Number(summary?.rate);
   return rate > 0 ? Math.round(((rate - offer) / rate) * 100) : 0;
-}
-
-function stockInDrawer(summary) {
-  return summary?.in_stock === true || summary?.in_stock === 1 || Number(summary?.stock) > 0;
 }
 
 function Info({ label, value }) {

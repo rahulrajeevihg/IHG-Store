@@ -2,7 +2,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 const ProductDetail = dynamic(() => import("@/components/Detail/ProductDetail"), { ssr: false });
 import { useRouter } from "next/router";
-import { useSelector } from "react-redux";
+import { useSelector, useDispatch } from "react-redux";
+import { recordLmsEvent } from "@/redux/slice/lmsSlice";
+import { setTourFlag } from "@/redux/slice/tourSlice";
 import { toast } from "react-toastify";
 import {
   aiSearchProductsV2,
@@ -49,6 +51,7 @@ import {
   looksLikeSku,
   summarizeFiltersForMetrics,
 } from "./utils/format";
+import { resolveStockQty } from "./utils/stock";
 import SearchHero from "./components/SearchHero";
 import ResultsToolbar from "./components/ResultsToolbar";
 import FilterPanel, { MobileFilterDialog } from "./components/FilterPanel";
@@ -64,7 +67,7 @@ import DiagnosticsDialog from "./components/DiagnosticsDialog";
 import AiStatusBanner from "@/components/Sales/AiStatusBanner";
 import SalesAddToCartModal from "@/components/Sales/SalesAddToCartModal";
 import CartModal from "@/components/Sales/CartModal";
-import IssueReportModal from "@/components/ProductDataIssues/IssueReportModal";
+import { openRaiseQuery } from "@/redux/slice/productQuerySlice";
 import AiGuidedAssistantLauncher from "@/components/AiGuidedAssistant/AiGuidedAssistantLauncher";
 import AiGuidedAssistantDialog from "@/components/AiGuidedAssistant/AiGuidedAssistantDialog";
 
@@ -72,6 +75,8 @@ const DENSITY_STORAGE_KEY = "v2:density";
 const DEV_MODE = process.env.NODE_ENV !== "production";
 const LIVE_SEARCH_DEBOUNCE_MS = 320;
 const SEARCH_EXECUTE_DEBOUNCE_MS = 220;
+const LIVE_STOCK_CACHE_TTL_MS = 5 * 60 * 1000;
+const LIVE_STOCK_RECONCILE_LIMIT = 20;
 const AI_DISPLAY_CONTRACT_ERROR =
   "AI search response is missing display metadata. Please refresh after the backend update or use standard search.";
 const INVENTORY_VALUE_ASC = "inventory_value:asc";
@@ -86,7 +91,7 @@ const getEffectiveUnitPrice = (document = {}) => {
 };
 
 const getStockValue = (document = {}) => {
-  const stock = Number(document?.stock);
+  const stock = resolveStockQty(document);
   const qty = Number.isFinite(stock) && stock > 0 ? stock : 0;
   return qty * getEffectiveUnitPrice(document);
 };
@@ -109,6 +114,7 @@ const FILTER_SOURCE_ALIASES = {
   brand: ["brand", "brands"],
   item_group: ["item_group", "item_groups"],
   category_list: ["category_list", "categories"],
+  series: ["series"],
   input_voltage: ["input_voltage", "input"],
   lumen_output: ["lumen_output", "lumen"],
   output_current: ["output_current", "current_output"],
@@ -127,6 +133,7 @@ export default function V2SearchPage({
   rightPanel,
 }) {
   const router = useRouter();
+  const dispatch = useDispatch();
   const cartItems = useSelector((state) => state.cartSettings.cartItems);
   const wishlistItems = useSelector((state) => state.cartSettings.wishlistItems);
   const isSystemManager = useMemo(() => getIsSystemManager(), []);
@@ -170,8 +177,6 @@ export default function V2SearchPage({
   const [cartModalOpen, setCartModalOpen] = useState(false);
   const [detailModalOpen, setDetailModalOpen] = useState(false);
   const [detailModalProduct, setDetailModalProduct] = useState(null);
-  const [issueModalOpen, setIssueModalOpen] = useState(false);
-  const [issueModalProduct, setIssueModalProduct] = useState(null);
 
   const initializedRef = useRef(false);
   const syncUrlRef = useRef(false);
@@ -182,10 +187,129 @@ export default function V2SearchPage({
   const activeSearchFingerprintRef = useRef("");
   const searchDebounceTimerRef = useRef(null);
   const detailCacheRef = useRef({});
+  const liveStockCacheRef = useRef({});
+  const liveStockReconcileRunRef = useRef(0);
   const suggestionsContainerRef = useRef(null);
   const guidedAutoQuestionKeyRef = useRef("");
 
-  const searchV2Requested = searchState.search_v2 || router.query.search_v2 === "1";
+  const mergeLiveStockIntoHit = (hit, liveStock) => {
+    if (!liveStock || !liveStock.item_code) {
+      return hit;
+    }
+    const safeHit = hit && typeof hit === "object" ? hit : {};
+    const doc = safeHit?.document && typeof safeHit.document === "object" ? safeHit.document : safeHit;
+    const code = String(doc?.item_code || doc?.name || "").trim().toLowerCase();
+    if (!code || code !== String(liveStock.item_code).trim().toLowerCase()) {
+      return hit;
+    }
+
+    const nextDoc = {
+      ...doc,
+      stock: liveStock.stock,
+      total_stock: liveStock.total_stock,
+      in_stock: liveStock.in_stock ? 1 : 0,
+    };
+
+    if (safeHit?.document && typeof safeHit.document === "object") {
+      return {
+        ...safeHit,
+        document: nextDoc,
+      };
+    }
+    return nextDoc;
+  };
+
+  const reconcileHitsWithLiveStock = async (rawHits = []) => {
+    const hits = Array.isArray(rawHits) ? rawHits : [];
+    if (!hits.length) return;
+
+    const runId = ++liveStockReconcileRunRef.current;
+    const itemCodes = Array.from(
+      new Set(
+        hits
+          .slice(0, LIVE_STOCK_RECONCILE_LIMIT)
+          .map((hit) => {
+            const doc = normalizeSearchHit(hit);
+            return String(doc?.item_code || doc?.name || "").trim();
+          })
+          .filter(Boolean)
+      )
+    );
+    if (!itemCodes.length) return;
+
+    const now = Date.now();
+    const liveStocks = {};
+
+    const pendingCodes = itemCodes.filter((itemCode) => {
+      const cached = liveStockCacheRef.current[itemCode];
+      if (cached && now - cached.fetchedAt < LIVE_STOCK_CACHE_TTL_MS) {
+        liveStocks[itemCode] = cached.value;
+        return false;
+      }
+      return true;
+    });
+
+    const fetched = await Promise.all(
+      pendingCodes.map(async (itemCode) => {
+        try {
+          const response = await get_product_details(itemCode);
+          const detail = response?.message && typeof response.message === "object" ? response.message : {};
+          const stockRows = Array.isArray(detail?.stock_rows)
+            ? detail.stock_rows
+            : Array.isArray(detail?.stock)
+              ? detail.stock
+              : [];
+          const totalStock = Number(
+            detail?.total_stock ??
+              stockRows.reduce((total, row) => total + Number(row?.actual_qty || row?.available_qty || 0), 0)
+          );
+          const resolvedTotalStock = Number.isFinite(totalStock) ? totalStock : 0;
+          const inStock =
+            detail?.in_stock !== undefined
+              ? Boolean(detail.in_stock)
+              : resolvedTotalStock > 0;
+          const liveValue = {
+            item_code: itemCode,
+            stock: resolvedTotalStock,
+            total_stock: resolvedTotalStock,
+            in_stock: inStock,
+          };
+          return [itemCode, liveValue];
+        } catch (_) {
+          return null;
+        }
+      })
+    );
+
+    fetched.forEach((entry) => {
+      if (!entry) return;
+      const [itemCode, liveValue] = entry;
+      liveStocks[itemCode] = liveValue;
+      liveStockCacheRef.current[itemCode] = {
+        value: liveValue,
+        fetchedAt: Date.now(),
+      };
+    });
+
+    if (runId !== liveStockReconcileRunRef.current) {
+      return;
+    }
+
+    if (!Object.keys(liveStocks).length) {
+      return;
+    }
+
+    setResults((currentHits) =>
+      (Array.isArray(currentHits) ? currentHits : []).map((hit) => {
+        const doc = normalizeSearchHit(hit);
+        const itemCode = String(doc?.item_code || doc?.name || "").trim();
+        const liveStock = liveStocks[itemCode];
+        return liveStock ? mergeLiveStockIntoHit(hit, liveStock) : hit;
+      })
+    );
+  };
+
+  const searchV2Requested = true;
   const diagnosticsEnabled = isSystemManager && router.query.debug_v2 === "1";
   const featureFlagOverride = useMemo(
     () => buildFeatureFlagOverride(searchV2Requested),
@@ -519,6 +643,7 @@ export default function V2SearchPage({
       const hits = applyInventoryValueSortFallback(rawHits, activeState.sort_by);
 
       setResults(hits);
+      void reconcileHitsWithLiveStock(hits);
       setFound(Number(response?.found) || 0);
       setFacetMap(adaptFacetCounts(response?.facet_counts));
       setQueryDebug(response?.query_debug || null);
@@ -594,6 +719,7 @@ export default function V2SearchPage({
         if (isAiSearch) clearAiSession();
         setSearchDisabled(true);
         setError("");
+        liveStockReconcileRunRef.current += 1;
         setResults([]);
         setFound(0);
         setFacetMap({});
@@ -612,6 +738,7 @@ export default function V2SearchPage({
         clearAiSession();
       }
       setError(message);
+      liveStockReconcileRunRef.current += 1;
       setResults([]);
       setFound(0);
       setSearchLatencyMs(Math.round(performance.now() - startedAt));
@@ -763,6 +890,51 @@ export default function V2SearchPage({
     });
   };
 
+  // Emit a `filters_changed` event into the LMS event log whenever the user
+  // toggles filters. The LMS reducer ignores events while no scenario is
+  // active, so this stays cheap outside of training.
+  const filtersJson = JSON.stringify(searchState.filters || {});
+  useEffect(() => {
+    if (!hydrated) return;
+    try {
+      const filters = JSON.parse(filtersJson);
+      dispatch(recordLmsEvent({ type: "filters_changed", filters }));
+    } catch (_) { /* ignore */ }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filtersJson, hydrated]);
+
+  // Push the current visible result item codes into the LMS event log so the
+  // SKU-verification task in the "precise-filter-and-find" scenario can check
+  // whether a user-entered code matches any product currently on screen.
+  useEffect(() => {
+    if (!Array.isArray(results) || results.length === 0) return;
+    const codes = results
+      .slice(0, 50)
+      .map((hit) => {
+        const doc = hit?.document || hit;
+        return doc?.item_code || doc?.name;
+      })
+      .filter(Boolean);
+    if (codes.length === 0) return;
+    dispatch(recordLmsEvent({ type: "search_results", item_codes: codes }));
+  }, [results, dispatch]);
+
+  // Tour hook — Joyride's "Opening Product Detail…" step flips this Redux
+  // flag; we react by opening the detail sheet on the first result so the
+  // subsequent product-detail-* tour steps have real DOM targets.
+  const tourRequestOpenDetail = useSelector((state) => state.tour?.requestOpenProductDetail);
+  useEffect(() => {
+    if (!tourRequestOpenDetail) return;
+    const firstResult = results?.[0];
+    if (firstResult) {
+      const normalized = normalizeSearchHit(firstResult);
+      setDetailModalProduct(normalized);
+      setDetailModalOpen(true);
+      if (typeof window !== "undefined") window.document.body.style.overflow = "hidden";
+    }
+    dispatch(setTourFlag({ key: "requestOpenProductDetail", value: false }));
+  }, [tourRequestOpenDetail, results, dispatch]);
+
   const clearAiSearch = () => {
     clearAiSession();
     setSearchInput("");
@@ -779,6 +951,9 @@ export default function V2SearchPage({
     setSuggestionsOpen(false);
     clearAiSession();
     const query = typeof nextQuery === "string" ? nextQuery.trim() : "";
+
+    if (query) dispatch(recordLmsEvent({ type: "search", query }));
+
     updateState((current) => {
       const nextState = {
         ...current,
@@ -1057,6 +1232,7 @@ export default function V2SearchPage({
     setDrawerOpen(true);
     setQuickViewLoading(true);
     logV2Event("quick_view_opened", { item_code: document.item_code });
+    dispatch(recordLmsEvent({ type: "detail_opened", item_code: document?.item_code, source: "quick_view" }));
     try {
       const detail = await ensureProductDetail(document.item_code);
       setSelectedDetail({ ...document, ...detail });
@@ -1072,13 +1248,13 @@ export default function V2SearchPage({
   };
 
   const handleOpenIssueModal = (productDoc) => {
-    setIssueModalProduct(productDoc);
-    setIssueModalOpen(true);
+    dispatch(openRaiseQuery(productDoc));
   };
 
   const handleNavigate = (productDoc) => {
     const itemCode = productDoc?.item_code || productDoc?.name;
     if (!itemCode) return;
+    dispatch(recordLmsEvent({ type: "detail_opened", item_code: itemCode, source: "card_click" }));
     if (aiSession?.search_event_id) {
       fireAndForgetAiTracking(
         trackAiSearchClick,
@@ -1100,6 +1276,7 @@ export default function V2SearchPage({
       toast.info("Enter a search intent first.");
       return;
     }
+    dispatch(recordLmsEvent({ type: "ai_search", query: message }));
     setAiLoading(true);
     try {
       if (shouldTrackReformulation(aiSession)) {
@@ -1143,6 +1320,7 @@ export default function V2SearchPage({
       const rawHits = Array.isArray(response?.hits) ? response.hits : [];
       const sortedHits = applyInventoryValueSortFallback(rawHits, searchState.sort_by);
       setResults(sortedHits);
+      void reconcileHitsWithLiveStock(sortedHits);
       setFound(Number(response?.found) || 0);
       setFacetMap(adaptFacetCounts(response?.facet_counts));
       setQueryDebug(response?.query_debug || null);
@@ -1176,6 +1354,7 @@ export default function V2SearchPage({
         clearAiSession();
         setSearchDisabled(true);
         setError("");
+        liveStockReconcileRunRef.current += 1;
         setResults([]);
         setFound(0);
         setFacetMap({});
@@ -1187,6 +1366,7 @@ export default function V2SearchPage({
       const message = getSearchErrorMessage(err?.message);
       clearAiSession();
       setError(message);
+      liveStockReconcileRunRef.current += 1;
       setResults([]);
       setFound(0);
       setLoading(false);
@@ -1517,6 +1697,7 @@ export default function V2SearchPage({
                         salesMode={salesMode}
                         cartQty={salesMode ? getCartQty(document) : 0}
                         onAddToCart={salesMode ? handleOpenCartModal : undefined}
+                        isTourAnchor={index === 0}
                       />
                     );
                   })}
@@ -1571,15 +1752,6 @@ export default function V2SearchPage({
         isWishlisted={selectedDetail ? isWishlisted(selectedDetail) : false}
         isShortlisted={selectedDetail ? isShortlisted(selectedDetail) : false}
         searchV2Requested={searchV2Requested}
-      />
-
-      <IssueReportModal
-        open={issueModalOpen}
-        onClose={() => {
-          setIssueModalOpen(false);
-          setIssueModalProduct(null);
-        }}
-        product={issueModalProduct}
       />
 
       <AiGuidedAssistantLauncher

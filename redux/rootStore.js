@@ -6,4 +6,9 @@ const store = configureStore({
   // ... other store configurations
 });
 
+// Expose store globally for debugging (remove in production)
+if (typeof window !== 'undefined') {
+  window.__reduxStore = store;
+}
+
 export default store;

@@ -34,13 +34,22 @@ const MUTATION_METHOD_NAMES = [
     'move_all_tocart',
     'start_guided_ai_search',
     'continue_guided_ai_search',
-    'create_product_data_issue',
-    'update_product_data_issue',
-    'add_product_data_issue_comment',
-    'reopen_product_data_issue',
+    'create_product_query',
+    'post_product_query_message',
+    'mark_product_query_read',
+    'escalate_product_query_to_ticket',
+    'update_product_query',
+    'resolve_product_query',
+    'rate_product_query_solution',
+    'reopen_product_query',
 ];
 
 export const PRODUCT_DATA_MANAGER_ROLES = ['System Manager', 'Product Data Manager'];
+
+// Product Query Desk roles. Product-team admins (chat back / resolve tickets) hold
+// the ERPNext "Item Manager" role; super admins (rankings) hold "System Manager".
+export const PRODUCT_TEAM_ADMIN_ROLES = ['Item Manager', 'System Manager'];
+export const SUPER_ADMIN_ROLES = ['System Manager'];
 
 function getMutationMethodNameFromApi(api) {
     if (!api || typeof api !== 'string') return null;
@@ -62,6 +71,16 @@ export function getStoredRoles() {
 export function isProductDataManager() {
     const roles = getStoredRoles();
     return PRODUCT_DATA_MANAGER_ROLES.some((role) => roles.includes(role));
+}
+
+export function isProductTeamAdmin() {
+    const roles = getStoredRoles();
+    return PRODUCT_TEAM_ADMIN_ROLES.some((role) => roles.includes(role));
+}
+
+export function isSuperAdmin() {
+    const roles = getStoredRoles();
+    return SUPER_ADMIN_ROLES.some((role) => roles.includes(role));
 }
 
 export function getStoredUserProfile() {
@@ -943,6 +962,147 @@ export async function get_product_details(code) {
     return await parseJsonResponseSafe(response, 'get_product_details');
 }
 
+function normalizeRelatedProductCard(item) {
+    if (!item) return null;
+    const item_code = item.item_code || item.name || "";
+    if (!item_code) return null;
+    const item_name = item.item_name || item.item || item_code;
+    const image = item.image || item.website_image_url || "";
+    const stock = Number(item.stock || 0);
+    const inStockRaw = item.in_stock;
+    const in_stock = inStockRaw === 1 || inStockRaw === true || stock > 0 ? 1 : 0;
+
+    return {
+        item_code,
+        item_name,
+        item,
+        name: item_code,
+        image,
+        website_image_url: image,
+        brand: item.brand || "",
+        category_list: item.category_list || "",
+        item_group: item.item_group || "",
+        series: item.series || "",
+        stock_uom: item.stock_uom || "Nos",
+        rate: Number(item.rate || 0),
+        offer_rate: Number(item.offer_rate || 0),
+        stock,
+        in_stock,
+        manufacture_total_qty: Number(item.manufacture_total_qty || 0),
+        manufacture_stock_entry_count: Number(item.manufacture_stock_entry_count || 0),
+    };
+}
+
+function normalizeRelatedSection(section, fallbackField = "", fallbackValue = "") {
+    const rawItems = Array.isArray(section?.items) ? section.items : [];
+    const items = rawItems.map(normalizeRelatedProductCard).filter(Boolean);
+    return {
+        filter_field: section?.filter_field || fallbackField || "",
+        value: section?.value || fallbackValue || "",
+        total: Number(section?.total || items.length || 0),
+        items,
+    };
+}
+
+function normalizeManufactureEntries(entries = []) {
+    if (!Array.isArray(entries)) return [];
+    return entries.map((entry) => {
+        const items = Array.isArray(entry?.items)
+            ? entry.items.map((item) => {
+                const card = normalizeRelatedProductCard(item) || {};
+                return {
+                    ...card,
+                    qty: Number(item?.qty || 0),
+                    is_finished_item: Number(item?.is_finished_item || 0),
+                };
+            }).filter((item) => item.item_code)
+            : [];
+        return {
+            stock_entry: entry?.stock_entry || "",
+            posting_date: entry?.posting_date || "",
+            posting_time: entry?.posting_time || "",
+            items,
+        };
+    });
+}
+
+export async function get_product_related_context(itemCode, previewLimit = 8) {
+    const api = `/api/erp/api/method/igh_search.igh_search.api.get_product_related_context`;
+    const response = await fetch(api, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify({
+            item_code: itemCode || "",
+            preview_limit: Number(previewLimit || 8),
+        }),
+        credentials: 'include',
+    });
+    const payload = await parseJsonResponseSafe(response, 'get_product_related_context');
+    const message = payload?.message || payload || {};
+
+    return {
+        status: message?.status || "success",
+        item_code: message?.item_code || itemCode || "",
+        item_name: message?.item_name || "",
+        category_filter_field: message?.category_filter_field || "",
+        category_filter_value: message?.category_filter_value || "",
+        series_filter_value: message?.series_filter_value || "",
+        related_category: normalizeRelatedSection(
+            message?.related_category,
+            message?.category_filter_field || "",
+            message?.category_filter_value || ""
+        ),
+        related_series: normalizeRelatedSection(
+            message?.related_series,
+            "series",
+            message?.series_filter_value || ""
+        ),
+        bundle_parent_products: normalizeRelatedSection(message?.bundle_parent_products),
+        bundle_sibling_components: normalizeRelatedSection(message?.bundle_sibling_components),
+        manufacture_preview: {
+            total_stock_entries: Number(message?.manufacture_preview?.total_stock_entries || 0),
+            total_distinct_items: Number(message?.manufacture_preview?.total_distinct_items || 0),
+            items: Array.isArray(message?.manufacture_preview?.items)
+                ? message.manufacture_preview.items.map(normalizeRelatedProductCard).filter(Boolean)
+                : [],
+        },
+    };
+}
+
+export async function get_product_manufacture_items(itemCode, page = 1, pageLength = 20) {
+    const api = `/api/erp/api/method/igh_search.igh_search.api.get_product_manufacture_items`;
+    const response = await fetch(api, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify({
+            item_code: itemCode || "",
+            page: Number(page || 1),
+            page_length: Number(pageLength || 20),
+        }),
+        credentials: 'include',
+    });
+    const payload = await parseJsonResponseSafe(response, 'get_product_manufacture_items');
+    const message = payload?.message || payload || {};
+
+    return {
+        status: message?.status || "success",
+        item_code: message?.item_code || itemCode || "",
+        pagination: {
+            page: Number(message?.pagination?.page || 1),
+            page_length: Number(message?.pagination?.page_length || pageLength || 20),
+            total_entries: Number(message?.pagination?.total_entries || 0),
+            total_pages: Number(message?.pagination?.total_pages || 0),
+            has_next: Boolean(message?.pagination?.has_next),
+            has_prev: Boolean(message?.pagination?.has_prev),
+        },
+        summary: {
+            total_distinct_items: Number(message?.summary?.total_distinct_items || 0),
+            total_stock_entries: Number(message?.summary?.total_stock_entries || 0),
+        },
+        entries: normalizeManufactureEntries(message?.entries || []),
+    };
+}
+
 export async function get_brands_list(keys, data) {
     const api = `/api/erp/api/method/get_brands`;
     const response = await fetch(api, {
@@ -975,55 +1135,78 @@ export async function get_recent_quotations() {
     return resp;
 }
 
-function normalizeProductDataIssueRow(issue) {
-    if (!issue) return null;
+export async function get_sales_dashboard_reports() {
+    let api = methodUrl + 'igh_search.igh_search.api.get_sales_dashboard_reports';
+    const resp = await postMethod(api, {});
+    return resp;
+}
+
+function normalizeProductQueryRow(query) {
+    if (!query) return null;
 
     return {
-        id: issue.name || issue.id || '',
-        item_code: issue.item_code || '',
-        item_name_snapshot: issue.item_name_snapshot || '',
-        reporter_user: issue.reporter_user || '',
-        reporter_name: issue.reporter_name || '',
-        reporter_role_snapshot: issue.reporter_role_snapshot || '',
-        issue_type: issue.issue_type || '',
-        severity: issue.severity || '',
-        affected_field: issue.affected_field || '',
-        current_value_snapshot: issue.current_value_snapshot || '',
-        suggested_value: issue.suggested_value || '',
-        description: issue.description || '',
-        attachment: issue.attachment || issue.attachment_url || '',
-        status: issue.status || '',
-        assigned_to: issue.assigned_to || '',
-        resolution_notes: issue.resolution_notes || '',
-        created_at: issue.creation || issue.created_at || '',
-        modified_at: issue.modified || issue.modified_at || '',
-        open_issue_count: Number(issue.open_issue_count || 0),
+        id: query.name || query.id || '',
+        item_code: query.item_code || '',
+        item_name_snapshot: query.item_name_snapshot || '',
+        brand: query.brand || '',
+        category_list: query.category_list || '',
+        website_image_url: query.website_image_url || '',
+        subject: query.subject || '',
+        query_type: query.query_type || '',
+        affected_field: query.affected_field || '',
+        severity: query.severity || '',
+        current_value_snapshot: query.current_value_snapshot || '',
+        suggested_value: query.suggested_value || '',
+        reporter_user: query.reporter_user || '',
+        reporter_name: query.reporter_name || '',
+        reporter_role_snapshot: query.reporter_role_snapshot || '',
+        stage: query.stage || 'chat',
+        status: query.status || 'open',
+        assigned_to: query.assigned_to || '',
+        solution_notes: query.solution_notes || '',
+        resolved_by: query.resolved_by || '',
+        resolved_at: query.resolved_at || '',
+        first_response_at: query.first_response_at || '',
+        solution_rating: Number(query.solution_rating || 0),
+        rating_comment: query.rating_comment || '',
+        unread_for_reporter: Number(query.unread_for_reporter || 0),
+        unread_for_admin: Number(query.unread_for_admin || 0),
+        last_message_at: query.last_message_at || '',
+        last_message_preview: query.last_message_preview || '',
+        created_at: query.creation || query.created_at || '',
+        modified_at: query.modified || query.modified_at || '',
     };
 }
 
-function normalizeProductDataIssueComment(comment) {
-    if (!comment) return null;
+function normalizeProductQueryMessage(message) {
+    if (!message) return null;
 
     return {
-        id: comment.name || '',
-        owner: comment.owner || comment.comment_by || '',
-        content: comment.content || comment.text || '',
-        created_at: comment.creation || '',
-        comment_type: comment.comment_type || 'Comment',
+        id: message.name || '',
+        query: message.query || '',
+        sender_user: message.sender_user || '',
+        sender_name: message.sender_name || '',
+        sender_role: message.sender_role || 'reporter',
+        message_type: message.message_type || 'message',
+        message: message.message || '',
+        attachment: message.attachment || '',
+        created_at: message.creation || message.created_at || '',
     };
 }
 
-function normalizeProductDataIssueDetail(payload) {
-    const source = payload?.issue || payload?.message?.issue || payload?.message || payload;
-    const comments = payload?.comments || payload?.message?.comments || [];
+function normalizeProductQueryDetail(payload) {
+    const source = payload?.query || payload?.message?.query || payload?.message || payload;
+    const messages = payload?.messages || payload?.message?.messages || [];
 
     return {
-        issue: normalizeProductDataIssueRow(source),
-        comments: Array.isArray(comments)
-            ? comments.map(normalizeProductDataIssueComment).filter(Boolean)
+        query: normalizeProductQueryRow(source),
+        messages: Array.isArray(messages)
+            ? messages.map(normalizeProductQueryMessage).filter(Boolean)
             : [],
         can_manage: Boolean(payload?.can_manage ?? payload?.message?.can_manage),
+        can_rate: Boolean(payload?.can_rate ?? payload?.message?.can_rate),
         can_reopen: Boolean(payload?.can_reopen ?? payload?.message?.can_reopen),
+        viewer_side: payload?.viewer_side ?? payload?.message?.viewer_side ?? 'reporter',
     };
 }
 
@@ -1062,71 +1245,140 @@ export async function uploadFileToErp(file, options = {}) {
     return payload?.message || payload;
 }
 
-export async function createProductDataIssue(payload) {
-    const api = methodUrl + 'igh_search.igh_search.api.create_product_data_issue';
-    const response = await postMethod(api, payload);
-    if (!response) return null;
-
-    const normalized = normalizeProductDataIssueDetail(response?.message || response);
-    return {
-        ...normalized,
-        issue: normalized.issue,
-    };
+function throwIfQueryUnavailable(payload, methodName) {
+    if (
+        payload?.exc_type === "PermissionError" ||
+        String(payload?.exc || "").includes("PermissionError") ||
+        (String(payload?.exc || "").includes(methodName) &&
+            String(payload?.exc || "").includes("has no attribute"))
+    ) {
+        const e = new Error("product_queries_unavailable");
+        e.code = "product_queries_unavailable";
+        throw e;
+    }
 }
 
-export async function listProductDataIssues(filters = {}) {
-    const api = methodUrl + 'igh_search.igh_search.api.list_product_data_issues';
+export async function createProductQuery(payload) {
+    const api = methodUrl + 'igh_search.igh_search.api.create_product_query';
+    const response = await postMethod(api, payload);
+    if (!response) return null;
+    return normalizeProductQueryDetail(response?.message || response);
+}
+
+export async function listProductQueries(filters = {}) {
+    const api = methodUrl + 'igh_search.igh_search.api.list_product_queries';
     let response;
     try {
         response = await postMethod(api, filters);
     } catch (error) {
         const message = String(error?.message || "");
-        if (
-            message.includes("list_product_data_issues") &&
-            message.includes("has no attribute")
-        ) {
-            const e = new Error("product_data_issues_unavailable");
-            e.code = "product_data_issues_unavailable";
+        if (message.includes("list_product_queries") && message.includes("has no attribute")) {
+            const e = new Error("product_queries_unavailable");
+            e.code = "product_queries_unavailable";
             throw e;
         }
         throw error;
     }
     const payload = response?.message || response || {};
-    const issues = Array.isArray(payload.items)
-        ? payload.items.map(normalizeProductDataIssueRow).filter(Boolean)
+    throwIfQueryUnavailable(payload, "list_product_queries");
+
+    const items = Array.isArray(payload.items)
+        ? payload.items.map(normalizeProductQueryRow).filter(Boolean)
         : [];
 
     return {
-        items: issues,
+        items,
         summary: payload.summary || {},
         can_manage: Boolean(payload.can_manage),
     };
 }
 
-export async function getProductDataIssue(issueId) {
-    const api = methodUrl + 'igh_search.igh_search.api.get_product_data_issue';
-    const response = await postMethod(api, { issue_id: issueId });
+export async function getProductQuery(queryId, after = null) {
+    const api = methodUrl + 'igh_search.igh_search.api.get_product_query';
+    const response = await postMethod(api, { query_id: queryId, after: after || '' });
     if (!response) return null;
-    return normalizeProductDataIssueDetail(response?.message || response);
+    return normalizeProductQueryDetail(response?.message || response);
 }
 
-export async function updateProductDataIssue(issueId, payload) {
-    const api = methodUrl + 'igh_search.igh_search.api.update_product_data_issue';
-    const response = await postMethod(api, { issue_id: issueId, ...(payload || {}) });
-    if (!response) return null;
-    return normalizeProductDataIssueDetail(response?.message || response);
-}
-
-export async function addProductDataIssueComment(payload) {
-    const api = methodUrl + 'igh_search.igh_search.api.add_product_data_issue_comment';
+export async function postProductQueryMessage(payload) {
+    const api = methodUrl + 'igh_search.igh_search.api.post_product_query_message';
     const response = await postMethod(api, payload);
     if (!response) return null;
-    return normalizeProductDataIssueDetail(response?.message || response);
+    return normalizeProductQueryDetail(response?.message || response);
 }
 
-export async function reopenProductDataIssue(issueId, payload = {}) {
-    const api = methodUrl + 'igh_search.igh_search.api.reopen_product_data_issue';
-    const response = await postMethod(api, { issue_id: issueId, ...(payload || {}) });
+export async function pollProductQueryUpdates(params = {}) {
+    const api = methodUrl + 'igh_search.igh_search.api.poll_product_query_updates';
+    let response;
+    try {
+        response = await postMethod(api, params);
+    } catch (error) {
+        const message = String(error?.message || "");
+        if (message.includes("poll_product_query_updates") && message.includes("has no attribute")) {
+            const e = new Error("product_queries_unavailable");
+            e.code = "product_queries_unavailable";
+            throw e;
+        }
+        throw error;
+    }
+    const payload = response?.message || response || {};
+    throwIfQueryUnavailable(payload, "poll_product_query_updates");
+
+    return {
+        unread_total: Number(payload.unread_total || 0),
+        open_count: payload.open_count === null || payload.open_count === undefined ? null : Number(payload.open_count),
+        is_admin: Boolean(payload.is_admin),
+        threads: Array.isArray(payload.threads) ? payload.threads : [],
+    };
+}
+
+export async function markProductQueryRead(queryId) {
+    const api = methodUrl + 'igh_search.igh_search.api.mark_product_query_read';
+    return await postMethod(api, { query_id: queryId });
+}
+
+export async function escalateProductQueryToTicket(queryId, payload = {}) {
+    const api = methodUrl + 'igh_search.igh_search.api.escalate_product_query_to_ticket';
+    const response = await postMethod(api, { query_id: queryId, ...(payload || {}) });
     if (!response) return null;
-    return normalizeProductDataIssueDetail(response?.message || response);
+    return normalizeProductQueryDetail(response?.message || response);
+}
+
+export async function updateProductQuery(queryId, payload = {}) {
+    const api = methodUrl + 'igh_search.igh_search.api.update_product_query';
+    const response = await postMethod(api, { query_id: queryId, ...(payload || {}) });
+    if (!response) return null;
+    return normalizeProductQueryDetail(response?.message || response);
+}
+
+export async function resolveProductQuery(queryId, solutionNotes) {
+    const api = methodUrl + 'igh_search.igh_search.api.resolve_product_query';
+    const response = await postMethod(api, { query_id: queryId, solution_notes: solutionNotes });
+    if (!response) return null;
+    return normalizeProductQueryDetail(response?.message || response);
+}
+
+export async function rateProductQuerySolution(queryId, rating, comment = '') {
+    const api = methodUrl + 'igh_search.igh_search.api.rate_product_query_solution';
+    const response = await postMethod(api, { query_id: queryId, rating, comment });
+    if (!response) return null;
+    return normalizeProductQueryDetail(response?.message || response);
+}
+
+export async function reopenProductQuery(queryId, reason = '') {
+    const api = methodUrl + 'igh_search.igh_search.api.reopen_product_query';
+    const response = await postMethod(api, { query_id: queryId, reason });
+    if (!response) return null;
+    return normalizeProductQueryDetail(response?.message || response);
+}
+
+export async function getProductQueryRankings(periodDays = 30) {
+    const api = methodUrl + 'igh_search.igh_search.api.get_product_query_rankings';
+    const response = await postMethod(api, { period_days: periodDays });
+    const payload = response?.message || response || {};
+    throwIfQueryUnavailable(payload, "get_product_query_rankings");
+    return {
+        period_days: Number(payload.period_days || periodDays),
+        leaderboard: Array.isArray(payload.leaderboard) ? payload.leaderboard : [],
+    };
 }

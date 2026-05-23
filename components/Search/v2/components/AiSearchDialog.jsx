@@ -49,7 +49,7 @@ export default function AiSearchDialog({ open, onClose, aiPrompt, setAiPrompt, l
               leaveFrom="opacity-100 translate-y-0 scale-100"
               leaveTo="opacity-0 translate-y-4 scale-[0.985]"
             >
-              <Dialog.Panel className="relative w-full max-w-[820px] overflow-hidden rounded-[28px] border border-[#d8e1ea] bg-[#f7fafc] shadow-[0_28px_80px_rgba(3,8,20,0.32)]">
+              <Dialog.Panel data-tour="ai-search-dialog" className="relative w-full max-w-[820px] overflow-hidden rounded-[28px] border border-[#d8e1ea] bg-[#f7fafc] shadow-[0_28px_80px_rgba(3,8,20,0.32)]">
                 <div className="absolute inset-x-0 top-0 h-[140px] bg-[radial-gradient(circle_at_top_left,_rgba(17,24,39,0.08),_transparent_52%),radial-gradient(circle_at_top_right,_rgba(27,109,255,0.16),_transparent_40%)]" />
 
                 <div className="relative flex flex-col">
@@ -73,6 +73,7 @@ export default function AiSearchDialog({ open, onClose, aiPrompt, setAiPrompt, l
                       </div>
 
                       <button
+                        data-tour="ai-search-dialog-close"
                         type="button"
                         onClick={onClose}
                         className="inline-flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-full border border-[#e2e8f0] bg-white text-[#64748b] transition hover:border-[#111827] hover:text-[#111827]"
@@ -101,6 +102,7 @@ export default function AiSearchDialog({ open, onClose, aiPrompt, setAiPrompt, l
 
                       <div className="mt-[16px] rounded-[22px] border border-[#d8e1ea] bg-[#fbfdff] p-[12px] focus-within:border-[#111827] focus-within:shadow-[0_0_0_4px_rgba(17,24,39,0.05)]">
                         <textarea
+                          data-tour="ai-search-dialog-input"
                           value={aiPrompt}
                           onChange={(event) => setAiPrompt(event.target.value)}
                           rows={7}
@@ -111,6 +113,7 @@ export default function AiSearchDialog({ open, onClose, aiPrompt, setAiPrompt, l
 
                       <div className="mt-[16px] flex flex-wrap items-center gap-[10px]">
                         <button
+                          data-tour="ai-search-dialog-apply"
                           type="button"
                           onClick={onApply}
                           disabled={loading || isPromptEmpty}
@@ -137,7 +140,7 @@ export default function AiSearchDialog({ open, onClose, aiPrompt, setAiPrompt, l
                       </div>
                     </section>
 
-                    <aside className="space-y-[16px]">
+                    <aside data-tour="ai-search-dialog-examples" className="space-y-[16px]">
                       <section className="rounded-[24px] border border-[#dde6ee] bg-white p-[16px] shadow-[0_10px_24px_rgba(15,23,42,0.05)]">
                         <div className="flex items-center gap-[10px]">
                           <span className="grid h-[34px] w-[34px] place-items-center rounded-[12px] bg-[#edf4ff] text-[#1d4ed8]">

@@ -1,0 +1,784 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Products App 2.0</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --bg: #ffffff;
+    --ink: #0a0a0a;
+    --ink-2: #1a1a1a;
+    --muted: #6b6b70;
+    --line: rgba(10,10,10,0.08);
+    --chip: #f2f2f3;
+    --chip-hover: #e9e9eb;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: 'Geist', ui-sans-serif, system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    overflow-x: hidden;
+  }
+  body { min-height: 100vh; }
+
+  /* ---------- Navbar ---------- */
+  .nav {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    z-index: 30;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 18px 28px;
+    background: rgba(255,255,255,0.72);
+    backdrop-filter: saturate(140%) blur(10px);
+    -webkit-backdrop-filter: saturate(140%) blur(10px);
+    border-bottom: 1px solid transparent;
+    transition: border-color .25s ease, background .25s ease;
+  }
+  .nav.scrolled {
+    border-bottom-color: var(--line);
+    background: rgba(255,255,255,0.86);
+  }
+  .brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    font-weight: 600;
+    font-size: 15px;
+    letter-spacing: -0.01em;
+    color: var(--ink);
+    text-decoration: none;
+  }
+  .brand-logo {
+    height: 34px;
+    width: 34px;
+    border-radius: 8px;
+    display: block;
+    object-fit: contain;
+  }
+
+  .menu {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(245,245,247,0.6);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 4px;
+  }
+  .menu a {
+    display: inline-flex;
+    align-items: center;
+    height: 34px;
+    padding: 0 14px;
+    border-radius: 999px;
+    font-size: 13.5px;
+    font-weight: 500;
+    color: #2a2a2e;
+    text-decoration: none;
+    letter-spacing: -0.005em;
+    transition: background .15s ease, color .15s ease;
+  }
+  .menu a:hover { background: #ffffff; color: var(--ink); }
+
+  .nav-right {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .user-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    padding: 4px 14px 4px 4px;
+    border-radius: 999px;
+    background: rgba(245, 245, 247, 0.75);
+    border: 1px solid var(--line);
+    transition: background .15s ease;
+    text-decoration: none;
+    color: inherit;
+  }
+  .user-pill:hover { background: #ffffff; }
+  .user-pill .avatar {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #1a1a1a 0%, #4a4a4a 100%);
+    color: #ffffff;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    flex-shrink: 0;
+  }
+  .user-pill .uname {
+    font-size: 13.5px;
+    font-weight: 500;
+    color: var(--ink);
+    letter-spacing: -0.005em;
+  }
+
+  /* ---------- Hero ---------- */
+  .hero {
+    position: relative;
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    padding: 120px 24px 80px;
+    isolation: isolate;
+  }
+  #particles {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 0;
+    pointer-events: none;
+  }
+  /* No edge vignette - particles fill all the way to the viewport edges,
+     matching the reference look. */
+
+  /* ---------- Fading product image backdrop ---------- */
+  .product-bg {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    pointer-events: none;
+    overflow: hidden;
+  }
+  .product-bg .pcard {
+    position: absolute;
+    left: 0;
+    top: 0;
+    background: #ffffff;
+    border: 1px solid rgba(10, 10, 10, 0.06);
+    border-radius: 0;
+    box-shadow:
+      0 1px 2px rgba(10, 10, 10, 0.04),
+      0 8px 24px -10px rgba(10, 10, 10, 0.10),
+      0 24px 60px -28px rgba(10, 10, 10, 0.18);
+    padding: 14px;
+    opacity: 0;
+    transform: translate(-50%, -50%);
+    will-change: opacity, transform;
+    user-select: none;
+  }
+  .product-bg .pcard img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    filter: contrast(0.97);
+    pointer-events: none;
+    -webkit-user-drag: none;
+  }
+  .product-bg .pcard .plabel {
+    position: absolute;
+    left: 14px;
+    bottom: 10px;
+    font-family: 'Geist Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 10px;
+    color: #9a9aa0;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  .hero-inner {
+    position: relative;
+    z-index: 2;
+    max-width: 1080px;
+    width: 100%;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 28px;
+  }
+  .eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 14px 6px 8px;
+    border-radius: 999px;
+    background: rgba(255,255,255,0.7);
+    border: 1px solid var(--line);
+    font-size: 12.5px;
+    font-weight: 500;
+    color: #3a3a3e;
+    letter-spacing: -0.005em;
+    backdrop-filter: blur(6px);
+  }
+  .eyebrow .dot {
+    width: 16px; height: 16px;
+    border-radius: 50%;
+    background: conic-gradient(from 200deg, #4f8cff, #ff5a5f, #ffc844, #a169ff, #ff8a3d, #4f8cff);
+    box-shadow: inset 0 0 0 3px #fff;
+  }
+
+  h1.headline {
+    font-family: 'Geist', sans-serif;
+    font-weight: 600;
+    font-size: clamp(40px, 7.2vw, 96px);
+    line-height: 0.98;
+    letter-spacing: -0.035em;
+    color: var(--ink);
+    margin: 0;
+    max-width: 16ch;
+    text-wrap: balance;
+  }
+  h1.headline em {
+    font-style: normal;
+    font-family: 'Geist', sans-serif;
+    background: linear-gradient(90deg, #0a0a0a 0%, #2a2a2e 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  .sub {
+    font-size: clamp(15px, 1.3vw, 17px);
+    color: var(--muted);
+    max-width: 56ch;
+    line-height: 1.5;
+    margin: 0;
+    letter-spacing: -0.005em;
+  }
+
+  .ctas {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    justify-content: center;
+    margin-top: 4px;
+  }
+  .cta {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    height: 52px;
+    padding: 0 26px;
+    border-radius: 999px;
+    font-size: 15px;
+    font-weight: 500;
+    text-decoration: none;
+    letter-spacing: -0.005em;
+    transition: transform .15s ease, background .15s ease, box-shadow .15s ease;
+  }
+  .cta-primary {
+    background: var(--ink);
+    color: #fff;
+    border: 1px solid var(--ink);
+    box-shadow: 0 1px 0 rgba(255,255,255,0.4) inset, 0 6px 24px -10px rgba(0,0,0,0.4);
+  }
+  .cta-primary:hover { background: #1f1f22; transform: translateY(-1px); }
+  .cta-secondary {
+    background: var(--chip);
+    color: var(--ink);
+    border: 1px solid var(--line);
+  }
+  .cta-secondary:hover { background: var(--chip-hover); transform: translateY(-1px); }
+  .cta svg { width: 16px; height: 16px; }
+
+  .footnote {
+    margin-top: 14px;
+    font-family: 'Geist Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 11.5px;
+    color: #9a9aa0;
+    letter-spacing: 0.02em;
+  }
+
+  /* ---------- Mobile ---------- */
+  @media (max-width: 820px) {
+    .menu { display: none; }
+    .nav { padding: 14px 18px; }
+    .user-pill .uname { display: none; }
+    .user-pill { padding: 4px; }
+    .hero { padding: 110px 20px 60px; }
+    .cta { height: 48px; padding: 0 22px; font-size: 14.5px; }
+  }
+</style>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <a href="#" class="brand" aria-label="IHG home">
+    <img src="assets/logo.png" alt="IHG" class="brand-logo" />
+  </a>
+  <div class="nav-right">
+    <a href="#account" class="user-pill" aria-label="Account">
+      <span class="avatar" aria-hidden="true">AK</span>
+      <span class="uname">Ashwin Kumar</span>
+    </a>
+  </div>
+</nav>
+
+<section class="hero">
+  <canvas id="particles" aria-hidden="true"></canvas>
+  <div class="product-bg" id="productBg" aria-hidden="true"></div>
+
+  <div class="hero-inner">
+    <h1 class="headline">Products App <em>2.0</em></h1>
+
+    <p class="sub">
+      One smart destination to explore every product &mdash; enhanced with AI for effortless search and discovery.
+    </p>
+
+    <div class="ctas">
+      <a href="#explore" class="cta cta-primary">
+        Explore Products
+        <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+          <path d="M4 8h8m0 0l-3-3m3 3l-3 3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </a>
+    </div>
+  </div>
+</section>
+
+<script>
+  // Scroll shadow on nav
+  const navEl = document.getElementById('nav');
+  const onScroll = () => navEl.classList.toggle('scrolled', window.scrollY > 4);
+  window.addEventListener('scroll', onScroll, { passive: true });
+  onScroll();
+</script>
+
+<script>
+/* -------------------------------------------------------
+   Floating product CARDS, scattered across the hero.
+   Each card pulses (slow heartbeat) with subtle float + parallax.
+   Positions are intentionally asymmetric (not a ring) and avoid the
+   headline's central column. They also reflow on resize.
+-------------------------------------------------------- */
+(() => {
+  const host = document.getElementById('productBg');
+  if (!host) return;
+  host.innerHTML = '';
+
+  // Asymmetric scatter — not a ring. Each entry: x/y are 0..1 fractions of the
+  // hero; w/h are card pixel dimensions. Periods/phases vary so the pulses
+  // never sync. SKUs are placeholder labels (replace with real codes).
+  const NODES = [
+    { src: 'assets/products/p1.png',  x: 0.08, y: 0.22, w: 170, h: 170, period: 5.8, phase: 0.0, parallax: 1.0 },
+    { src: 'assets/products/p4.png',  x: 0.27, y: 0.78, w: 130, h: 130, period: 4.9, phase: 1.6, parallax: 0.7 },
+    { src: 'assets/products/p2.png',  x: 0.86, y: 0.18, w: 120, h: 120, period: 6.4, phase: 2.3, parallax: 1.2 },
+    { src: 'assets/products/p9.png',  x: 0.92, y: 0.48, w: 150, h: 150, period: 5.3, phase: 0.9, parallax: 1.1 },
+    { src: 'assets/products/p6.png',  x: 0.04, y: 0.62, w: 110, h: 130, period: 5.6, phase: 3.0, parallax: 0.8 },
+    { src: 'assets/products/p10.png', x: 0.72, y: 0.86, w: 145, h: 145, period: 4.6, phase: 2.0, parallax: 1.0 },
+    { src: 'assets/products/p5.png',  x: 0.55, y: 0.08, w: 110, h: 110, period: 6.1, phase: 4.1, parallax: 0.9 },
+  ];
+
+  const PEAK   = 0.55;
+  const TROUGH = 0.05;
+
+  const items = NODES.map(n => {
+    const card = document.createElement('div');
+    card.className = 'pcard';
+    card.style.width  = n.w + 'px';
+    card.style.height = n.h + 'px';
+    const img = document.createElement('img');
+    img.src = n.src;
+    img.alt = '';
+    card.appendChild(img);
+    host.appendChild(card);
+    return { ...n, card };
+  });
+
+  const heroEl = host.parentElement;
+
+  function placeAll() {
+    const rect = heroEl.getBoundingClientRect();
+    items.forEach(it => {
+      it._x = rect.width  * it.x;
+      it._y = rect.height * it.y;
+    });
+  }
+  placeAll();
+  window.addEventListener('resize', () => {
+    clearTimeout(window.__pbTO);
+    window.__pbTO = setTimeout(placeAll, 80);
+  });
+
+  const t0 = performance.now();
+  let running = true;
+
+  function frame(now) {
+    if (!running) return;
+    const tSec = (now - t0) / 1000;
+    for (const it of items) {
+      const u = (Math.sin((tSec / it.period) * Math.PI * 2 + it.phase) + 1) * 0.5;
+      const eased = u * u * (3 - 2 * u);
+      const op = TROUGH + (PEAK - TROUGH) * eased;
+
+      const floatY = Math.sin(tSec * 0.55 + it.phase * 1.7) * 8 * it.parallax;
+      const floatX = Math.cos(tSec * 0.40 + it.phase * 1.2) * 4 * it.parallax;
+      const scale  = 0.94 + eased * 0.08;
+
+      it.card.style.opacity = op.toFixed(3);
+      it.card.style.transform =
+        `translate(-50%, -50%) translate(${(it._x + floatX).toFixed(1)}px, ${(it._y + floatY).toFixed(1)}px) scale(${scale.toFixed(3)})`;
+    }
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+
+  document.addEventListener('visibilitychange', () => {
+    running = !document.hidden;
+    if (running) requestAnimationFrame(frame);
+  });
+})();
+</script>
+
+<script>
+/* -------------------------------------------------------
+   Antigravity-style radial dash particle field.
+
+   - 600–1200 particles, each a short rounded radial dash
+   - Distributed in polar coords: baseRadius + baseAngle + depth
+   - Slow outward drift + sine-driven breathing/rotation
+   - Pointer push-away + swirl, modulated by pointer velocity
+   - offset returns home with exponential decay (no chasing)
+-------------------------------------------------------- */
+(() => {
+  const canvas = document.getElementById('particles');
+  const ctx = canvas.getContext('2d', { alpha: true });
+
+  // Muted, slightly darker Google-ish palette — reads on white but doesn't shout.
+  const PALETTE = [
+    '#3B6FC9', // navy blue
+    '#C24A4A', // muted red
+    '#C99B2A', // ochre yellow
+    '#7A52C2', // muted purple
+    '#C9722E', // burnt orange
+  ];
+
+  let DPR = Math.min(window.devicePixelRatio || 1, 2);
+  let W = 0, H = 0, CX = 0, CY = 0, FIELD_R = 0;
+  let particles = [];
+  let t0 = performance.now();
+  let running = true;
+
+  // Pointer state
+  const mouse = {
+    x: -9999, y: -9999,
+    sx: -9999, sy: -9999,       // smoothed (lagged) cursor — fed into the field
+    px: -9999, py: -9999,
+    vx: 0, vy: 0,
+    speed: 0,
+    dirX: 1, dirY: 0,
+    active: false,
+    lastT: 0,
+  };
+
+  // ----- Cursor field -----
+  // EXCLUSION: cleared zone right at the cursor (no particles inside)
+  // RADIUS:    outer edge of magnetic attraction
+  let EXCLUSION = 40;
+  let RADIUS    = 1200;            // huge — effectively all particles feel pull
+  const MAX_PULL    = 55;          // max pull toward cursor (px)
+  const REACTIVITY  = 0.06;        // spring stiffness (low = slow & soft)
+  let RADIUS_SQ     = RADIUS * RADIUS;
+
+  const prefersReduced =
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  function rand(a, b) { return a + Math.random() * (b - a); }
+  function pick(arr) { return arr[(Math.random() * arr.length) | 0]; }
+
+  function resize() {
+    const rect = canvas.getBoundingClientRect();
+    W = rect.width; H = rect.height;
+    CX = W / 2; CY = H / 2;
+    // Field reaches all 4 corners so dashes fill the whole viewport.
+    FIELD_R = Math.hypot(W, H) / 2 + 40;
+    // Cursor attraction radius scales with viewport so all particles feel pull
+    RADIUS = Math.hypot(W, H) * 0.7;
+    RADIUS_SQ = RADIUS * RADIUS;
+    canvas.width  = Math.floor(W * DPR);
+    canvas.height = Math.floor(H * DPR);
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    seed();
+  }
+
+  function targetCount() {
+    // 700 on small screens, up to ~1100 on large
+    const area = W * H;
+    return Math.round(Math.max(700, Math.min(1100, area / 2000)));
+  }
+
+  // Inner clearing radius — keeps the center airy where text sits
+  function innerR() { return Math.min(W, H) * 0.18; }
+
+  function makeParticle(opts = {}) {
+    const baseAngle = Math.random() * Math.PI * 2;
+    let baseRadius;
+    if (opts.respawn) {
+      baseRadius = innerR() + rand(0, 60);
+    } else {
+      baseRadius = innerR() + Math.sqrt(Math.random()) * (FIELD_R - innerR());
+    }
+    const depth = Math.pow(Math.random(), 1.1);
+
+    return {
+      baseAngle,
+      baseRadius,
+      depth,
+      // Visual size in px (small but visible) — 50% smaller per request
+      size: 2.5 + depth * 2.5 + Math.random() * 0.5,  // ~2.5–5.5px
+      color: pick(PALETTE),
+      // Rest opacity — subtle; rises toward peak when cursor is close.
+      restOpacity: 0.40 + depth * 0.20,               // 0.40–0.60
+      peakOpacity: 0.88,
+      // Slow morph oval<->circle
+      morphPhase: Math.random() * Math.PI * 2,
+      morphPeriod: rand(6.0, 10.0),                   // 6–10s loop
+      maxAspect: rand(1.4, 1.9),                      // oval stretch at peak
+      baseRot: Math.random() * Math.PI,               // rest rotation
+      // Slow drift (per-particle low-frequency wander)
+      driftAmp: 4 + depth * 6,                        // px amplitude
+      driftFx:  rand(0.10, 0.30),                     // freqs
+      driftFy:  rand(0.10, 0.30),
+      driftPx:  Math.random() * Math.PI * 2,
+      driftPy:  Math.random() * Math.PI * 2,
+      // Cursor-driven displacement (springs back to 0)
+      offsetX: 0,
+      offsetY: 0,
+      // Last known pointer force (for shape stretch in render)
+      force: 0,
+    };
+  }
+
+  function seed() {
+    const n = targetCount();
+    particles = new Array(n).fill(0).map(() => makeParticle());
+  }
+
+  function step(now) {
+    const tSec = (now - t0) / 1000;
+
+    // Pointer velocity decay
+    mouse.vx *= 0.86;
+    mouse.vy *= 0.86;
+    mouse.speed *= 0.9;
+
+    // Smoothed pointer (acts as uMousePos in the shader) — lagged for soft trail
+    if (mouse.active) {
+      mouse.sx += (mouse.x - mouse.sx) * 0.18;
+      mouse.sy += (mouse.y - mouse.sy) * 0.18;
+    }
+
+    // Full clear: crisp dashes, no muddy trail
+    ctx.clearRect(0, 0, W, H);
+    ctx.lineCap = 'round';
+
+    // Global breathing + slow rotation (very subtle)
+    const breathe = Math.sin(tSec * 0.25) * 0.02 + 1.0;   // 0.98–1.02
+    const globalRot = tSec * 0.012 +                       // slow base rotation
+                      Math.sin(tSec * 0.12) * 0.03;        // tiny sine wobble
+
+    for (let i = 0; i < particles.length; i++) {
+      const p = particles[i];
+
+      // No per-particle outward drift — particles stay anchored to refPos.
+      // Global breathe + slow rotation are the only ambient motion.
+
+      // Angle: per-particle sine wobble + global rotation
+      const localWobble = Math.sin(tSec * 0.6 + p.morphPhase) * 0.02;
+      const angle = p.baseAngle + globalRot + localWobble;
+
+      // Radius with breathing
+      const radius = p.baseRadius * breathe;
+
+      const cosA = Math.cos(angle);
+      const sinA = Math.sin(angle);
+
+      // Base position
+      let x = CX + cosA * radius;
+      let y = CY + sinA * radius;
+
+      // ---- Cursor interaction: exclusion ring + magnetic attraction ----
+      // Inside EXCLUSION: pushed outward so the cursor stays in a clean bubble.
+      // EXCLUSION..RADIUS: pulled toward the cursor (magnetic), smoothstep falloff.
+      // Beyond RADIUS: target offset = 0, springs back home.
+      let targetX = 0, targetY = 0;
+      let force = 0;
+      if (mouse.active) {
+        const dxm = mouse.sx - x;
+        const dym = mouse.sy - y;
+        const distSq = dxm * dxm + dym * dym;
+        if (distSq < RADIUS_SQ) {
+          const dist = Math.sqrt(distSq) || 0.0001;
+          const ux = dxm / dist;
+          const uy = dym / dist;
+          if (dist < EXCLUSION) {
+            // Push OUT of the bubble (opposite of toward-cursor direction)
+            const k = (EXCLUSION - dist) / EXCLUSION;     // 0..1
+            const push = k * 18 + 4;
+            targetX = -ux * push;
+            targetY = -uy * push;
+            force = 1;
+          } else {
+            // Magnetic pull TOWARD cursor with smoothstep falloff toward RADIUS
+            const t = (RADIUS - dist) / (RADIUS - EXCLUSION);
+            const s = t * t * (3 - 2 * t);                // smoothstep
+            targetX = ux * MAX_PULL * s;
+            targetY = uy * MAX_PULL * s;
+            force = s;
+          }
+        }
+      }
+
+      // Slow / soft spring toward target offset (reactivity = 0.06)
+      p.offsetX += (targetX - p.offsetX) * REACTIVITY;
+      p.offsetY += (targetY - p.offsetY) * REACTIVITY;
+      p.force = force;
+
+      // Gentle rest drift (smooth low-frequency wander) — always on
+      const dX = Math.sin(tSec * p.driftFx + p.driftPx) * p.driftAmp;
+      const dY = Math.cos(tSec * p.driftFy + p.driftPy) * p.driftAmp;
+
+      x += p.offsetX + dX;
+      y += p.offsetY + dY;
+
+      // Twinkle: very subtle per-particle alpha modulation
+      const tw = 0.88 + 0.12 * Math.sin(tSec * 0.5 + p.morphPhase);
+
+      // Soft inner clearing (text area) + edge fade
+      const ir = innerR();
+      const inner = Math.min(1, Math.max(0, (radius - ir * 0.6) / (ir * 0.7)));
+      const fadeOut = 1 - Math.pow(Math.min(1, radius / FIELD_R), 3);
+
+      // Visibility: subtle at rest, BRIGHTER near cursor (force pulls toward peak)
+      const baseAlpha = p.restOpacity + (p.peakOpacity - p.restOpacity) * p.force;
+      const alpha = baseAlpha * tw * inner * fadeOut;
+      if (alpha <= 0.005) continue;
+
+      // Shape: slow morph between near-circle and oval over time.
+      const morph = (Math.sin(tSec / p.morphPeriod * Math.PI * 2 + p.morphPhase) + 1) * 0.5;
+      let aspect = 1.0 + (p.maxAspect - 1.0) * morph;
+
+      // Rotation: rest = baseRot (very slow turn); near cursor = motion axis.
+      let rot = p.baseRot + tSec * 0.05;
+      if (p.force > 0.05) {
+        // Align along displacement vector when disturbed
+        const offMag = Math.hypot(p.offsetX, p.offsetY);
+        if (offMag > 0.3) {
+          const motionAngle = Math.atan2(p.offsetY, p.offsetX);
+          // Blend toward motion angle, and stretch further
+          let diff = motionAngle - rot;
+          while (diff >  Math.PI / 2) diff -= Math.PI;
+          while (diff < -Math.PI / 2) diff += Math.PI;
+          rot += diff * p.force;
+          aspect += p.force * 0.9;          // extra stretch near cursor
+        }
+      }
+
+      const rx = (p.size / 2) * aspect;
+      const ry = (p.size / 2);
+
+      // Cull (rough)
+      if (x < -rx - 4 || x > W + rx + 4 || y < -ry - 4 || y > H + ry + 4) continue;
+
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = p.color;
+      ctx.beginPath();
+      ctx.ellipse(x, y, rx, ry, rot, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  function loop(now) {
+    if (!running) return;
+    step(now);
+    requestAnimationFrame(loop);
+  }
+
+  // ---- Pointer tracking (whole window so it works above the canvas) ----
+  function onPointerMove(e) {
+    const now = performance.now();
+    const dt = Math.max(1, now - (mouse.lastT || now));
+    mouse.lastT = now;
+
+    const rect = canvas.getBoundingClientRect();
+    const nx = e.clientX - rect.left;
+    const ny = e.clientY - rect.top;
+
+    if (!mouse.active) {
+      mouse.x = nx; mouse.y = ny;
+      mouse.sx = nx; mouse.sy = ny;
+      mouse.px = nx; mouse.py = ny;
+      mouse.active = true;
+    } else {
+      mouse.px = mouse.x;
+      mouse.py = mouse.y;
+      mouse.x = nx;
+      mouse.y = ny;
+      // Velocity (frame-normalized for ~60fps)
+      const dx = mouse.x - mouse.px;
+      const dy = mouse.y - mouse.py;
+      mouse.vx = dx;
+      mouse.vy = dy;
+      const v = Math.hypot(dx, dy) * (16 / dt);
+      mouse.speed = mouse.speed * 0.55 + v * 0.45;
+      // Smoothed motion direction (unit vector) — keeps last direction if speed is tiny
+      const mag = Math.hypot(dx, dy);
+      if (mag > 0.4) {
+        const nx2 = dx / mag, ny2 = dy / mag;
+        mouse.dirX = mouse.dirX * 0.7 + nx2 * 0.3;
+        mouse.dirY = mouse.dirY * 0.7 + ny2 * 0.3;
+        const dmag = Math.hypot(mouse.dirX, mouse.dirY) || 1;
+        mouse.dirX /= dmag; mouse.dirY /= dmag;
+      }
+    }
+  }
+  function onPointerLeave() {
+    mouse.active = false;
+    mouse.x = -9999; mouse.y = -9999;
+    mouse.sx = -9999; mouse.sy = -9999;
+  }
+
+  window.addEventListener('pointermove', onPointerMove, { passive: true });
+  window.addEventListener('pointerleave', onPointerLeave, { passive: true });
+  document.addEventListener('mouseleave', onPointerLeave);
+
+  // ---- Resize ----
+  let resizeTO;
+  window.addEventListener('resize', () => {
+    clearTimeout(resizeTO);
+    resizeTO = setTimeout(() => {
+      DPR = Math.min(window.devicePixelRatio || 1, 2);
+      resize();
+    }, 80);
+  });
+
+  document.addEventListener('visibilitychange', () => {
+    const was = running;
+    running = !document.hidden && !prefersReduced;
+    if (running && !was) requestAnimationFrame(loop);
+  });
+
+  resize();
+
+  if (prefersReduced) {
+    // Static frame
+    step(performance.now());
+    running = false;
+  } else {
+    requestAnimationFrame(loop);
+  }
+})();
+</script>
+
+</body>
+</html>

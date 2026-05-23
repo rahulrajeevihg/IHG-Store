@@ -2,6 +2,7 @@ import { useState } from "react";
 import { check_Image } from "@/libs/api";
 import { highlightText, formatPrice } from "../utils/format";
 import { formatPlusCount, getBusinessSignals } from "@/libs/businessSignals";
+import { formatStockQty, resolveInStock, resolveStockQty } from "../utils/stock";
 
 export default function ProductCard({
   document,
@@ -19,6 +20,7 @@ export default function ProductCard({
   salesMode = false,
   cartQty = 0,
   onAddToCart,
+  isTourAnchor = false,
 }) {
   const [copied, setCopied] = useState(false);
 
@@ -43,8 +45,8 @@ export default function ProductCard({
     hasSoldQty,
   } = getBusinessSignals(document);
 
-  const stock = Number(document.stock);
-  const inStock = document.in_stock === true || document.in_stock === 1 || stock > 0;
+  const stock = resolveStockQty(document);
+  const inStock = resolveInStock(document);
   const stockSeverity =
     stock <= 0
       ? "none"
@@ -68,6 +70,7 @@ export default function ProductCard({
 
   return (
     <article
+      data-tour={isTourAnchor ? "product-card" : undefined}
       onClick={() => onNavigate(document)}
       className="group relative flex flex-col overflow-hidden rounded-xl border border-[#e8eaed] bg-white shadow-[0_1px_3px_rgba(16,24,40,0.06)] transition-all duration-200 hover:-translate-y-0.5 hover:border-[#d0d5dd] hover:shadow-[0_8px_24px_rgba(16,24,40,0.1)] cursor-pointer"
     >
@@ -75,14 +78,14 @@ export default function ProductCard({
       {(discounted || hasStarRating) && (
         <div className="absolute right-0 top-0 z-20 flex flex-col items-end gap-1.5 p-1.5">
           {discounted && (
-            <div className="overflow-hidden rounded-tr-xl">
+            <div data-tour={isTourAnchor ? "product-card-promo-badge" : undefined} className="overflow-hidden rounded-tr-xl">
               <div className="bg-[#dc2626] px-2.5 py-[4px] text-[9px] font-bold uppercase tracking-[0.1em] text-white rounded-bl-lg">
                 Promo
               </div>
             </div>
           )}
           {hasStarRating && (
-            <div className="rounded-full border border-[#fcd34d] bg-[#fffbeb] px-2 py-[3px] text-[9px] font-bold text-[#b45309] shadow-sm">
+            <div data-tour={isTourAnchor ? "product-card-star-rating" : undefined} className="rounded-full border border-[#fcd34d] bg-[#fffbeb] px-2 py-[3px] text-[9px] font-bold text-[#b45309] shadow-sm">
               ★ {starRating.toFixed(1)}
             </div>
           )}
@@ -103,14 +106,14 @@ export default function ProductCard({
         <ProductImage document={document} />
 
         {/* hover actions */}
-        <div className="absolute right-2 top-2 hidden lg:flex flex-col gap-1.5 translate-y-1 opacity-0 transition-all duration-200 group-hover:translate-y-0 group-hover:opacity-100">
-          <IconBtn label={isWishlisted ? "Remove from saved" : "Save"} active={isWishlisted} onClick={(e) => { e.stopPropagation(); onWishlist(document); }}>
+        <div className="tour-hover-actions absolute right-2 top-2 hidden lg:flex flex-col gap-1.5 translate-y-1 opacity-0 transition-all duration-200 group-hover:translate-y-0 group-hover:opacity-100">
+          <IconBtn data-tour={isTourAnchor ? "product-card-hover-save" : undefined} label={isWishlisted ? "Remove from saved" : "Save"} active={isWishlisted} onClick={(e) => { e.stopPropagation(); onWishlist(document); }}>
             <HeartIcon filled={isWishlisted} />
           </IconBtn>
-          <IconBtn label="Quick view" onClick={(e) => { e.stopPropagation(); onQuickView(document); }}>
+          <IconBtn data-tour={isTourAnchor ? "product-card-hover-quickview" : undefined} label="Quick view" onClick={(e) => { e.stopPropagation(); onQuickView(document); }}>
             <EyeIcon />
           </IconBtn>
-          <IconBtn label="Report issue" onClick={(e) => { e.stopPropagation(); onReportIssue && onReportIssue(document); }}>
+          <IconBtn data-tour={isTourAnchor ? "product-card-hover-report" : undefined} label="Report issue" onClick={(e) => { e.stopPropagation(); onReportIssue && onReportIssue(document); }}>
             <FlagIcon />
           </IconBtn>
         </div>
@@ -121,7 +124,7 @@ export default function ProductCard({
 
         {/* Brand · Category */}
         {(document.brand || document.category_list || document.item_group) && (
-          <div className="flex items-center gap-1 min-w-0">
+          <div data-tour={isTourAnchor ? "product-card-brand-category" : undefined} className="flex items-center gap-1 min-w-0">
             {document.brand && (
               <span className="truncate text-[9px] font-bold uppercase tracking-[0.12em] text-[#a8b3bf]">
                 {document.brand}
@@ -140,6 +143,7 @@ export default function ProductCard({
 
         {/* Item code — primary identifier */}
         <button
+          data-tour={isTourAnchor ? "product-card-item-code" : undefined}
           type="button"
           onClick={copySku}
           title="Click to copy item code"
@@ -155,6 +159,7 @@ export default function ProductCard({
 
         {/* Item name — fixed 2-line height so all cards align */}
         <p
+          data-tour={isTourAnchor ? "product-card-item-name" : undefined}
           className="line-clamp-2 h-[28px] overflow-hidden text-[10px] font-normal leading-[1.4] text-[#6b7280]"
           title={document.item_name || document.item_code}
         >
@@ -162,7 +167,7 @@ export default function ProductCard({
         </p>
 
         {/* Price */}
-        <div className="mt-0.5 min-h-[38px]">
+        <div data-tour={isTourAnchor ? "product-card-price" : undefined} className="mt-0.5 min-h-[38px]">
           {hasPrice ? (
             <>
               <div className="flex flex-wrap items-baseline gap-1.5">
@@ -176,7 +181,7 @@ export default function ProductCard({
                 )}
               </div>
               {discounted && (
-                <div className="mt-1 flex flex-wrap items-center gap-1">
+                <div data-tour={isTourAnchor ? "product-card-discount" : undefined} className="mt-1 flex flex-wrap items-center gap-1">
                   <span className="rounded-md bg-[#fef2f2] px-1.5 py-[2px] text-[9px] font-bold text-[#dc2626]">
                     {discountPct}%
                   </span>
@@ -192,7 +197,7 @@ export default function ProductCard({
         </div>
 
         {(hasCustomerCount || hasSoldQty) && (
-          <div className="mt-1 flex flex-wrap items-center gap-1.5">
+          <div data-tour={isTourAnchor ? "product-card-customer-signals" : undefined} className="mt-1 flex flex-wrap items-center gap-1.5">
             {hasCustomerCount && (
               <span className="rounded-full border border-[#bfdbfe] bg-[#eff6ff] px-2 py-[3px] text-[9px] font-semibold text-[#1d4ed8]">
                 {formatPlusCount(customerCount)} customers
@@ -210,6 +215,7 @@ export default function ProductCard({
           <div className="min-h-[30px]">
             {inStock ? (
               <span
+                data-tour={isTourAnchor ? "product-card-stock" : undefined}
                 className={`inline-flex min-h-[30px] items-center gap-1.5 rounded-lg px-2.5 py-[5px] ${
                   stockSeverity === "critical"
                     ? "border border-[#fecaca] bg-[#fef2f2]"
@@ -245,12 +251,12 @@ export default function ProductCard({
                   }`}
                 >
                   {stock > 0
-                    ? `${stock}${document.stock_uom ? ` ${document.stock_uom}` : ""}`
+                    ? `${formatStockQty(stock)}${document.stock_uom ? ` ${document.stock_uom}` : ""}`
                     : "In stock"}
                 </span>
               </span>
             ) : (
-              <span className="inline-flex min-h-[30px] items-center gap-1.5 rounded-lg border border-[#e5e7eb] bg-[#fafafa] px-2.5 py-[5px]">
+              <span data-tour={isTourAnchor ? "product-card-stock" : undefined} className="inline-flex min-h-[30px] items-center gap-1.5 rounded-lg border border-[#e5e7eb] bg-[#fafafa] px-2.5 py-[5px]">
                 <svg className="h-[13px] w-[13px] shrink-0 text-[#9ca3af]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                   <circle cx="12" cy="12" r="9" />
                   <path d="M8 12h8" strokeLinecap="round" />
@@ -265,6 +271,7 @@ export default function ProductCard({
           {salesMode ? (
             <div className="relative h-[33px]">
               <div
+                data-tour={isTourAnchor ? "product-card-qty-stepper" : undefined}
                 className={`absolute inset-0 flex items-center overflow-hidden rounded-lg border border-[#e6ebf1] bg-white transition-all duration-200 ${
                   cartQty > 0 ? "opacity-100 scale-100" : "opacity-0 scale-95 pointer-events-none"
                 }`}
@@ -288,6 +295,7 @@ export default function ProductCard({
                 </button>
               </div>
               <button
+                data-tour={isTourAnchor ? "product-card-add-to-cart" : undefined}
                 type="button"
                 onClick={(e) => { e.stopPropagation(); onAddToCart && onAddToCart(document, 1); }}
                 className={`absolute inset-0 rounded-lg bg-black px-3 text-[10px] font-bold uppercase tracking-[0.1em] text-white transition-all duration-200 hover:bg-[#1f1f1f] active:scale-[0.99] ${
@@ -333,13 +341,14 @@ function Badge({ tone, children }) {
 }
 
 /* ── ICON BUTTON ── */
-function IconBtn({ label, active, onClick, children }) {
+function IconBtn({ label, active, onClick, children, ...props }) {
   return (
     <button
       type="button"
       onClick={onClick}
       title={label}
       aria-label={label}
+      {...props}
       className={`pointer-events-auto inline-flex h-[26px] w-[26px] items-center justify-center rounded-lg border shadow-sm transition-all duration-[180ms] ${
         active
           ? "border-[#111] bg-[#111] text-white"

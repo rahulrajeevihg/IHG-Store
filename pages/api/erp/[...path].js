@@ -20,6 +20,9 @@ const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
 const MAX_UPSTREAM_REDIRECTS = 5;
 const MAX_FETCH_ATTEMPTS = 2;
 const UPSTREAM_TIMEOUT_MS = 30000;
+const STOCK_RECONCILE_METHODS = ['search_products_v2', 'ai_search_products_v2'];
+const ERP_GET_PRODUCT_INFO_METHOD = 'igh_search.igh_search.api.get_product_details';
+const STOCK_RECONCILE_MAX_HITS = Number(process.env.ERP_STOCK_RECONCILE_MAX_HITS || 20);
 const POST_ONLY_MUTATION_METHODS = new Set([
   'insert_cart_items',
   'update_cartitem',
@@ -28,10 +31,14 @@ const POST_ONLY_MUTATION_METHODS = new Set([
   'move_all_tocart',
   'start_guided_ai_search',
   'continue_guided_ai_search',
-  'create_product_data_issue',
-  'update_product_data_issue',
-  'add_product_data_issue_comment',
-  'reopen_product_data_issue',
+  'create_product_query',
+  'post_product_query_message',
+  'mark_product_query_read',
+  'escalate_product_query_to_ticket',
+  'update_product_query',
+  'resolve_product_query',
+  'rate_product_query_solution',
+  'reopen_product_query',
 ]);
 
 export const config = {
@@ -110,6 +117,171 @@ function normalizeSetCookieForProxy(cookieValue, req) {
   }
 
   return normalized;
+}
+
+function parseJsonSafe(value) {
+  if (!value || typeof value !== 'string') return null;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
+}
+
+function looksLikeSku(value) {
+  const trimmed = String(value || '').trim();
+  if (!trimmed || trimmed.length < 6) return false;
+  return /[A-Za-z]/.test(trimmed) && /[0-9]/.test(trimmed) && /[.\-_/]/.test(trimmed);
+}
+
+function extractTargetSkuFromSearchPayload(payload) {
+  if (!payload || typeof payload !== 'object') return '';
+
+  const hint = String(payload.item_code_hint || '').trim();
+  if (hint) return hint;
+
+  const query = String(payload.query || payload.q || '').trim();
+  if (query && looksLikeSku(query)) return query;
+
+  return '';
+}
+
+function getMethodNameFromPath(path = '') {
+  return STOCK_RECONCILE_METHODS.find((methodName) => path.includes(methodName)) || '';
+}
+
+async function fetchLiveStockForItem(itemCode, forwardHeaders) {
+  if (!itemCode) return null;
+
+  const response = await fetch(`${ERP_BASE_URL}/api/method/${ERP_GET_PRODUCT_INFO_METHOD}`, {
+    method: 'POST',
+    headers: {
+      ...forwardHeaders,
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+    },
+    body: JSON.stringify({ item_code: itemCode }),
+    redirect: 'manual',
+  });
+
+  if (!response.ok) {
+    return null;
+  }
+
+  const payload = await response.json().catch(() => null);
+  const data = payload?.message || payload;
+  if (!data || typeof data !== 'object') {
+    return null;
+  }
+
+  const totalStock = Number(data.total_stock);
+  const freshnessTs = new Date().toISOString();
+  return {
+    item_code: String(data.item_code || itemCode),
+    total_stock: Number.isFinite(totalStock) ? totalStock : 0,
+    in_stock:
+      data.in_stock === true ||
+      data.in_stock === 1 ||
+      data.in_stock === '1' ||
+      (Number.isFinite(totalStock) && totalStock > 0),
+    stock_freshness_source: 'runtime_reconciled',
+    stock_freshness_ts: freshnessTs,
+  };
+}
+
+function applyStockOverrideToHits(hits = [], stockOverride = null) {
+  if (!Array.isArray(hits) || !stockOverride?.item_code) return hits;
+
+  const targetSku = String(stockOverride.item_code).trim().toLowerCase();
+  if (!targetSku) return hits;
+
+  return hits.map((hit) => {
+    const safeHit = hit && typeof hit === 'object' ? hit : {};
+    const doc = safeHit?.document && typeof safeHit.document === 'object' ? safeHit.document : safeHit;
+    const itemCode = String(doc?.item_code || doc?.name || '').trim().toLowerCase();
+    if (!itemCode || itemCode !== targetSku) {
+      return hit;
+    }
+
+    const nextDoc = {
+      ...doc,
+      stock: stockOverride.total_stock,
+      total_stock: stockOverride.total_stock,
+      in_stock: stockOverride.in_stock ? 1 : 0,
+      stock_freshness_source: stockOverride.stock_freshness_source || 'runtime_reconciled',
+      stock_freshness_ts: stockOverride.stock_freshness_ts || new Date().toISOString(),
+    };
+
+    if (safeHit?.document && typeof safeHit.document === 'object') {
+      return {
+        ...safeHit,
+        document: nextDoc,
+      };
+    }
+
+    return nextDoc;
+  });
+}
+
+function extractItemCodeFromHit(hit) {
+  const safeHit = hit && typeof hit === 'object' ? hit : {};
+  const doc = safeHit?.document && typeof safeHit.document === 'object' ? safeHit.document : safeHit;
+  return String(doc?.item_code || doc?.name || '').trim();
+}
+
+async function fetchLiveStocksForItems(itemCodes = [], forwardHeaders) {
+  const deduped = Array.from(
+    new Set(
+      (Array.isArray(itemCodes) ? itemCodes : [])
+        .map((value) => String(value || '').trim())
+        .filter(Boolean)
+    )
+  );
+
+  const result = new Map();
+  const maxItems = Math.min(Math.max(STOCK_RECONCILE_MAX_HITS, 0), deduped.length);
+  for (let index = 0; index < maxItems; index += 1) {
+    const itemCode = deduped[index];
+    const liveStock = await fetchLiveStockForItem(itemCode, forwardHeaders);
+    if (!liveStock) continue;
+    result.set(String(liveStock.item_code || itemCode).trim().toLowerCase(), liveStock);
+  }
+
+  return result;
+}
+
+function applyStockMapToHits(hits = [], stockMap = new Map()) {
+  if (!Array.isArray(hits) || !(stockMap instanceof Map) || stockMap.size === 0) {
+    return hits;
+  }
+
+  return hits.map((hit) => {
+    const safeHit = hit && typeof hit === 'object' ? hit : {};
+    const doc = safeHit?.document && typeof safeHit.document === 'object' ? safeHit.document : safeHit;
+    const itemCode = String(doc?.item_code || doc?.name || '').trim().toLowerCase();
+    if (!itemCode || !stockMap.has(itemCode)) {
+      return hit;
+    }
+
+    const liveStock = stockMap.get(itemCode);
+    const nextDoc = {
+      ...doc,
+      stock: liveStock.total_stock,
+      total_stock: liveStock.total_stock,
+      in_stock: liveStock.in_stock ? 1 : 0,
+      stock_freshness_source: liveStock.stock_freshness_source || 'runtime_reconciled',
+      stock_freshness_ts: liveStock.stock_freshness_ts || new Date().toISOString(),
+    };
+
+    if (safeHit?.document && typeof safeHit.document === 'object') {
+      return {
+        ...safeHit,
+        document: nextDoc,
+      };
+    }
+
+    return nextDoc;
+  });
 }
 
 export default async function handler(req, res) {
@@ -273,7 +445,6 @@ export default async function handler(req, res) {
       'content-type',
       'x-frame-options',
       'cache-control',
-      'content-length',
     ];
     headersToForward.forEach((header) => {
       const value = finalResponse.headers.get(header);
@@ -300,7 +471,73 @@ export default async function handler(req, res) {
     res.status(finalResponse.status);
 
     // Forward response body
-    const responseBody = await finalResponse.text();
+    let responseBody = await finalResponse.text();
+    const matchedStockMethod = getMethodNameFromPath(upstreamPath || '');
+    const shouldAttemptStockReconcile =
+      Boolean(matchedStockMethod) &&
+      finalResponse.status === 200 &&
+      String(finalResponse.headers.get('content-type') || '').includes('application/json');
+
+    if (shouldAttemptStockReconcile) {
+      try {
+        const parsedRequest = body ? parseJsonSafe(body.toString()) : null;
+        const targetSku = extractTargetSkuFromSearchPayload(parsedRequest);
+        const parsedResponse = parseJsonSafe(responseBody);
+        const messageBlock =
+          parsedResponse?.message && typeof parsedResponse.message === 'object'
+            ? parsedResponse.message
+            : parsedResponse;
+
+        if (messageBlock && Array.isArray(messageBlock.hits)) {
+          if (targetSku) {
+            const liveStock = await fetchLiveStockForItem(targetSku, forwardHeaders);
+            if (liveStock) {
+              const patchedHits = applyStockOverrideToHits(messageBlock.hits, liveStock);
+              if (parsedResponse?.message && typeof parsedResponse.message === 'object') {
+                parsedResponse.message = {
+                  ...parsedResponse.message,
+                  hits: patchedHits,
+                };
+              } else if (parsedResponse && typeof parsedResponse === 'object') {
+                parsedResponse.hits = patchedHits;
+              }
+              responseBody = JSON.stringify(parsedResponse);
+              console.info('[ERP Proxy] Stock reconciled from live ERP', {
+                method: matchedStockMethod,
+                item_code: liveStock.item_code,
+                total_stock: liveStock.total_stock,
+                in_stock: liveStock.in_stock,
+              });
+            }
+          } else {
+            const hitItemCodes = messageBlock.hits
+              .map((hit) => extractItemCodeFromHit(hit))
+              .filter(Boolean);
+            const stockMap = await fetchLiveStocksForItems(hitItemCodes, forwardHeaders);
+            if (stockMap.size > 0) {
+              const patchedHits = applyStockMapToHits(messageBlock.hits, stockMap);
+              if (parsedResponse?.message && typeof parsedResponse.message === 'object') {
+                parsedResponse.message = {
+                  ...parsedResponse.message,
+                  hits: patchedHits,
+                };
+              } else if (parsedResponse && typeof parsedResponse === 'object') {
+                parsedResponse.hits = patchedHits;
+              }
+              responseBody = JSON.stringify(parsedResponse);
+              console.info('[ERP Proxy] Stock reconciled from live ERP (batch)', {
+                method: matchedStockMethod,
+                reconciled_hits: stockMap.size,
+                requested_hits: Math.min(hitItemCodes.length, STOCK_RECONCILE_MAX_HITS),
+              });
+            }
+          }
+        }
+      } catch (stockError) {
+        console.warn('[ERP Proxy] Stock reconciliation skipped:', stockError?.message || stockError);
+      }
+    }
+
     const durationMs = Date.now() - startedAt;
     console.log('[ERP Proxy] completed', {
       upstream_status: finalResponse.status,

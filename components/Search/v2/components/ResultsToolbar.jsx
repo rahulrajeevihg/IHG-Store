@@ -61,7 +61,7 @@ export default function ResultsToolbar({
     <div className="mt-[10px] rounded-[16px] border border-[#e7edf3] bg-white px-[14px] py-[12px] shadow-[0_8px_24px_rgba(15,23,42,0.04)]">
       <div className="flex flex-col gap-[10px] lg:flex-row lg:items-center lg:justify-between">
         <div className="flex flex-wrap items-center gap-[10px]">
-          <div className="flex items-center gap-[10px] rounded-[12px] border border-[#eef2f6] bg-[#f8fafc] px-[12px] py-[8px]">
+          <div data-tour="results-count" className="flex items-center gap-[10px] rounded-[12px] border border-[#eef2f6] bg-[#f8fafc] px-[12px] py-[8px]">
             <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[#8a94a3]">
               Results
             </span>
@@ -80,6 +80,7 @@ export default function ResultsToolbar({
           </div>
 
           <button
+            data-tour="mobile-filter-button"
             type="button"
             onClick={onOpenMobileFilters}
             className="inline-flex items-center gap-1.5 rounded-[12px] border border-[#dbe3ec] bg-white px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-[#374151] transition hover:border-[#111827] lg:hidden"
@@ -115,7 +116,7 @@ export default function ResultsToolbar({
 
           <div className="hidden h-7 w-px bg-[#e5e7eb] md:block" />
 
-          <ControlCard label="Per page">
+          <ControlCard data-tour="per-page-control" label="Per page">
             <select
               value={pageLength}
               onChange={(event) => onPageLengthChange(Number(event.target.value))}
@@ -135,7 +136,7 @@ export default function ResultsToolbar({
             </select>
           </ControlCard>
 
-          <div className="min-w-[190px]">
+          <div data-tour="sort-control" className="min-w-[190px]">
             <ControlCard label="Sort by">
               <Select
                 classNamePrefix="v2-sort"
@@ -157,7 +158,7 @@ export default function ResultsToolbar({
 
 function DensityToggle({ value, onChange }) {
   return (
-    <div className="hidden items-center rounded-lg border border-[#e5e7eb] md:inline-flex" role="group" aria-label="Grid density">
+    <div data-tour="density-toggle" className="hidden items-center rounded-lg border border-[#e5e7eb] md:inline-flex" role="group" aria-label="Grid density">
       <button
         type="button"
         onClick={() => onChange("comfortable")}

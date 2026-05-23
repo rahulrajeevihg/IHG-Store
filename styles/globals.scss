@@ -48,6 +48,11 @@ body.active_visible {
   overflow: hidden !important;
 }
 
+[data-tour-force-hover="true"] .tour-hover-actions {
+  opacity: 1 !important;
+  transform: translateY(0) !important;
+}
+
 /* ── Product full_description HTML content ── */
 .item-desc {
   color: #374151;
@@ -1987,4 +1992,31 @@ canvas {
 .fade-enter-active {
   opacity: 1;
   transition: opacity 500ms ease-in-out;
+}
+
+/* Tour: Force hover visibility for product card */
+[data-tour="product-card"][data-tour-force-hover] {
+  [data-tour="product-card-hover-save"],
+  [data-tour="product-card-hover-quickview"],
+  [data-tour="product-card-hover-report"] {
+    opacity: 1 !important;
+    transform: translateY(0) !important;
+    pointer-events: auto !important;
+  }
+}
+
+// LMS Animations
+@keyframes lms_pulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.5;
+    transform: scale(1.4);
+  }
+}
+
+.lms-pulse-dot {
+  animation: lms_pulse 1.8s ease-in-out infinite;
 }

@@ -8,7 +8,10 @@ import checkoutInfo from './slice/checkoutInfo'
 import ProductListFilters from './slice/ProductListFilters'
 import FiltersList from './slice/filtersList'
 import HomeFilter from './slice/homeFilter'
-import ProductDetails from './slice/productDetail';
+import ProductDetails from './slice/productDetail'
+import tour from './slice/tourSlice';
+import lms from './slice/lmsSlice';
+import productQuery from './slice/productQuerySlice';
 
 export default configureStore({
   reducer: {
@@ -21,6 +24,9 @@ export default configureStore({
     ProductListFilters:ProductListFilters,
     FiltersList: FiltersList,
     HomeFilter: HomeFilter,
-    ProductDetails: ProductDetails
+    ProductDetails: ProductDetails,
+    tour: tour,
+    lms: lms,
+    productQuery: productQuery,
   },
 })

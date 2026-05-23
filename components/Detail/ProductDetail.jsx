@@ -1,10 +1,10 @@
-import { check_Image, get_product_details, typesense_search_items } from '@/libs/api';
+import { check_Image, get_product_details, get_product_related_context, typesense_search_items } from '@/libs/api';
 import Head from 'next/head';
 import { useEffect, useRef, useState } from 'react';
 import Image from 'next/image';
-import ProductBox from '../Product/ProductBox';
 import CardButton from '../Product/CardButton';
 import Tabs from '../Common/Tabs';
+import RelatedIntelligenceSections from './RelatedIntelligenceSections';
 import {
     formatHappyCustomers,
     formatLifetimeSoldQty,
@@ -13,7 +13,7 @@ import {
 } from '@/libs/businessSignals';
 
 const ProductDetail = ({ hide, visible, productData }) => {
-    const [relatedProductData, setRelatedData] = useState([]);
+    const [relatedContext, setRelatedContext] = useState(null);
     const [details, setDetails] = useState({});
     const [loader, setLoader] = useState(true);
     const [data, setData] = useState({});
@@ -39,6 +39,7 @@ const ProductDetail = ({ hide, visible, productData }) => {
             setActiveThumb(0);
             fetchFullProduct(productData.item_code);
             getDetail(productData.item_code);
+            fetchRelatedContext(productData.item_code);
         }
     }, [productData]);
 
@@ -66,61 +67,35 @@ const ProductDetail = ({ hide, visible, productData }) => {
         try {
             const resp = await get_product_details(itemCode);
             const detail = (resp && resp.message) || {};
-
-            if (detail && detail.stock && detail.stock.length > 0) {
-                setDetails(detail);
-            } else {
-                setDetails([]);
-            }
-
-            if (detail.related_products) {
-                let relatedSections = {};
-                const keysToFetch = ["Bought Together", "category_list", "Must Use", "Add On"];
-                let excludedItemCodes = new Set();
-
-                ["Bought Together", "Must Use", "Add On"].forEach((key) => {
-                    if (detail.related_products[key]) {
-                        detail.related_products[key].forEach((code) => excludedItemCodes.add(code));
-                    }
-                });
-
-                keysToFetch.forEach((key) => {
-                    let values = detail.related_products[key] || [];
-                    if (key === "category_list") {
-                        values = values.filter((code) => !excludedItemCodes.has(code));
-                    }
-                    const filterQuery = values.map((code) => `item_code:="${code}"`).join(" || ");
-                    relatedSections[key] = { query: filterQuery, data: [] };
-                });
-
-                for (const key in relatedSections) {
-                    if (!relatedSections[key].query) continue;
-                    const queryParams = new URLSearchParams({
-                        q: "*",
-                        query_by: "item_name,item_description,brand",
-                        query_by_weights: "1,2,3",
-                        filter_by: relatedSections[key].query
-                    });
-                    const res = await typesense_search_items(queryParams);
-                    relatedSections[key].data = res.hits || [];
-                }
-                setRelatedData({ ...relatedSections });
-            } else {
-                setRelatedData({});
-            }
+            setDetails(detail && typeof detail === "object" ? detail : {});
         } catch (e) {
             console.error('getDetail error', e);
         }
     };
 
+    const fetchRelatedContext = async (itemCode) => {
+        if (!itemCode) {
+            setRelatedContext(null);
+            return;
+        }
+        try {
+            const context = await get_product_related_context(itemCode, 8);
+            setRelatedContext(context || null);
+        } catch (err) {
+            console.error('fetchRelatedContext error', err);
+            setRelatedContext(null);
+        }
+    };
+
     const openDetail = (value) => {
-        if (value && value.document) {
-            const doc = value.document;
+        const doc = value?.document || value;
+        if (doc && doc.item_code) {
             setData({ ...doc });
             setActiveThumb(0);
             setLoader(false);
             fetchFullProduct(doc.item_code);
             getDetail(doc.item_code);
+            fetchRelatedContext(doc.item_code);
             if (bodyRef.current) bodyRef.current.scrollTo({ top: 0, behavior: 'smooth' });
         }
     };
@@ -141,6 +116,16 @@ const ProductDetail = ({ hide, visible, productData }) => {
         ? parseInt(((data.rate - data.offer_rate) / data.rate) * 100)
         : 0;
     const businessSignals = getBusinessSignals(data);
+    const stockRows = Array.isArray(details?.stock_rows)
+        ? details.stock_rows
+        : Array.isArray(details?.stock)
+            ? details.stock
+            : [];
+    const totalStock = Number(
+        details?.total_stock ??
+            stockRows.reduce((accumulator, row) => accumulator + Number(row?.actual_qty || 0), 0)
+    );
+    const isInStock = details?.in_stock !== undefined ? Boolean(details.in_stock) : totalStock > 0;
 
     return (
         <>
@@ -156,6 +141,7 @@ const ProductDetail = ({ hide, visible, productData }) => {
 
             {/* Sheet panel — slides in from right */}
             <div
+                data-tour="product-detail-panel"
                 className={`fixed right-0 top-0 h-screen z-[201] bg-white flex flex-col transition-transform duration-300 ease-out w-full lg:w-[88vw] max-w-[1300px] shadow-[-6px_0_48px_rgba(0,0,0,0.13)] ${open ? 'translate-x-0' : 'translate-x-full'}`}
             >
                 {/* ── Sticky header ── */}
@@ -177,6 +163,7 @@ const ProductDetail = ({ hide, visible, productData }) => {
                     )}
 
                     <button
+                        data-tour="product-detail-close"
                         onClick={() => hide(undefined)}
                         className="size-[34px] flex items-center justify-center rounded-full text-[#9ca3af] hover:bg-[#f3f4f6] hover:text-[#111] transition-colors text-[22px] leading-none"
                         aria-label="Close"
@@ -186,17 +173,17 @@ const ProductDetail = ({ hide, visible, productData }) => {
                 </div>
 
                 {/* ── Scrollable body ── */}
-                <div ref={bodyRef} className="flex-1 overflow-y-auto">
+                <div ref={bodyRef} className="flex-1 overflow-y-auto overflow-x-hidden">
                     {loader ? (
                         <SheetSkeleton />
                     ) : (
                         data && Object.keys(data).length > 0 && (
                             <>
                                 {/* Top section: image | info */}
-                                <div className="lg:grid lg:grid-cols-[400px_1fr]">
+                                <div className="overflow-x-hidden lg:grid lg:grid-cols-[400px_1fr]">
 
                                     {/* LEFT — image panel, sticky */}
-                                    <div className="hidden lg:block border-r border-[#e9edf2]">
+                                    <div data-tour="product-detail-images" className="hidden lg:block border-r border-[#e9edf2]">
                                         <div className="sticky top-0 p-5 bg-white">
                                             {/* Discount badge */}
                                             {discountPct > 0 && (
@@ -242,7 +229,7 @@ const ProductDetail = ({ hide, visible, productData }) => {
                                     </div>
 
                                     {/* RIGHT — info panel */}
-                                    <div className="p-5 lg:p-7">
+                                    <div className="min-w-0 p-5 lg:p-7">
                                         {/* Mobile image */}
                                         <div className="lg:hidden mb-5 h-[220px] bg-[#f7f8fa] flex items-center justify-center relative overflow-hidden">
                                             {discountPct > 0 && (
@@ -260,6 +247,7 @@ const ProductDetail = ({ hide, visible, productData }) => {
                                             />
                                         </div>
 
+                                        <div data-tour="product-detail-info">
                                         {/* Brand · Category */}
                                         {(data.brand || data.item_group) && (
                                             <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-[#6b7280] mb-2.5">
@@ -285,10 +273,12 @@ const ProductDetail = ({ hide, visible, productData }) => {
                                             />
                                         )}
 
+                                        </div>
+
                                         <div className="h-px bg-[#f0f2f5] mb-4" />
 
                                         {/* Price */}
-                                        <div className="mb-4">
+                                        <div data-tour="product-detail-price" className="mb-4">
                                             {data.offer_rate > 0 ? (
                                                 <div className="flex flex-wrap items-baseline gap-3">
                                                     <span className="text-[26px] font-bold text-[#111] tracking-tight">
@@ -311,12 +301,12 @@ const ProductDetail = ({ hide, visible, productData }) => {
                                         </div>
 
                                         {/* Stock status */}
-                                        <div className="mb-5">
-                                            {data.stock > 0 ? (
+                                        <div data-tour="product-detail-stock-detail" className="mb-5">
+                                            {isInStock ? (
                                                 <div className="inline-flex items-center gap-2">
                                                     <span className="size-2 rounded-full bg-[#16a34a] shadow-[0_0_0_3px_rgba(22,163,74,0.18)]" />
                                                     <span className="text-[13px] font-semibold text-[#16a34a]">
-                                                        IN STOCK · {Number(data.stock).toLocaleString()} Nos
+                                                        IN STOCK · {Number(totalStock || 0).toLocaleString()} Nos
                                                     </span>
                                                 </div>
                                             ) : (
@@ -327,7 +317,7 @@ const ProductDetail = ({ hide, visible, productData }) => {
                                             )}
                                         </div>
 
-                                        <div className="mb-5 rounded-[14px] border border-[#e5e7eb] bg-[#f8fafc] p-3.5">
+                                        <div data-tour="product-detail-business-signals" className="mb-5 rounded-[14px] border border-[#e5e7eb] bg-[#f8fafc] p-3.5">
                                             <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[#64748b] mb-2">
                                                 Business Signals
                                             </p>
@@ -348,53 +338,28 @@ const ProductDetail = ({ hide, visible, productData }) => {
                                         </div>
 
                                         {/* Add to Cart */}
-                                        <div className="mb-6">
+                                        <div data-tour="product-detail-add-to-cart" className="mb-6">
                                             <CardButton item={data} index={0} text_btn={true} is_big={true} />
                                         </div>
 
                                         <div className="h-px bg-[#f0f2f5] mb-4" />
 
                                         {/* Tabs: Product Details / Stock / QR */}
-                                        <Tabs stockDetails={details.stock} productDetails={data} />
+                                        <div data-tour="product-detail-tabs">
+                                          <Tabs
+                                              stockDetails={stockRows}
+                                              productDetails={{ ...data, total_stock: totalStock }}
+                                          />
+                                        </div>
                                     </div>
                                 </div>
+                                <RelatedIntelligenceSections
+                                    itemCode={data.item_code}
+                                    relatedContext={relatedContext}
+                                    onOpenProduct={openDetail}
+                                    className="px-5 pb-6 lg:px-7"
+                                />
 
-                                {/* ── Related products (below fold, full width) ── */}
-                                {relatedProductData && Object.keys(relatedProductData).length > 0 && (() => {
-                                    const hasBoughtTogether = relatedProductData["Bought Together"]?.data?.length > 0;
-
-                                    const filteredData = Object.entries(relatedProductData).filter(([key, value]) => {
-                                        if (!value.data.length) return false;
-                                        if (key === "Add On" || key === "Must Use") return true;
-                                        if (key === "Bought Together") return true;
-                                        if (key === "category_list" && !hasBoughtTogether) return true;
-                                        return false;
-                                    });
-
-                                    if (filteredData.length === 0) return null;
-
-                                    return (
-                                        <div className="border-t border-[#e9edf2]">
-                                            {filteredData.map(([key, value]) => (
-                                                <div key={key} className="px-5 lg:px-7 py-5 border-b border-[#f0f2f5] last:border-b-0">
-                                                    <h3 className="text-[13px] font-semibold uppercase tracking-[0.1em] text-[#111] mb-3">
-                                                        {key === "Bought Together" || key === "category_list"
-                                                            ? "Related Products"
-                                                            : key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}
-                                                    </h3>
-                                                    <ProductBox
-                                                        openDetail={openDetail}
-                                                        productList={value.data}
-                                                        scroll_button={true}
-                                                        rowStyle={true}
-                                                        scroll_id={`related_${key}`}
-                                                        rowCount={"flex-[0_0_calc(20%_-_8px)] min-w-[160px]"}
-                                                    />
-                                                </div>
-                                            ))}
-                                        </div>
-                                    );
-                                })()}
                             </>
                         )
                     )}

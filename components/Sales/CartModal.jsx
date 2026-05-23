@@ -29,6 +29,7 @@ export default function CartModal({ open, onClose, onQuotationCreated }) {
         .cm_panel { animation:cm_pop .22s cubic-bezier(.25,.8,.25,1) both }
       `}</style>
       <div
+        data-tour="cart-modal"
         onClick={(e) => e.stopPropagation()}
         className="cm_panel relative w-full max-w-[520px] bg-white rounded-[12px] shadow-[0_24px_60px_rgba(0,0,0,0.22)] overflow-hidden"
         style={{ minHeight: '60vh', maxHeight: 'calc(100vh - 48px)' }}

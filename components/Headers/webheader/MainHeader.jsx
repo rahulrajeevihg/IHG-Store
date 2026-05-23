@@ -16,6 +16,8 @@ import SearchCom from '@/components/Search/SearchCom';
 
 import { resetFilters, setAllFilter } from '@/redux/slice/filtersList';
 import { resetSetFilters } from '@/redux/slice/ProductListFilters';
+import { startTour } from '@/redux/slice/tourSlice';
+import { LMSHeaderBadge } from '@/components/LMS';
 import dynamic from 'next/dynamic';
 
 export default function MainHeader({ header_template, theme_settings, website_settings, all_categories, navigateDetail }) {
@@ -331,7 +333,7 @@ export default function MainHeader({ header_template, theme_settings, website_se
     { 'title': 'My Profile', route: '/profile?my_account=edit-profile' },
     { 'title': 'My Order', route: '/profile?my_account=orders' },
     { 'title': 'My Cart', route: '/profile?my_account=mycart' },
-    { 'title': 'Product Issues', route: '/product-data-issues' },
+    { 'title': 'Product Queries', route: '/product-queries' },
     { 'title': 'Logout', route: '' },
   ]
   const moveToProfile = () => {
@@ -484,7 +486,7 @@ export default function MainHeader({ header_template, theme_settings, website_se
                     <option value="item_code">Item Code</option>
                   </select>
                       <div className="p-[5px_10px_5px_20px] h-[35px] flex items-center w-[69.5%]  border_color rounded-[30px]">
-                        <input value={searchValue} autoComplete='off' id='search' spellCheck="false" onKeyDown={handleKeyDown} ref={searchRef} onChange={(eve) => { getSearchTxt(eve) }} onFocus={() => { setActiveSearch(true) }} onBlur={() => { setActiveSearch(true) }} className='w-[95%] text-[14px]' placeholder='Search Products' />
+                        <input data-tour="header-search-input" value={searchValue} autoComplete='off' id='search' spellCheck="false" onKeyDown={handleKeyDown} ref={searchRef} onChange={(eve) => { getSearchTxt(eve) }} onFocus={() => { setActiveSearch(true) }} onBlur={() => { setActiveSearch(true) }} className='w-[95%] text-[14px]' placeholder='Search Products' />
                         {searchValue && <Image onClick={() => clearSearchValue()} style={{ objectFit: 'contain' }} className='h-[18px] w-[15px] cursor-pointer mr-2' height={25} width={25} alt='vantage' src={'/Navbar/cancel.svg'}></Image>}
                         <Image onClick={() => { searchValue == '' ? null : navigateToSearch('/list?search=' + searchValue) }} style={{ objectFit: 'contain' }} className='h-[18px] w-[15px] cursor-pointer' height={25} width={25} alt='vantage' src={'/search.svg'}></Image>
                       </div>
@@ -504,6 +506,30 @@ export default function MainHeader({ header_template, theme_settings, website_se
                       </Link>
                     </div>
 
+                    <button
+                      data-tour="tour-relaunch-button"
+                      onClick={() => {
+                        try {
+                          if (typeof window !== 'undefined') {
+                            localStorage.removeItem('ihg_v1');
+                            if (router.pathname !== '/list') {
+                              router.push('/list').then(() => dispatch(startTour()));
+                            } else {
+                              dispatch(startTour());
+                            }
+                          }
+                        } catch (error) {
+                          console.error('Tour error:', error);
+                          toast.error('Unable to start the tour right now.');
+                        }
+                      }}
+                      className="headerBtbs text-[16px] font-bold hover:opacity-70 transition-opacity"
+                      title="Restart product tour"
+                    >
+                      ?
+                    </button>
+
+                    <LMSHeaderBadge />
 
                     {/* <div onClick={() => { checkUser() }} onMouseEnter={() => customerName ? setCustomerMenu(true) : null} onMouseLeave={() => customerName ? setCustomerMenu(false) : null} class="relative  cursor-pointer flex flex-row-reverse items-center">
                       <div className='headerBtbs'>
@@ -514,7 +540,7 @@ export default function MainHeader({ header_template, theme_settings, website_se
 
                     </div> */}
 
-                    <Link href="/tabs/yourcart" className="relative headerBtbs">
+                    <Link data-tour="header-cart-icon" href="/tabs/yourcart" className="relative headerBtbs">
                       <img style={{ objectFit: 'contain' }} className='h-[25px] w-[23px]' alt='cart' src={'https://erp.ihgind.com/files/grocery.gif'}></img>
                       {cartCount > 0 && (
                         <span className="absolute -top-2 -right-2 bg-red-600 text-white text-[10px] font-bold rounded-full h-5 w-5 flex items-center justify-center">
@@ -525,6 +551,7 @@ export default function MainHeader({ header_template, theme_settings, website_se
 
                     <div className="relative">
                       <button
+                        data-tour="header-user-menu"
                         onClick={() => customerName ? setIsLogout(true) : router.push('/login')}
                         className="flex items-center justify-center"
                       >

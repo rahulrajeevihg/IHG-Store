@@ -90,7 +90,7 @@ const LoginScreen = ({ webSettings, modal, checkModal, hide, cssClass, visible, 
             {/* <div className='md:hidden flex-[0_0_calc(60%_-_10px)] h-full'>
                 {webSettings && webSettings.websiteSettings && webSettings.websiteSettings.login_image && <Image src={check_Image(webSettings.websiteSettings.login_image)} height={200} width={400} alt={'go-1 Market'} className={`w-full h-full rounded-[10px_0_0_10px]`} />}
             </div> */}
-            {webSettings && <div className={`flex w-full flex-col justify-center items-center md:px-[10px]`}>
+            <div className={`flex w-full flex-col justify-center items-center md:px-[10px]`}>
                 <div className='w-full lg:w-[450px]'>
                 {modal == 'login' ? <Login checkModal={(mod) => checkModal(mod)} hide={hide} />
                         : modal == 'forget' ? <Forget checkModal={(mod) => checkModal(mod)} hide={hide} visible={visible} setVisible={setVisible} />
@@ -115,7 +115,7 @@ const LoginScreen = ({ webSettings, modal, checkModal, hide, cssClass, visible, 
                         <p>Continue with Apple</p>
                     </div> */}
                 {/* </div> */}
-            </div>}
+            </div>
         </div>
     )
 }

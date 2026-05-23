@@ -7,6 +7,7 @@ import { formatRangeValue, isMeaningfulRange } from "../utils/format";
 /* ─── icons (refined) ─────────────────────────────────────────── */
 const ICONS = {
   brand:         <TagIcon />,
+  item_group:    <GridIcon />,
   category_list: <GridIcon />,
   product_type:  <BoxIcon />,
   power:         <BoltIcon />,
@@ -110,7 +111,7 @@ export default function FilterPanel({
   );
 
   const groupedSections = useMemo(() => {
-    const PRIMARY = new Set(["brand", "category_list", "product_type"]);
+    const PRIMARY = new Set(["brand", "item_group", "category_list", "product_type"]);
     const TECHNICAL = new Set([
       "ip_rate",
       "lumen_output",
@@ -134,9 +135,9 @@ export default function FilterPanel({
   }, [sections]);
 
   return (
-    <div className="w-full h-full flex flex-col bg-[#fcfdff] overflow-hidden">
+    <div data-tour="filter-panel" className="w-full h-full flex flex-col bg-[#fcfdff] overflow-hidden">
       {/* ── HEADER ── */}
-      <div className="sticky top-0 z-10 flex h-12 items-center justify-between border-b border-[#eef0f3] bg-[#fcfdff] px-4 shrink-0">
+      <div data-tour="filter-panel-header" className="sticky top-0 z-10 flex h-12 items-center justify-between border-b border-[#eef0f3] bg-[#fcfdff] px-4 shrink-0">
         <div className="flex items-center gap-2.5">
           <span className="text-[14px] font-bold text-gray-900 tracking-tight">Filters</span>
           {totalActive > 0 && (
@@ -147,6 +148,7 @@ export default function FilterPanel({
         </div>
         {totalActive > 0 && (
           <button
+            data-tour="filter-panel-clear-all"
             type="button"
             onClick={clearFilters}
             className="text-[12px] font-medium text-gray-500 hover:text-red-600 transition-colors"
@@ -163,7 +165,7 @@ export default function FilterPanel({
       >
         <div className="p-[14px_16px] space-y-3">
           {/* IN STOCK toggle */}
-          <div className="px-2 py-3 flex items-center justify-between rounded-xl border border-[#edf1f5] bg-white">
+          <div data-tour="filter-instock-toggle" className="px-2 py-3 flex items-center justify-between rounded-xl border border-[#edf1f5] bg-white">
             <div className="flex items-center gap-3">
               <div className={`p-1.5 rounded-lg ${filters.in_stock ? "bg-red-50 text-red-600" : "bg-gray-100 text-gray-400"}`}>
                 <StockIcon />
@@ -177,7 +179,7 @@ export default function FilterPanel({
           </div>
 
           {/* PROMO toggle */}
-          <div className="px-2 py-3 flex items-center justify-between rounded-xl border border-[#edf1f5] bg-white">
+          <div data-tour="filter-promo-toggle" className="px-2 py-3 flex items-center justify-between rounded-xl border border-[#edf1f5] bg-white">
             <div className="flex items-center gap-3">
               <div className={`p-1.5 rounded-lg ${filters.show_promotion ? "bg-red-50 text-red-600" : "bg-gray-100 text-gray-400"}`}>
                 <PercentIcon />
@@ -191,7 +193,7 @@ export default function FilterPanel({
           </div>
 
           {/* MANUFACTURED toggle */}
-          <div className="px-2 py-3 flex items-center justify-between rounded-xl border border-[#edf1f5] bg-white">
+          <div data-tour="filter-manufactured-toggle" className="px-2 py-3 flex items-center justify-between rounded-xl border border-[#edf1f5] bg-white">
             <div className="flex items-center gap-3">
               <div className={`p-1.5 rounded-lg ${(filters.is_manufactured_item || []).includes("1") ? "bg-red-50 text-red-600" : "bg-gray-100 text-gray-400"}`}>
                 <FactoryIcon />
@@ -206,6 +208,7 @@ export default function FilterPanel({
 
           {/* PRICE range */}
           <FilterSection
+            dataTour="filter-price-range"
             label="Price Range"
             icon={<PriceIcon />}
             active={!!(filters.rate_range?.min || filters.rate_range?.max)}
@@ -237,6 +240,7 @@ export default function FilterPanel({
 
           {/* STOCK range */}
           <FilterSection
+            dataTour="filter-stock-range"
             label="Stock Range"
             icon={<StockIcon />}
             active={!!(filters.stock_range?.min || filters.stock_range?.max)}
@@ -267,6 +271,7 @@ export default function FilterPanel({
           </FilterSection>
 
           <PowerRangeSection
+            dataTour="filter-power-slider"
             bounds={powerSliderBounds}
             value={filters.power_value_range}
             active={isMeaningfulRange(filters.power_value_range) || (filters.power || []).length > 0}
@@ -288,6 +293,7 @@ export default function FilterPanel({
           />
 
           <ColorTemperatureRangeSection
+            dataTour="filter-color-temp-slider"
             bounds={colorTemperatureSliderBounds}
             value={filters.color_temp_kelvin_range}
             active={isMeaningfulRange(filters.color_temp_kelvin_range) || (filters.color_temp || []).length > 0}
@@ -368,6 +374,7 @@ export default function FilterPanel({
           )}
 
           <FilterSection
+            dataTour="filter-happy-customers"
             label="Happy Customers"
             icon={<UsersIcon />}
             active={!!(filters.customer_count_range?.min || filters.customer_count_range?.max)}
@@ -411,6 +418,7 @@ export default function FilterPanel({
           </FilterSection>
 
           <FilterSection
+            dataTour="filter-star-rating"
             label="Star Rating"
             icon={<StarIcon />}
             active={!!(filters.product_star_rating_range?.min || filters.product_star_rating_range?.max)}
@@ -452,7 +460,7 @@ export default function FilterPanel({
   );
 }
 
-function PowerRangeSection({ bounds, value, active, rawValueCount, onChange, onClear }) {
+function PowerRangeSection({ bounds, value, active, rawValueCount, onChange, onClear, dataTour }) {
   const [open, setOpen] = useState(false);
   const effectiveMin = bounds.min;
   const effectiveMax = bounds.max;
@@ -476,7 +484,7 @@ function PowerRangeSection({ bounds, value, active, rawValueCount, onChange, onC
   };
 
   return (
-    <div className="rounded-lg border border-transparent bg-white">
+    <div data-tour={dataTour} className="rounded-lg border border-transparent bg-white">
       <button
         type="button"
         onClick={() => setOpen(!open)}
@@ -788,7 +796,7 @@ function NumericFacetRangeSection({ title, unit, facetKey, icon, bounds, options
   );
 }
 
-function ColorTemperatureRangeSection({ bounds, value, active, rawValueCount, onChange, onClear }) {
+function ColorTemperatureRangeSection({ bounds, value, active, rawValueCount, onChange, onClear, dataTour }) {
   const [open, setOpen] = useState(false);
   const effectiveMin = bounds.min;
   const effectiveMax = bounds.max;
@@ -812,7 +820,7 @@ function ColorTemperatureRangeSection({ bounds, value, active, rawValueCount, on
   };
 
   return (
-    <div className="rounded-lg border border-transparent bg-white">
+    <div data-tour={dataTour} className="rounded-lg border border-transparent bg-white">
       <button
         type="button"
         onClick={() => setOpen(!open)}
@@ -1151,11 +1159,11 @@ function FilterGroup({ title, sections, filters, updateMultiFilter }) {
 }
 
 /* ─── FilterSection ─────────────────────────────────────────────── */
-function FilterSection({ label, icon, active, children }) {
+function FilterSection({ label, icon, active, children, dataTour }) {
   const [open, setOpen] = useState(false);
 
   return (
-    <div className="rounded-lg border border-transparent bg-white">
+    <div data-tour={dataTour} className="rounded-lg border border-transparent bg-white">
       <button
         type="button"
         onClick={() => setOpen(!open)}
@@ -1207,10 +1215,18 @@ function FacetSection({ section, icon, selected, defaultOpen, onChange }) {
 
   const isBrandSection = section.key === "brand";
   const isCategorySection = section.key === "category_list";
-  const usesLargeOptionsModal = isBrandSection || isCategorySection;
+  const isItemGroupSection = section.key === "item_group";
+  const usesLargeOptionsModal = isBrandSection || isCategorySection || isItemGroupSection;
+  const dataTour = isBrandSection
+    ? "filter-brand-facet"
+    : isItemGroupSection
+      ? "filter-item-group-facet"
+      : isCategorySection
+        ? "filter-category-facet"
+        : undefined;
 
   return (
-    <div className="pb-1">
+    <div data-tour={dataTour} className="pb-1">
       <button
         type="button"
         onClick={() => setOpen(!open)}
@@ -1248,7 +1264,7 @@ function FacetSection({ section, icon, selected, defaultOpen, onChange }) {
 
       <div className={`grid transition-all duration-200 ${open ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"}`}>
         <div className="overflow-hidden px-2 pb-3">
-          {parsed.length > 6 && (
+          {(usesLargeOptionsModal || parsed.length > 6) && (
             <div className="relative mb-3 group">
               <div className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400">
                 <SearchIcon />
@@ -1306,9 +1322,10 @@ function FacetSection({ section, icon, selected, defaultOpen, onChange }) {
             })}
           </div>
 
-          {!search && filtered.length > 6 && (
+          {!search && (usesLargeOptionsModal ? filtered.length > 0 : filtered.length > 6) && (
             usesLargeOptionsModal ? (
               <button
+                data-tour="filter-show-all-button"
                 type="button"
                 onClick={() => setOptionsModalOpen(true)}
                 className="mt-2 w-full text-center text-[11px] font-bold text-gray-400 hover:text-red-600 py-1.5 rounded-lg hover:bg-red-50/50 transition-all"

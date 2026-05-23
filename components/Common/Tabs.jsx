@@ -35,6 +35,10 @@ export default function Tabs({ stockDetails, productDetails }) {
   const filteredStock = Array.isArray(stockDetails)
     ? stockDetails.filter((item) => Number(item?.actual_qty) > 0)
     : [];
+  const totalStock = Number(
+    productDetails?.total_stock ??
+      filteredStock.reduce((accumulator, row) => accumulator + Number(row?.actual_qty || 0), 0)
+  );
 
   const specs = SPEC_FIELDS.filter(
     (f) => productDetails?.[f.key] && String(productDetails[f.key]).trim() !== ""
@@ -166,7 +170,7 @@ export default function Tabs({ stockDetails, productDetails }) {
                       <td className="px-3 py-2.5" />
                       <td className="px-3 py-2.5 text-[12px] font-semibold uppercase tracking-[0.08em] text-[#6b7280]">Total</td>
                       <td className="px-3 py-2.5 text-right text-[15px] font-bold text-[#111]">
-                        {Number(productDetails?.stock || 0).toLocaleString()}
+                        {Number(totalStock || 0).toLocaleString()}
                         <span className="ml-1 text-[11px] font-medium text-[#9ca3af]">Nos</span>
                       </td>
                     </tr>

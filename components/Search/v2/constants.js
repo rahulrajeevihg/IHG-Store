@@ -2,7 +2,9 @@ export const PAGE_SIZE_OPTIONS = [20, 50, 100];
 
 export const VISIBLE_FILTERS = [
   { key: "brand", label: "Brand" },
+  { key: "item_group", label: "Item Group" },
   { key: "category_list", label: "Category" },
+  { key: "series", label: "Series" },
   { key: "product_type", label: "Product Type" },
   { key: "power", label: "Power" },
   { key: "color_temp", label: "Color Temperature" },
@@ -24,6 +26,7 @@ export const FILTER_LABEL_MAP = {
   brand: "Brand",
   category_list: "Category",
   item_group: "Item Group",
+  series: "Series",
   product_type: "Product Type",
   power: "Power",
   color_temp: "Color Temperature",

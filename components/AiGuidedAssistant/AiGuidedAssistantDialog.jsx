@@ -60,7 +60,7 @@ export default function AiGuidedAssistantDialog({
               leaveFrom="opacity-100 translate-y-0 md:translate-x-0"
               leaveTo="opacity-0 translate-y-4 md:translate-x-6 md:translate-y-0"
             >
-              <Dialog.Panel className="flex h-[92vh] w-full max-w-[780px] flex-col overflow-hidden rounded-t-[28px] border border-[#d9e2ec] bg-[#f4f7fb] shadow-[0_32px_80px_rgba(3,8,20,0.22)] md:h-screen md:rounded-none md:border-y-0 md:border-r-0 md:rounded-l-[28px]">
+              <Dialog.Panel data-tour="ai-guided-dialog" className="flex h-[92vh] w-full max-w-[780px] flex-col overflow-hidden rounded-t-[28px] border border-[#d9e2ec] bg-[#f4f7fb] shadow-[0_32px_80px_rgba(3,8,20,0.22)] md:h-screen md:rounded-none md:border-y-0 md:border-r-0 md:rounded-l-[28px]">
                 <header className="border-b border-[#e4ebf2] bg-white px-[20px] py-[18px] md:px-[24px]">
                   <div className="flex items-start justify-between gap-[14px]">
                     <div className="min-w-0">
@@ -207,7 +207,7 @@ export default function AiGuidedAssistantDialog({
                         )}
                       </div>
 
-                      <div className="mt-[14px] space-y-[12px]">
+                      <div data-tour="ai-guided-messages" className="mt-[14px] space-y-[12px]">
                         {messages.length === 0 ? (
                           <div className="rounded-[18px] border border-dashed border-[#dbe5ef] bg-white px-[18px] py-[18px] text-[13px] leading-[1.7] text-[#667085]">
                             Start by telling the assistant what you need. It will keep narrowing the catalog with one targeted question at a time.
@@ -242,7 +242,7 @@ export default function AiGuidedAssistantDialog({
                         </div>
 
                         {suggestions.length > 0 && (
-                          <div className="mt-[14px] flex flex-wrap gap-[8px]">
+                          <div data-tour="ai-guided-suggestions" className="mt-[14px] flex flex-wrap gap-[8px]">
                             {suggestions.map((suggestion) => (
                               <button
                                 key={`${session.question_key}-${suggestion.value}`}
@@ -262,6 +262,7 @@ export default function AiGuidedAssistantDialog({
 
                         <div className="mt-[14px] flex flex-wrap items-center gap-[10px]">
                           <button
+                            data-tour="ai-guided-skip"
                             type="button"
                             onClick={onSkip}
                             disabled={!canSkip}
@@ -270,6 +271,7 @@ export default function AiGuidedAssistantDialog({
                             Skip this question
                           </button>
                           <button
+                            data-tour="ai-guided-show-results"
                             type="button"
                             onClick={onShowResults || onEndChat}
                             className="inline-flex h-[40px] items-center rounded-[12px] px-[4px] text-[11px] font-semibold uppercase tracking-[0.12em] text-[#98a2b3] transition hover:text-[#111827]"
@@ -291,6 +293,7 @@ export default function AiGuidedAssistantDialog({
                 <footer className="border-t border-[#e5edf4] bg-white px-[18px] py-[16px] md:px-[22px]">
                   <div className="rounded-[20px] border border-[#d8e1ea] bg-[#fbfdff] p-[12px]">
                     <textarea
+                      data-tour="ai-guided-input"
                       value={inputValue}
                       onChange={(event) => onInputChange(event.target.value)}
                       onKeyDown={(event) => {

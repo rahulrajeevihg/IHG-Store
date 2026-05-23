@@ -53,6 +53,11 @@ def get_customer_info(*args, **kwargs):
     return _impl().get_customer_info(*args, **_sanitize_framework_kwargs(kwargs))
 
 
+@frappe.whitelist(methods=["POST"])
+def get_sales_dashboard_reports(*args, **kwargs):
+    return _impl().get_sales_dashboard_reports(*args, **_sanitize_framework_kwargs(kwargs))
+
+
 @frappe.whitelist(allow_guest=True)
 def get_product_details(*args, **kwargs):
     return _impl().get_product_details(*args, **_sanitize_framework_kwargs(kwargs))

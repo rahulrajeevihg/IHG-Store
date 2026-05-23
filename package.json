@@ -28,6 +28,7 @@
     "react-google-recaptcha": "^3.1.0",
     "react-hook-form": "^7.51.5",
     "react-instantsearch": "^7.15.1",
+    "react-joyride": "^3.1.0",
     "react-lazy-load-image-component": "^1.6.0",
     "react-multi-carousel": "^2.8.5",
     "react-qr-barcode-scanner": "^2.0.0",

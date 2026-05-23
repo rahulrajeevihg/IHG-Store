@@ -1,0 +1,155 @@
+.dashboardShell {
+  position: relative;
+  min-height: 100vh;
+  min-height: 100dvh;
+  isolation: isolate;
+  overflow: hidden;
+  color: #1b2c54;
+  background:
+    radial-gradient(1200px circle at 8% -8%, rgba(79, 109, 255, 0.18), transparent 50%),
+    radial-gradient(1100px circle at 100% 0%, rgba(124, 58, 237, 0.14), transparent 46%),
+    radial-gradient(900px circle at 50% 110%, rgba(56, 189, 248, 0.12), transparent 50%),
+    linear-gradient(180deg, #eef3ff 0%, #eaf0ff 45%, #f1f5ff 100%);
+}
+
+.dashboardShell::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: radial-gradient(rgba(18, 37, 79, 0.045) 0.6px, transparent 0.6px);
+  background-size: 20px 20px;
+  opacity: 0.5;
+  z-index: -1;
+}
+
+.glassCard {
+  background: rgba(255, 255, 255, 0.62);
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(18px) saturate(1.1);
+  -webkit-backdrop-filter: blur(18px) saturate(1.1);
+  box-shadow: 0 18px 44px rgba(22, 37, 78, 0.08);
+}
+
+.glassBar {
+  background: rgba(255, 255, 255, 0.72);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.55);
+  backdrop-filter: blur(20px) saturate(1.15);
+  -webkit-backdrop-filter: blur(20px) saturate(1.15);
+  box-shadow: 0 8px 30px rgba(22, 37, 78, 0.06);
+}
+
+.frostButton {
+  background: rgba(255, 255, 255, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.78);
+  transition: transform 180ms ease, box-shadow 180ms ease, background-color 180ms ease;
+}
+
+.frostButton:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 24px rgba(27, 40, 75, 0.14);
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.tile {
+  transition: transform 200ms ease, box-shadow 200ms ease, background-color 200ms ease;
+}
+
+.tile:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 14px 30px rgba(27, 40, 75, 0.12);
+}
+
+/* Hero gradient panel */
+.hero {
+  position: relative;
+  overflow: hidden;
+  color: #fff;
+  background:
+    radial-gradient(520px circle at 88% 12%, rgba(255, 255, 255, 0.22), transparent 55%),
+    linear-gradient(125deg, #4f46e5 0%, #5b3fe0 48%, #7c3aed 100%);
+}
+
+.heroBlob {
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(34px);
+  pointer-events: none;
+}
+
+.rankCard {
+  position: relative;
+  overflow: hidden;
+  color: #fff;
+  background:
+    radial-gradient(360px circle at 90% 0%, rgba(255, 255, 255, 0.18), transparent 55%),
+    linear-gradient(140deg, #312e9e 0%, #4338ca 55%, #6d28d9 100%);
+}
+
+.aiCard {
+  position: relative;
+  overflow: hidden;
+  color: #fff;
+  background:
+    radial-gradient(420px circle at 92% 20%, rgba(255, 255, 255, 0.2), transparent 55%),
+    linear-gradient(125deg, #4338ca 0%, #6d28d9 60%, #8b5cf6 100%);
+}
+
+.scrollRow::-webkit-scrollbar { height: 6px; }
+.scrollRow::-webkit-scrollbar-thumb { background: rgba(79, 109, 255, 0.3); border-radius: 9999px; }
+
+/* Pill tab group */
+.tabs {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 11px;
+  background: rgba(79, 109, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+}
+
+.tab {
+  border-radius: 8px;
+  padding: 5px 11px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #5a6c97;
+  white-space: nowrap;
+  transition: color 160ms ease, background-color 160ms ease, box-shadow 160ms ease;
+}
+
+.tab:hover { color: #2741b8; }
+
+.tabActive {
+  color: #2741b8;
+  background: #fff;
+  box-shadow: 0 2px 8px rgba(27, 40, 75, 0.1);
+}
+
+/* Section zone heading */
+.zoneRule {
+  height: 1px;
+  flex: 1;
+  background: linear-gradient(90deg, rgba(124, 138, 181, 0.28), transparent);
+}
+
+/* Ecommerce product card */
+.productCard { transition: transform 200ms ease, box-shadow 200ms ease; }
+.productCard:hover { transform: translateY(-3px); box-shadow: 0 16px 32px rgba(27, 40, 75, 0.14); }
+.productCard:hover .productImg { transform: scale(1.05); }
+.productImg { transition: transform 400ms ease; }
+
+.reveal {
+  opacity: 0;
+  transform: translateY(14px);
+  animation: revealCard 560ms cubic-bezier(0.2, 0.95, 0.3, 1) forwards;
+}
+
+@keyframes revealCard {
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal { animation: none; opacity: 1; transform: none; }
+  .tile:hover, .frostButton:hover { transform: none; }
+}
