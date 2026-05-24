@@ -39,6 +39,7 @@ import {
   buildGuidedSessionFromResponse,
   buildV2StateFromGuidedResponse,
   deriveV2SuggestedAnswers,
+  getGuidedQuestionMeta,
   getGuidedUserMessages,
   isGuidedSkipAnswer,
   mergeGuidedSuggestedAnswers,
@@ -62,14 +63,11 @@ import ResultsSkeleton from "./components/ResultsSkeleton";
 import EmptyState from "./components/EmptyState";
 import ErrorState from "./components/ErrorState";
 import SearchUnavailableState from "./components/SearchUnavailableState";
-import AiSearchDialog from "./components/AiSearchDialog";
 import DiagnosticsDialog from "./components/DiagnosticsDialog";
 import AiStatusBanner from "@/components/Sales/AiStatusBanner";
 import SalesAddToCartModal from "@/components/Sales/SalesAddToCartModal";
 import CartModal from "@/components/Sales/CartModal";
 import { openRaiseQuery } from "@/redux/slice/productQuerySlice";
-import AiGuidedAssistantLauncher from "@/components/AiGuidedAssistant/AiGuidedAssistantLauncher";
-import AiGuidedAssistantDialog from "@/components/AiGuidedAssistant/AiGuidedAssistantDialog";
 
 const DENSITY_STORAGE_KEY = "v2:density";
 const DEV_MODE = process.env.NODE_ENV !== "production";
@@ -150,9 +148,12 @@ export default function V2SearchPage({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [hydrated, setHydrated] = useState(false);
-  const [aiModalOpen, setAiModalOpen] = useState(false);
+  const [aiInputMode, setAiInputMode] = useState(false);
+  const [aiPanelMode, setAiPanelMode] = useState("search"); // "search" | "guided"
   const [aiPrompt, setAiPrompt] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
+  const [aiPreview, setAiPreview] = useState(null);
+  const [aiPreviewError, setAiPreviewError] = useState("");
   const [aiExplanation, setAiExplanation] = useState("");
   const [guidedAssistantOpen, setGuidedAssistantOpen] = useState(false);
   const [guidedAssistantLoading, setGuidedAssistantLoading] = useState(false);
@@ -190,6 +191,7 @@ export default function V2SearchPage({
   const liveStockCacheRef = useRef({});
   const liveStockReconcileRunRef = useRef(0);
   const suggestionsContainerRef = useRef(null);
+  const searchInputRef = useRef(null);
   const guidedAutoQuestionKeyRef = useRef("");
 
   const mergeLiveStockIntoHit = (hit, liveStock) => {
@@ -325,6 +327,23 @@ export default function V2SearchPage({
   const isAiMode = Boolean(aiSession?.mode === "ai" && aiSession?.message);
   const aiDisplayChips = useMemo(() => buildAiDisplayChips(aiSession), [aiSession]);
   const activeResultQuery = isAiMode ? aiSession.display_query || "" : searchState.q;
+
+  // Inline AI search: chips for the held (not-yet-applied) interpretation, and
+  // whether that preview still matches the current prompt text.
+  const aiPreviewChips = useMemo(
+    () =>
+      aiPreview
+        ? buildAiDisplayChips({
+            mode: "ai",
+            display_query: aiPreview.display_query,
+            display_filters: aiPreview.display_filters,
+          })
+        : [],
+    [aiPreview]
+  );
+  const aiPreviewFresh = Boolean(
+    aiPreview && aiPreview.message === aiPrompt.trim() && aiPrompt.trim().length > 0
+  );
 
   useEffect(() => {
     if (typeof document === "undefined") return;
@@ -550,6 +569,63 @@ export default function V2SearchPage({
     }
     clearAiSession();
   };
+
+  // Open the inline AI search bar: seed the prompt from whatever is already in
+  // the search input / active query, collapse the suggestion dropdown, and
+  // focus the field so the user can type immediately.
+  const enterAiMode = () => {
+    setAiInputMode(true);
+    setAiPanelMode("search");
+    setAiPreviewError("");
+    setSuggestionsOpen(false);
+    setAiPrompt((prev) => prev || searchInput || searchState.q || "");
+    requestAnimationFrame(() => searchInputRef.current?.focus());
+  };
+
+  // Collapse the inline AI panel and discard any unapplied interpretation.
+  const exitAiInputMode = () => {
+    setAiInputMode(false);
+    setAiPanelMode("search");
+    setAiPreview(null);
+    setAiPreviewError("");
+    setAiLoading(false);
+  };
+
+  // From a one-shot preview, switch the panel into guided mode and kick off the
+  // guided session seeded with the same prompt (reuses start_guided_ai_search).
+  const startGuidedFromAi = () => {
+    const seed = (aiPreview?.message || aiPrompt || searchInput || "").trim();
+    setAiPanelMode("guided");
+    setAiPreview(null);
+    setGuidedAssistantInput("");
+    if (seed) {
+      submitGuidedAssistant(seed);
+    }
+    requestAnimationFrame(() => searchInputRef.current?.focus());
+  };
+
+  // Leave guided mode but keep the applied filters; collapse the panel.
+  const showGuidedResults = () => {
+    setAiInputMode(false);
+    setAiPanelMode("search");
+  };
+
+  const guidedPlaceholder = getGuidedQuestionMeta(
+    guidedAssistantSession?.question_key
+  )?.placeholder;
+
+  // ⌘K / Ctrl+K opens AI search from anywhere on the page.
+  useEffect(() => {
+    const onKeyDown = (event) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        enterAiMode();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchInput, searchState.q]);
 
   const shouldTrackReformulation = (session) => {
     if (!session?.search_event_id) return false;
@@ -1073,10 +1149,11 @@ export default function V2SearchPage({
       return;
     }
     clearAiSession();
+    setSearchInput("");
     updateState((current) => ({
       ...DEFAULT_V2_STATE,
       search_v2: current.search_v2,
-      q: current.q,
+      q: "",
       sort_by: current.sort_by,
       page_length: current.page_length,
       include_inactive: current.include_inactive,
@@ -1277,14 +1354,21 @@ export default function V2SearchPage({
     window.document.body.style.overflow = "hidden";
   };
 
-  const handleAiSearch = async () => {
-    const message = aiPrompt.trim();
+  // Interpret the prompt: fetch the AI response (filters + count + hits) and
+  // hold it as a preview. Nothing is committed to the product grid yet — the
+  // user reviews the interpreted filters first, then Applies. The interpret
+  // call already returns the hits, so Apply needs no second network round-trip.
+  const interpretAiSearch = async (overrideMessage) => {
+    const message = (
+      typeof overrideMessage === "string" ? overrideMessage : aiPrompt
+    ).trim();
     if (!message) {
-      toast.info("Enter a search intent first.");
+      toast.info("Describe what you need first.");
       return;
     }
     dispatch(recordLmsEvent({ type: "ai_search", query: message }));
     setAiLoading(true);
+    setAiPreviewError("");
     try {
       if (shouldTrackReformulation(aiSession)) {
         fireAndForgetAiTracking(
@@ -1306,85 +1390,86 @@ export default function V2SearchPage({
         feature_flag_override: featureFlagOverride,
       });
       assertAiDisplayResponse(response);
-      setAiExplanation(response?.explanation || "");
-      setAiSession({
-        mode: "ai",
-        message,
-        display_query: response.display_query,
-        display_filters: response.display_filters,
-        search_event_id: response?.search_event_id || "",
-        resolved_intent: response?.resolved_intent || null,
-        applied_filters: response?.applied_filters || {},
-        applied_sort: response?.applied_sort || "",
-        applied_relaxations: Array.isArray(response?.applied_relaxations)
-          ? response.applied_relaxations
-          : [],
-        quality_signals: response?.quality_signals || null,
-        explanation: response?.explanation || "",
-        found: Number(response?.found) || 0,
-      });
-      setSearchInput(message);
-      const rawHits = Array.isArray(response?.hits) ? response.hits : [];
-      const sortedHits = applyInventoryValueSortFallback(rawHits, searchState.sort_by);
-      setResults(sortedHits);
-      void reconcileHitsWithLiveStock(sortedHits);
-      setFound(Number(response?.found) || 0);
-      setFacetMap(adaptFacetCounts(response?.facet_counts));
-      setQueryDebug(response?.query_debug || null);
-      setError("");
-      setLoading(false);
-      skipNextSearchRef.current = true;
-      syncUrlRef.current = true;
-      setSearchState((current) => ({
-        ...DEFAULT_V2_STATE,
-        search_v2: current.search_v2,
-        page: 1,
-        page_length: current.page_length,
-        include_inactive: current.include_inactive,
-      }));
-      setAiModalOpen(false);
-      toast.success("AI search applied.");
-      logV2Event("ai_search_applied", {
+      setAiPreview({ ...response, message });
+      logV2Event("ai_search_interpreted", {
         prompt: message,
         search_event_id: response?.search_event_id || "",
         found: Number(response?.found) || 0,
-        applied_sort: response?.applied_sort || "",
-        display_query: response.display_query,
-        display_filters: response.display_filters,
       });
     } catch (err) {
       if (isSearchV2DisabledError(err)) {
         reportSearchV2DisabledOnce({
           source: "ai_search_products_v2",
-          prompt: aiPrompt.trim(),
+          prompt: message,
         });
-        clearAiSession();
         setSearchDisabled(true);
-        setError("");
-        liveStockReconcileRunRef.current += 1;
-        setResults([]);
-        setFound(0);
-        setFacetMap({});
-        setQueryDebug(null);
-        setLoading(false);
-        setAiModalOpen(false);
+        setAiPreview(null);
+        exitAiInputMode();
         return;
       }
-      const message = getSearchErrorMessage(err?.message);
-      clearAiSession();
-      setError(message);
-      liveStockReconcileRunRef.current += 1;
-      setResults([]);
-      setFound(0);
-      setLoading(false);
-      toast.error(message || "AI search failed.");
-      logV2Event("ai_search_failed", {
-        prompt: aiPrompt.trim(),
-        message,
-      });
+      const errorMessage = getSearchErrorMessage(err?.message);
+      setAiPreview(null);
+      setAiPreviewError(errorMessage);
+      logV2Event("ai_search_failed", { prompt: message, message: errorMessage });
     } finally {
       setAiLoading(false);
     }
+  };
+
+  // Commit the held interpretation to the product grid. Pure client-side swap
+  // of already-fetched results, then collapse the inline panel. The applied AI
+  // filters surface as read-only chips in ActiveFiltersSummary (via aiSession).
+  const applyAiPreview = () => {
+    const response = aiPreview;
+    if (!response) return;
+    const message = response.message;
+    setAiExplanation(response?.explanation || "");
+    setAiSession({
+      mode: "ai",
+      message,
+      display_query: response.display_query,
+      display_filters: response.display_filters,
+      search_event_id: response?.search_event_id || "",
+      resolved_intent: response?.resolved_intent || null,
+      applied_filters: response?.applied_filters || {},
+      applied_sort: response?.applied_sort || "",
+      applied_relaxations: Array.isArray(response?.applied_relaxations)
+        ? response.applied_relaxations
+        : [],
+      quality_signals: response?.quality_signals || null,
+      explanation: response?.explanation || "",
+      found: Number(response?.found) || 0,
+    });
+    setSearchInput(message);
+    const rawHits = Array.isArray(response?.hits) ? response.hits : [];
+    const sortedHits = applyInventoryValueSortFallback(rawHits, searchState.sort_by);
+    setResults(sortedHits);
+    void reconcileHitsWithLiveStock(sortedHits);
+    setFound(Number(response?.found) || 0);
+    setFacetMap(adaptFacetCounts(response?.facet_counts));
+    setQueryDebug(response?.query_debug || null);
+    setError("");
+    setLoading(false);
+    skipNextSearchRef.current = true;
+    syncUrlRef.current = true;
+    setSearchState((current) => ({
+      ...DEFAULT_V2_STATE,
+      search_v2: current.search_v2,
+      page: 1,
+      page_length: current.page_length,
+      include_inactive: current.include_inactive,
+    }));
+    setAiInputMode(false);
+    setAiPreview(null);
+    toast.success("AI search applied.");
+    logV2Event("ai_search_applied", {
+      prompt: message,
+      search_event_id: response?.search_event_id || "",
+      found: Number(response?.found) || 0,
+      applied_sort: response?.applied_sort || "",
+      display_query: response.display_query,
+      display_filters: response.display_filters,
+    });
   };
 
   const applyGuidedAssistantResponse = (payload, userMessage = "") => {
@@ -1582,7 +1667,6 @@ export default function V2SearchPage({
         searchInput={searchInput}
         setSearchInput={setSearchInput}
         onSubmit={handleSubmitSearch}
-        onOpenAi={() => setAiModalOpen(true)}
         onKeyDown={handleSuggestionKeyDown}
         suggestionsLoading={suggestionsLoading}
         suggestionsOpen={suggestionsOpen}
@@ -1591,12 +1675,40 @@ export default function V2SearchPage({
         activeSuggestionIndex={activeSuggestionIndex}
         onSuggestionSelect={handleSuggestionSelect}
         suggestionsContainerRef={suggestionsContainerRef}
+        searchInputRef={searchInputRef}
         loading={loading}
         found={found}
         searchLatencyMs={searchLatencyMs}
         suggestLatencyMs={suggestLatencyMs}
         fallbackMessage={fallbackMessage}
         aiExplanation={aiExplanation}
+        aiInputMode={aiInputMode}
+        onEnterAiMode={enterAiMode}
+        onExitAiMode={exitAiInputMode}
+        aiPrompt={aiPrompt}
+        setAiPrompt={setAiPrompt}
+        aiLoading={aiLoading}
+        aiPreview={aiPreview}
+        aiPreviewChips={aiPreviewChips}
+        aiPreviewFresh={aiPreviewFresh}
+        aiPreviewError={aiPreviewError}
+        onInterpretAi={interpretAiSearch}
+        onApplyAi={applyAiPreview}
+        aiPanelMode={aiPanelMode}
+        guidedSession={guidedAssistantSession}
+        guidedLoading={guidedAssistantLoading}
+        guidedInputValue={guidedAssistantInput}
+        setGuidedInputValue={setGuidedAssistantInput}
+        guidedPlaceholder={guidedPlaceholder}
+        onStartGuided={startGuidedFromAi}
+        onGuidedSubmit={() => submitGuidedAssistant()}
+        onGuidedChip={(suggestion) =>
+          submitGuidedAssistant(suggestion?.value || suggestion?.label || "")
+        }
+        onGuidedSkip={skipGuidedAssistantQuestion}
+        onGuidedShowResults={showGuidedResults}
+        onGuidedStartOver={() => resetGuidedAssistant(true)}
+        onGuidedRemoveLast={removeLastGuidedAnswer}
       />
 
       <div className="mx-auto max-w-[1700px] px-[12px]">
@@ -1615,6 +1727,7 @@ export default function V2SearchPage({
                 clearFilters={clearFilters}
                 setInStock={setInStock}
                 setShowPromotion={setShowPromotion}
+                setManufacturedOnly={setManufacturedOnly}
               />
             </div>
           </aside>
@@ -1677,7 +1790,7 @@ export default function V2SearchPage({
                 query={activeResultQuery || (isAiMode ? aiSession.message : searchState.q)}
                 hasFilters={isAiMode ? aiDisplayChips.length > 0 : hasActiveFilters(searchState.filters)}
                 onClear={clearFilters}
-                onAskAi={() => setAiModalOpen(true)}
+                onAskAi={enterAiMode}
               />
             ) : (
               <div className="relative">
@@ -1759,41 +1872,6 @@ export default function V2SearchPage({
         isWishlisted={selectedDetail ? isWishlisted(selectedDetail) : false}
         isShortlisted={selectedDetail ? isShortlisted(selectedDetail) : false}
         searchV2Requested={searchV2Requested}
-      />
-
-      <AiGuidedAssistantLauncher
-        onClick={openGuidedAssistant}
-        pending={Boolean(guidedAssistantSession?.messages?.length && !guidedAssistantSession?.done)}
-      />
-
-      <AiGuidedAssistantDialog
-        open={guidedAssistantOpen}
-        onClose={closeGuidedAssistant}
-        session={guidedAssistantSession}
-        inputValue={guidedAssistantInput}
-        onInputChange={setGuidedAssistantInput}
-        onSubmit={() => submitGuidedAssistant()}
-        onChipClick={(suggestion) => submitGuidedAssistant(suggestion?.value || suggestion?.label || "")}
-        onSkip={skipGuidedAssistantQuestion}
-        onStartOver={() => resetGuidedAssistant(true)}
-        onEndChat={closeGuidedAssistant}
-        onShowResults={closeGuidedAssistant}
-        onRemoveLastAnswer={removeLastGuidedAnswer}
-        loading={guidedAssistantLoading}
-        secondaryActionLabel="Open direct AI search"
-        onSecondaryAction={() => {
-          setGuidedAssistantOpen(false);
-          setAiModalOpen(true);
-        }}
-      />
-
-      <AiSearchDialog
-        open={aiModalOpen}
-        onClose={() => setAiModalOpen(false)}
-        aiPrompt={aiPrompt}
-        setAiPrompt={setAiPrompt}
-        loading={aiLoading}
-        onApply={handleAiSearch}
       />
 
       {diagnosticsEnabled && (

@@ -142,22 +142,24 @@ const ProductDetail = ({ hide, visible, productData }) => {
             {/* Sheet panel — slides in from right */}
             <div
                 data-tour="product-detail-panel"
-                className={`fixed right-0 top-0 h-screen z-[201] bg-white flex flex-col transition-transform duration-300 ease-out w-full lg:w-[88vw] max-w-[1300px] shadow-[-6px_0_48px_rgba(0,0,0,0.13)] ${open ? 'translate-x-0' : 'translate-x-full'}`}
+                className={`fixed right-0 top-0 h-screen z-[201] bg-white flex flex-col transition-transform duration-300 ease-out w-full lg:w-[88vw] max-w-[1300px] lg:rounded-l-[20px] overflow-hidden shadow-[-12px_0_60px_rgba(15,23,42,0.18)] ${open ? 'translate-x-0' : 'translate-x-full'}`}
             >
                 {/* ── Sticky header ── */}
-                <div className="flex-none flex items-center justify-between px-4 lg:px-6 h-[52px] border-b border-[#e9edf2] bg-white shrink-0">
+                <div className="flex-none flex items-center justify-between px-4 lg:px-6 h-[56px] border-b border-[#eef1f5] bg-white/95 backdrop-blur-sm shrink-0">
                     <button
                         onClick={() => hide(undefined)}
-                        className="flex items-center gap-2 text-[13px] font-medium text-[#6b7280] hover:text-[#111] transition-colors"
+                        className="group flex items-center gap-2.5 text-[13px] font-medium text-[#6b7280] hover:text-[#111] transition-colors"
                     >
-                        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-                            <path d="M19 12H5M12 5l-7 7 7 7" strokeLinecap="round" strokeLinejoin="round" />
-                        </svg>
+                        <span className="grid size-[30px] place-items-center rounded-full border border-[#e9edf2] bg-white transition-colors group-hover:border-[#111] group-hover:text-[#111]">
+                            <svg className="w-[15px] h-[15px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                                <path d="M19 12H5M12 5l-7 7 7 7" strokeLinecap="round" strokeLinejoin="round" />
+                            </svg>
+                        </span>
                         <span className="hidden sm:inline">Back to results</span>
                     </button>
 
                     {data.item_code && (
-                        <span className="font-mono text-[11px] tracking-[0.06em] text-[#b0b7c3] hidden md:block select-all">
+                        <span className="font-mono text-[11px] tracking-[0.06em] text-[#94a3b8] hidden md:inline-flex items-center rounded-full border border-[#eef1f5] bg-[#f8fafc] px-3 py-1 select-all">
                             {data.item_code}
                         </span>
                     )}
@@ -183,42 +185,42 @@ const ProductDetail = ({ hide, visible, productData }) => {
                                 <div className="overflow-x-hidden lg:grid lg:grid-cols-[400px_1fr]">
 
                                     {/* LEFT — image panel, sticky */}
-                                    <div data-tour="product-detail-images" className="hidden lg:block border-r border-[#e9edf2]">
-                                        <div className="sticky top-0 p-5 bg-white">
+                                    <div data-tour="product-detail-images" className="hidden lg:block border-r border-[#eef1f5]">
+                                        <div className="sticky top-0 p-6 bg-white">
                                             {/* Discount badge */}
                                             {discountPct > 0 && (
-                                                <div className="absolute top-5 left-5 z-10 bg-[#16a34a] text-white text-[10px] font-bold uppercase tracking-[0.1em] px-3 py-1.5">
+                                                <div className="absolute top-6 left-6 z-10 rounded-full bg-[#16a34a] text-white text-[10px] font-bold uppercase tracking-[0.1em] px-3 py-1.5 shadow-[0_4px_12px_rgba(22,163,74,0.35)]">
                                                     SAVE {discountPct}%
                                                 </div>
                                             )}
 
                                             {/* Main image */}
-                                            <div className="h-[380px] bg-[#f7f8fa] flex items-center justify-center overflow-hidden">
+                                            <div className="h-[400px] rounded-[18px] border border-[#eef1f5] bg-gradient-to-br from-[#fafbfc] to-[#f1f4f8] flex items-center justify-center overflow-hidden">
                                                 <Image
                                                     src={primaryImage || '/empty-states.png'}
-                                                    width={380}
-                                                    height={380}
+                                                    width={400}
+                                                    height={400}
                                                     alt={data.item_name || 'Product'}
-                                                    className="w-full h-full object-contain"
+                                                    className="w-full h-full object-contain p-6 transition-transform duration-300 hover:scale-[1.04]"
                                                     onError={(e) => { e.target.onerror = null; e.target.src = '/empty-states.png'; }}
                                                 />
                                             </div>
 
                                             {/* Thumbnail strip */}
                                             {data.images && data.images.length > 1 && (
-                                                <div className="flex gap-2 mt-3 overflow-x-auto scrollbarHide pb-1">
+                                                <div className="flex gap-2.5 mt-4 overflow-x-auto scrollbarHide pb-1">
                                                     {data.images.slice(0, 6).map((img, idx) => (
                                                         <button
                                                             key={idx}
                                                             onClick={() => setActiveThumb(idx)}
-                                                            className={`flex-none w-[58px] h-[58px] border-2 transition-all duration-150 overflow-hidden bg-[#f7f8fa] ${activeThumb === idx ? 'border-[#111]' : 'border-[#e5e7eb] hover:border-[#9ca3af]'}`}
+                                                            className={`flex-none w-[60px] h-[60px] rounded-[12px] border transition-all duration-150 overflow-hidden bg-[#f7f8fa] ${activeThumb === idx ? 'border-[#111] ring-2 ring-[#111]/10' : 'border-[#e5e7eb] hover:border-[#9ca3af]'}`}
                                                         >
                                                             <Image
                                                                 src={check_Image(img.detail_image || img.image) || '/empty-states.png'}
-                                                                width={58}
-                                                                height={58}
+                                                                width={60}
+                                                                height={60}
                                                                 alt={`View ${idx + 1}`}
-                                                                className="w-full h-full object-contain"
+                                                                className="w-full h-full object-contain p-1.5"
                                                                 onError={(e) => { e.target.onerror = null; e.target.src = '/empty-states.png'; }}
                                                             />
                                                         </button>
@@ -229,20 +231,20 @@ const ProductDetail = ({ hide, visible, productData }) => {
                                     </div>
 
                                     {/* RIGHT — info panel */}
-                                    <div className="min-w-0 p-5 lg:p-7">
+                                    <div className="min-w-0 p-5 lg:p-8">
                                         {/* Mobile image */}
-                                        <div className="lg:hidden mb-5 h-[220px] bg-[#f7f8fa] flex items-center justify-center relative overflow-hidden">
+                                        <div className="lg:hidden mb-5 h-[240px] rounded-[16px] border border-[#eef1f5] bg-gradient-to-br from-[#fafbfc] to-[#f1f4f8] flex items-center justify-center relative overflow-hidden">
                                             {discountPct > 0 && (
-                                                <div className="absolute top-2 left-2 z-10 bg-[#16a34a] text-white text-[9px] font-bold uppercase tracking-[0.1em] px-2 py-1">
+                                                <div className="absolute top-3 left-3 z-10 rounded-full bg-[#16a34a] text-white text-[9px] font-bold uppercase tracking-[0.1em] px-2.5 py-1 shadow-[0_4px_12px_rgba(22,163,74,0.35)]">
                                                     -{discountPct}%
                                                 </div>
                                             )}
                                             <Image
                                                 src={primaryImage || '/empty-states.png'}
-                                                width={220}
-                                                height={220}
+                                                width={240}
+                                                height={240}
                                                 alt={data.item_name || 'Product'}
-                                                className="h-full w-full object-contain"
+                                                className="h-full w-full object-contain p-5"
                                                 onError={(e) => { e.target.onerror = null; e.target.src = '/empty-states.png'; }}
                                             />
                                         </div>
@@ -250,18 +252,17 @@ const ProductDetail = ({ hide, visible, productData }) => {
                                         <div data-tour="product-detail-info">
                                         {/* Brand · Category */}
                                         {(data.brand || data.item_group) && (
-                                            <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-[#6b7280] mb-2.5">
-                                                {data.brand && <span>{data.brand}</span>}
-                                                {data.brand && data.item_group && <span className="text-[#d1d5db]">·</span>}
-                                                {data.item_group && <span>{data.item_group}</span>}
+                                            <div className="flex flex-wrap items-center gap-2 mb-3">
+                                                {data.brand && <span className="inline-flex items-center rounded-full bg-[#111] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-white">{data.brand}</span>}
+                                                {data.item_group && <span className="inline-flex items-center rounded-full border border-[#e5e7eb] bg-[#f8fafc] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-[#6b7280]">{data.item_group}</span>}
                                             </div>
                                         )}
 
                                         {/* SKU */}
-                                        <p className="font-mono text-[11px] text-[#b0b7c3] mb-1.5 tracking-[0.04em]">{data.item_code}</p>
+                                        <p className="font-mono text-[11px] text-[#b0b7c3] mb-2 tracking-[0.04em]">{data.item_code}</p>
 
                                         {/* Product name */}
-                                        <h2 className="text-[19px] lg:text-[21px] font-semibold text-[#111] leading-snug capitalize mb-3">
+                                        <h2 className="text-[22px] lg:text-[26px] font-bold text-[#111] leading-[1.25] tracking-[-0.01em] capitalize mb-3">
                                             {data.item_name}
                                         </h2>
 
@@ -275,24 +276,24 @@ const ProductDetail = ({ hide, visible, productData }) => {
 
                                         </div>
 
-                                        <div className="h-px bg-[#f0f2f5] mb-4" />
+                                        <div className="h-px bg-[#f0f2f5] mb-5" />
 
                                         {/* Price */}
-                                        <div data-tour="product-detail-price" className="mb-4">
+                                        <div data-tour="product-detail-price" className="mb-5">
                                             {data.offer_rate > 0 ? (
                                                 <div className="flex flex-wrap items-baseline gap-3">
-                                                    <span className="text-[26px] font-bold text-[#111] tracking-tight">
+                                                    <span className="text-[30px] font-bold text-[#111] tracking-[-0.02em]">
                                                         AED {parseFloat(data.offer_rate).toFixed(2)}
                                                     </span>
-                                                    <span className="text-[16px] text-[#9ca3af] line-through">
+                                                    <span className="text-[17px] text-[#9ca3af] line-through">
                                                         {parseFloat(data.rate).toFixed(2)}
                                                     </span>
-                                                    <span className="text-[10px] font-bold text-white bg-[#16a34a] px-2.5 py-1 tracking-[0.08em]">
+                                                    <span className="rounded-full bg-[#dcfce7] text-[#15803d] text-[11px] font-bold px-2.5 py-1 tracking-[0.04em]">
                                                         SAVE {discountPct}%
                                                     </span>
                                                 </div>
                                             ) : data.rate > 0 ? (
-                                                <span className="text-[26px] font-bold text-[#111] tracking-tight">
+                                                <span className="text-[30px] font-bold text-[#111] tracking-[-0.02em]">
                                                     AED {parseFloat(data.rate).toFixed(2)}
                                                 </span>
                                             ) : (
@@ -303,25 +304,25 @@ const ProductDetail = ({ hide, visible, productData }) => {
                                         {/* Stock status */}
                                         <div data-tour="product-detail-stock-detail" className="mb-5">
                                             {isInStock ? (
-                                                <div className="inline-flex items-center gap-2">
+                                                <div className="inline-flex items-center gap-2 rounded-full border border-[#bbf7d0] bg-[#f0fdf4] px-3 py-1.5">
                                                     <span className="size-2 rounded-full bg-[#16a34a] shadow-[0_0_0_3px_rgba(22,163,74,0.18)]" />
-                                                    <span className="text-[13px] font-semibold text-[#16a34a]">
+                                                    <span className="text-[12px] font-semibold text-[#15803d]">
                                                         IN STOCK · {Number(totalStock || 0).toLocaleString()} Nos
                                                     </span>
                                                 </div>
                                             ) : (
-                                                <div className="inline-flex items-center gap-2">
+                                                <div className="inline-flex items-center gap-2 rounded-full border border-[#fecaca] bg-[#fef2f2] px-3 py-1.5">
                                                     <span className="size-2 rounded-full bg-[#dc2626]" />
-                                                    <span className="text-[13px] font-semibold text-[#dc2626]">OUT OF STOCK</span>
+                                                    <span className="text-[12px] font-semibold text-[#dc2626]">OUT OF STOCK</span>
                                                 </div>
                                             )}
                                         </div>
 
-                                        <div data-tour="product-detail-business-signals" className="mb-5 rounded-[14px] border border-[#e5e7eb] bg-[#f8fafc] p-3.5">
-                                            <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[#64748b] mb-2">
+                                        <div data-tour="product-detail-business-signals" className="mb-5 rounded-[16px] border border-[#e5e7eb] bg-gradient-to-br from-[#fbfcfe] to-[#f4f7fb] p-4">
+                                            <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[#64748b] mb-3">
                                                 Business Signals
                                             </p>
-                                            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                                            <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
                                                 <MetricChip
                                                     label="Star Rating"
                                                     value={businessSignals.hasStarRating ? formatStarRating(businessSignals.starRating) : '-'}
@@ -372,9 +373,9 @@ const ProductDetail = ({ hide, visible, productData }) => {
 export default ProductDetail;
 
 const MetricChip = ({ label, value }) => (
-    <div className="rounded-[10px] border border-[#e2e8f0] bg-white px-2.5 py-2">
+    <div className="rounded-[12px] border border-[#e2e8f0] bg-white px-3 py-2.5 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
         <p className="text-[10px] uppercase tracking-[0.08em] text-[#94a3b8]">{label}</p>
-        <p className="mt-1 text-[12px] font-semibold text-[#1e293b]">{value}</p>
+        <p className="mt-1 text-[13px] font-bold text-[#1e293b]">{value}</p>
     </div>
 );
 

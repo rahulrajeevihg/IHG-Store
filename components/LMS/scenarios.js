@@ -205,11 +205,11 @@ const SCENARIOS = {
       },
       {
         id: 'pf-category',
-        label: 'Set category to "Spotlight"',
-        hint: 'Open the Category facet and tick "Spotlight".',
+        label: 'Set category to "Spot Light"',
+        hint: 'Open the Category facet and tick "Spot Light".',
         check: (state) => {
           const f = lastFilterEvent(state)?.filters || {};
-          return arrayIncludesLoose(f.category_list, 'spotlight') || arrayIncludesLoose(f.item_group, 'spotlight');
+          return arrayIncludesLoose(f.category_list, 'spot light') || arrayIncludesLoose(f.item_group, 'spot light');
         },
       },
       {

@@ -27,12 +27,12 @@ export default function EmptyState({ query, hasFilters, onClear, onAskAi }) {
           <button
             type="button"
             onClick={onAskAi}
-            className="inline-flex items-center gap-[6px] bg-[#111] px-[14px] py-[9px] text-[11px] font-semibold uppercase tracking-[0.12em] text-white hover:bg-black"
+            className="inline-flex items-center gap-[6px] rounded-[10px] bg-gradient-to-r from-[#1b6dff] to-[#3f86ff] px-[14px] py-[9px] text-[11px] font-semibold uppercase tracking-[0.12em] text-white shadow-[0_4px_14px_rgba(27,109,255,0.3)] transition hover:from-[#155fe0] hover:to-[#2f78f5] hover:shadow-[0_6px_18px_rgba(27,109,255,0.45)]"
           >
             <svg className="h-[12px] w-[12px]" viewBox="0 0 24 24" fill="currentColor">
               <path d="M12 2l1.9 5.2L19 9l-5.1 1.8L12 16l-1.9-5.2L5 9l5.1-1.8L12 2z" />
             </svg>
-            Ask AI to expand
+            Ask AI
           </button>
         )}
       </div>

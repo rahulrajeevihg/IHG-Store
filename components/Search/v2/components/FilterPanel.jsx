@@ -48,15 +48,28 @@ export default function FilterPanel({
 
   const sections = useMemo(
     () =>
-      VISIBLE_FILTERS.filter((filter) => !["power", "color_temp", "lumen_output", "input_voltage", "output_current", "output_voltage"].includes(filter.key)).map((f) => {
-        const sel = new Set(filters[f.key] || []);
-        const options = (visibleFilterOptions[f.key] || []).filter((opt) => {
-          if (sel.has(opt.value)) return true;
-          const m = opt.label.match(/\((\d+)\)$/);
-          return !m || Number(m[1]) > 0;
-        });
-        return { ...f, options, selectedCount: sel.size };
-      }),
+      VISIBLE_FILTERS
+        .filter(
+          (filter) =>
+            ![
+              "power",
+              "color_temp",
+              "lumen_output",
+              "input_voltage",
+              "output_current",
+              "output_voltage",
+              "is_manufactured_item",
+            ].includes(filter.key)
+        )
+        .map((f) => {
+          const sel = new Set(filters[f.key] || []);
+          const options = (visibleFilterOptions[f.key] || []).filter((opt) => {
+            if (sel.has(opt.value)) return true;
+            const m = opt.label.match(/\((\d+)\)$/);
+            return !m || Number(m[1]) > 0;
+          });
+          return { ...f, options, selectedCount: sel.size };
+        }),
     [filters, visibleFilterOptions]
   );
 
@@ -111,26 +124,39 @@ export default function FilterPanel({
   );
 
   const groupedSections = useMemo(() => {
-    const PRIMARY = new Set(["brand", "item_group", "category_list", "product_type"]);
-    const TECHNICAL = new Set([
+    const preliminaryOrder = [
+      "brand",
+      "category_list",
+      "series",
+      "item_group",
+      "product_type",
+    ];
+    const specificationPreferredOrder = [
       "ip_rate",
-      "lumen_output",
-      "beam_angle",
       "mounting",
-      "input_voltage",
-      "output_voltage",
-      "output_current",
+      "beam_angle",
       "lamp_type",
       "body_finish",
       "material",
       "warranty",
-      "is_manufactured_item",
-    ]);
+    ];
+
+    const sectionMap = new Map(sections.map((section) => [section.key, section]));
+    const preliminary = preliminaryOrder
+      .map((key) => sectionMap.get(key))
+      .filter(Boolean);
+
+    const usedKeys = new Set(preliminary.map((section) => section.key));
+    const specificationOrdered = specificationPreferredOrder
+      .map((key) => sectionMap.get(key))
+      .filter(Boolean);
+    specificationOrdered.forEach((section) => usedKeys.add(section.key));
+
+    const specificationRemaining = sections.filter((section) => !usedKeys.has(section.key));
 
     return {
-      primary: sections.filter((s) => PRIMARY.has(s.key)),
-      technical: sections.filter((s) => TECHNICAL.has(s.key)),
-      advanced: sections.filter((s) => !PRIMARY.has(s.key) && !TECHNICAL.has(s.key)),
+      preliminary,
+      specification: [...specificationOrdered, ...specificationRemaining],
     };
   }, [sections]);
 
@@ -270,6 +296,8 @@ export default function FilterPanel({
             </div>
           </FilterSection>
 
+          <FilterGroup title="Preliminary Filters" sections={groupedSections.preliminary} filters={filters} updateMultiFilter={updateMultiFilter} />
+
           <PowerRangeSection
             dataTour="filter-power-slider"
             bounds={powerSliderBounds}
@@ -367,11 +395,7 @@ export default function FilterPanel({
           />
 
           {/* FACET sections grouped */}
-          <FilterGroup title="Primary Filters" sections={groupedSections.primary} filters={filters} updateMultiFilter={updateMultiFilter} />
-          <FilterGroup title="Technical Filters" sections={groupedSections.technical} filters={filters} updateMultiFilter={updateMultiFilter} />
-          {groupedSections.advanced.length > 0 && (
-            <FilterGroup title="Advanced Filters" sections={groupedSections.advanced} filters={filters} updateMultiFilter={updateMultiFilter} />
-          )}
+          <FilterGroup title="Specification Filters" sections={groupedSections.specification} filters={filters} updateMultiFilter={updateMultiFilter} />
 
           <FilterSection
             dataTour="filter-happy-customers"

@@ -540,8 +540,8 @@ export default function MainHeader({ header_template, theme_settings, website_se
 
                     </div> */}
 
-                    <Link data-tour="header-cart-icon" href="/tabs/yourcart" className="relative headerBtbs">
-                      <img style={{ objectFit: 'contain' }} className='h-[25px] w-[23px]' alt='cart' src={'https://erp.ihgind.com/files/grocery.gif'}></img>
+                    <Link data-tour="header-cart-icon" href="/tabs/yourcart" className="relative headerBtbs text-[#111827]">
+                      <CartIcon className='h-[24px] w-[24px]' />
                       {cartCount > 0 && (
                         <span className="absolute -top-2 -right-2 bg-red-600 text-white text-[10px] font-bold rounded-full h-5 w-5 flex items-center justify-center">
                           {cartCount}
@@ -586,4 +586,23 @@ export default function MainHeader({ header_template, theme_settings, website_se
       </div>
     </>
   )
+}
+
+function CartIcon({ className = '' }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <circle cx="9" cy="20" r="1.5" />
+      <circle cx="18" cy="20" r="1.5" />
+      <path d="M3 4h2l2.4 10.2a2 2 0 0 0 2 1.6h7.8a2 2 0 0 0 2-1.6L21 7H7" />
+    </svg>
+  );
 }

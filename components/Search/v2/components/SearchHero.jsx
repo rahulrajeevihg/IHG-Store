@@ -1,8 +1,9 @@
+import AiInlinePanel from "./AiInlinePanel";
+
 export default function SearchHero({
   searchInput,
   setSearchInput,
   onSubmit,
-  onOpenAi,
   onKeyDown,
   suggestionsLoading,
   suggestionsOpen,
@@ -17,7 +18,69 @@ export default function SearchHero({
   suggestLatencyMs,
   fallbackMessage,
   aiExplanation,
+  // ── AI inline mode ──
+  aiInputMode,
+  onEnterAiMode,
+  onExitAiMode,
+  aiPrompt,
+  setAiPrompt,
+  aiLoading,
+  aiPreview,
+  aiPreviewChips,
+  aiPreviewFresh,
+  aiPreviewError,
+  onInterpretAi,
+  onApplyAi,
+  searchInputRef,
+  // ── guided sub-mode ──
+  aiPanelMode = "search",
+  guidedSession,
+  guidedLoading,
+  guidedInputValue,
+  setGuidedInputValue,
+  guidedPlaceholder,
+  onStartGuided,
+  onGuidedSubmit,
+  onGuidedChip,
+  onGuidedSkip,
+  onGuidedShowResults,
+  onGuidedStartOver,
+  onGuidedRemoveLast,
 }) {
+  const guidedMode = aiInputMode && aiPanelMode === "guided";
+
+  const handleAiKeyDown = (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      if (aiPreviewFresh) onApplyAi();
+      else onInterpretAi();
+    } else if (event.key === "Escape") {
+      event.preventDefault();
+      onExitAiMode();
+    }
+  };
+
+  const handleGuidedKeyDown = (event) => {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      onGuidedSubmit();
+    } else if (event.key === "Escape") {
+      event.preventDefault();
+      onExitAiMode();
+    }
+  };
+
+  const inputValue = guidedMode
+    ? guidedInputValue || ""
+    : aiInputMode
+      ? aiPrompt
+      : searchInput;
+  const showClear = guidedMode
+    ? !!guidedInputValue
+    : aiInputMode
+      ? !!aiPrompt
+      : !!searchInput && !suggestionsLoading;
+
   return (
     <section className="sticky top-0 z-20 border-b border-[#e7edf3] bg-[#fbfcfe]">
       <div className="mx-auto max-w-[1700px] px-[12px] py-[10px]">
@@ -27,99 +90,184 @@ export default function SearchHero({
               className="relative flex items-stretch"
               ref={suggestionsContainerRef}
             >
-              <div data-tour="search-bar" className="group relative flex h-[56px] w-full items-stretch rounded-[16px] border border-[#d8e1ea] bg-[#fcfdff] transition-all duration-200 focus-within:border-[#111827] focus-within:bg-white focus-within:shadow-[0_0_0_4px_rgba(15,23,42,0.06)]">
+              <div
+                data-tour="search-bar"
+                className={`group relative flex h-[56px] w-full items-stretch rounded-[16px] border bg-[#fcfdff] transition-all duration-200 ${
+                  aiInputMode
+                    ? "border-[#1b6dff] bg-white shadow-[0_0_0_4px_rgba(27,109,255,0.12)]"
+                    : "border-[#d8e1ea] focus-within:border-[#111827] focus-within:bg-white focus-within:shadow-[0_0_0_4px_rgba(15,23,42,0.06)]"
+                }`}
+              >
                 <span className="inline-flex shrink-0 items-center pl-[18px] text-[#64748b]">
-                  <SearchIcon />
+                  {aiInputMode ? (
+                    <span className="grid h-[24px] w-[24px] place-items-center rounded-full bg-[#edf4ff] text-[#1b6dff]">
+                      <SparkIcon className="h-[12px] w-[12px]" />
+                    </span>
+                  ) : (
+                    <SearchIcon />
+                  )}
                 </span>
                 <input
-                  value={searchInput}
+                  ref={searchInputRef}
+                  value={inputValue}
                   onChange={(event) => {
-                    setSearchInput(event.target.value);
-                    setSuggestionsOpen(true);
+                    if (guidedMode) {
+                      setGuidedInputValue(event.target.value);
+                    } else if (aiInputMode) {
+                      setAiPrompt(event.target.value);
+                    } else {
+                      setSearchInput(event.target.value);
+                      setSuggestionsOpen(true);
+                    }
                   }}
-                  onKeyDown={onKeyDown}
-                  placeholder="Search SKU, product name, category, or specification…"
+                  onKeyDown={
+                    guidedMode
+                      ? handleGuidedKeyDown
+                      : aiInputMode
+                        ? handleAiKeyDown
+                        : onKeyDown
+                  }
+                  placeholder={
+                    guidedMode
+                      ? guidedPlaceholder || "Type your answer, or pick an option below…"
+                      : aiInputMode
+                        ? "Describe what you need — e.g. ip65 3000k spotlights in stock under 500"
+                        : "Search SKU, product name, category, or specification…"
+                  }
                   className="h-full flex-1 bg-transparent px-[12px] text-[15px] text-[#111827] outline-none placeholder:text-[#97a3b6]"
                   autoComplete="off"
                   spellCheck={false}
                 />
-                {suggestionsLoading && (
+                {aiInputMode && (
+                  <span className="hidden shrink-0 items-center pr-[4px] sm:inline-flex">
+                    <span className="rounded-full bg-[#edf4ff] px-[8px] py-[3px] text-[10px] font-semibold uppercase tracking-[0.14em] text-[#1d4ed8]">
+                      {guidedMode ? "Guided" : "AI mode"}
+                    </span>
+                  </span>
+                )}
+                {!aiInputMode && suggestionsLoading && (
                   <span className="inline-flex shrink-0 items-center px-[10px] text-[10px] font-semibold uppercase tracking-[0.18em] text-[#94a3b8]">
                     …
                   </span>
                 )}
-                {!!searchInput && !suggestionsLoading && (
+                {showClear && (
                   <button
                     type="button"
                     onClick={() => {
-                      setSearchInput("");
-                      setSuggestionsOpen(false);
+                      if (guidedMode) {
+                        setGuidedInputValue("");
+                      } else if (aiInputMode) {
+                        setAiPrompt("");
+                      } else {
+                        setSearchInput("");
+                        setSuggestionsOpen(false);
+                      }
                     }}
                     className="shrink-0 px-[10px] text-[18px] leading-none text-[#94a3b8] transition hover:text-[#111827]"
-                    aria-label="Clear search"
+                    aria-label="Clear"
                   >
                     ×
                   </button>
                 )}
-                <span className="my-[12px] w-px shrink-0 bg-[#e6ebf1]" aria-hidden="true" />
+                <span className="my-[12px] ml-[4px] w-px shrink-0 bg-[#e6ebf1]" aria-hidden="true" />
                 <button
                   data-tour="ai-search-button"
                   type="button"
-                  onClick={onOpenAi}
-                  className="group/ai inline-flex shrink-0 items-center gap-[7px] rounded-r-none px-[14px] text-[11px] font-semibold uppercase tracking-[0.14em] text-[#1f2937] transition hover:bg-[#f5f8fc]"
-                  title="Describe what you need in plain English"
+                  onClick={aiInputMode ? onExitAiMode : onEnterAiMode}
+                  className={
+                    aiInputMode
+                      ? "group/ai m-[6px] inline-flex shrink-0 items-center gap-[7px] rounded-[12px] border border-[#cdddff] bg-[#eef5ff] px-[14px] text-[11px] font-semibold uppercase tracking-[0.14em] text-[#1d4ed8] transition hover:bg-[#e2eeff]"
+                      : "group/ai m-[6px] inline-flex shrink-0 items-center gap-[7px] rounded-[12px] bg-gradient-to-r from-[#1b6dff] to-[#3f86ff] px-[14px] text-[11px] font-semibold uppercase tracking-[0.14em] text-white shadow-[0_4px_14px_rgba(27,109,255,0.3)] transition hover:from-[#155fe0] hover:to-[#2f78f5] hover:shadow-[0_6px_18px_rgba(27,109,255,0.45)]"
+                  }
+                  title="Describe what you need in plain English — AI turns it into filters"
                 >
-                  <span className="grid h-[24px] w-[24px] place-items-center rounded-full bg-[#edf4ff] text-[#1b6dff] transition group-hover/ai:bg-[#dce9ff]">
-                    <SparkIcon className="h-[12px] w-[12px]" />
-                  </span>
-                  <span className="hidden sm:inline">Ask AI</span>
+                  <SparkIcon className="h-[13px] w-[13px]" />
+                  <span>{aiInputMode ? "Exit AI" : "Ask AI"}</span>
+                  {!aiInputMode && (
+                    <kbd className="ml-[3px] hidden h-[18px] items-center rounded-[5px] border border-white/30 bg-white/15 px-[5px] text-[10px] font-semibold not-italic text-white sm:inline-flex">
+                      ⌘K
+                    </kbd>
+                  )}
                 </button>
-                <button
-                  data-tour="search-submit-button"
-                  type="button"
-                  onClick={() => onSubmit()}
-                  className="m-[6px] inline-flex shrink-0 items-center rounded-[12px] bg-[#111827] px-[18px] text-[11px] font-semibold uppercase tracking-[0.14em] text-white transition hover:bg-black"
-                >
-                  Search
-                  <ArrowRight className="ml-[7px]" />
-                </button>
+                {!aiInputMode && (
+                  <button
+                    data-tour="search-submit-button"
+                    type="button"
+                    onClick={() => onSubmit()}
+                    className="m-[6px] inline-flex shrink-0 items-center rounded-[12px] bg-[#111827] px-[18px] text-[11px] font-semibold uppercase tracking-[0.14em] text-white transition hover:bg-black"
+                  >
+                    Search
+                    <ArrowRight className="ml-[7px]" />
+                  </button>
+                )}
               </div>
-            </div>
 
-            {suggestionsOpen && suggestions.length > 0 && (
-              <div className="absolute left-0 right-0 top-full z-30 mt-[6px] max-h-[400px] overflow-auto rounded-[16px] border border-[#e5e7eb] bg-white shadow-[0_18px_48px_rgba(15,23,42,0.12)]" style={{ scrollbarWidth: "thin" }}>
-                {suggestions.map((suggestion, index) => {
-                  const isActive = index === activeSuggestionIndex;
-                  return (
-                    <button
-                      key={`${suggestion.item_code}-${index}`}
-                      type="button"
-                      onClick={() => onSuggestionSelect(suggestion)}
-                      className={`relative flex w-full items-center justify-between gap-[12px] border-b border-[#f4f6f8] px-[16px] py-[11px] text-left last:border-b-0 transition-colors duration-100 ${
-                        isActive ? "bg-[#f0f6ff]" : "hover:bg-[#f9fafb]"
-                      }`}
-                    >
-                      {isActive && (
-                        <div className="absolute left-0 top-0 bottom-0 w-[3px] rounded-r-full bg-[#3b82f6]" />
-                      )}
-                      <div className="min-w-0">
-                        <p className="truncate font-mono text-[12px] font-semibold text-[#111]">
-                          {highlightQuery(suggestion.item_code, searchInput)}
-                        </p>
-                        <p className="truncate text-[12px] text-[#6b7280]">
-                          {highlightQuery(suggestion.item_name, searchInput)}
-                        </p>
-                      </div>
-                      {suggestion.brand && (
-                        <span className="shrink-0 rounded-md border border-[#e5e5e5] px-[8px] py-[3px] text-[10px] font-medium uppercase tracking-[0.12em] text-[#6b7280]">
-                          {suggestion.brand}
-                        </span>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
+              {aiInputMode ? (
+                <AiInlinePanel
+                  mode={aiPanelMode}
+                  prompt={aiPrompt}
+                  loading={aiLoading}
+                  preview={aiPreview}
+                  previewChips={aiPreviewChips}
+                  previewFresh={aiPreviewFresh}
+                  error={aiPreviewError}
+                  onInterpret={onInterpretAi}
+                  onApply={onApplyAi}
+                  onClose={onExitAiMode}
+                  onPickExample={(example) => {
+                    setAiPrompt(example);
+                    onInterpretAi(example);
+                  }}
+                  onStartGuided={onStartGuided}
+                  guidedSession={guidedSession}
+                  guidedLoading={guidedLoading}
+                  onGuidedChip={onGuidedChip}
+                  onGuidedSkip={onGuidedSkip}
+                  onGuidedShowResults={onGuidedShowResults}
+                  onGuidedStartOver={onGuidedStartOver}
+                  onGuidedRemoveLast={onGuidedRemoveLast}
+                />
+              ) : (
+                suggestionsOpen &&
+                suggestions.length > 0 && (
+                  <div
+                    className="absolute left-0 right-0 top-full z-30 mt-[6px] max-h-[400px] overflow-auto rounded-[16px] border border-[#e5e7eb] bg-white shadow-[0_18px_48px_rgba(15,23,42,0.12)]"
+                    style={{ scrollbarWidth: "thin" }}
+                  >
+                    {suggestions.map((suggestion, index) => {
+                      const isActive = index === activeSuggestionIndex;
+                      return (
+                        <button
+                          key={`${suggestion.item_code}-${index}`}
+                          type="button"
+                          onClick={() => onSuggestionSelect(suggestion)}
+                          className={`relative flex w-full items-center justify-between gap-[12px] border-b border-[#f4f6f8] px-[16px] py-[11px] text-left last:border-b-0 transition-colors duration-100 ${
+                            isActive ? "bg-[#f0f6ff]" : "hover:bg-[#f9fafb]"
+                          }`}
+                        >
+                          {isActive && (
+                            <div className="absolute left-0 top-0 bottom-0 w-[3px] rounded-r-full bg-[#3b82f6]" />
+                          )}
+                          <div className="min-w-0">
+                            <p className="truncate font-mono text-[12px] font-semibold text-[#111]">
+                              {highlightQuery(suggestion.item_code, searchInput)}
+                            </p>
+                            <p className="truncate text-[12px] text-[#6b7280]">
+                              {highlightQuery(suggestion.item_name, searchInput)}
+                            </p>
+                          </div>
+                          {suggestion.brand && (
+                            <span className="shrink-0 rounded-md border border-[#e5e5e5] px-[8px] py-[3px] text-[10px] font-medium uppercase tracking-[0.12em] text-[#6b7280]">
+                              {suggestion.brand}
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )
+              )}
+            </div>
           </div>
 
           {(fallbackMessage || aiExplanation) && (
@@ -164,8 +312,19 @@ function ArrowRight({ className = "" }) {
 
 export function SparkIcon({ className = "" }) {
   return (
-    <svg className={`h-[14px] w-[14px] ${className}`} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-      <path d="M12 2l1.9 5.2L19 9l-5.1 1.8L12 16l-1.9-5.2L5 9l5.1-1.8L12 2zM19 14l.8 2.2L22 17l-2.2.8L19 20l-.8-2.2L16 17l2.2-.8L19 14zM5 14l.8 2.2L8 17l-2.2.8L5 20l-.8-2.2L2 17l2.2-.8L5 14z" />
+    <svg
+      className={`h-[14px] w-[14px] ${className}`}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M12 3l1.7 4.8L18.5 9.5l-4.8 1.7L12 16l-1.7-4.8L5.5 9.5l4.8-1.7L12 3z" />
+      <path d="M18.5 14.5l.9 2.3 2.3.9-2.3.9-.9 2.3-.9-2.3-2.3-.9 2.3-.9.9-2.3z" />
+      <path d="M5.5 14.5l.9 2.3 2.3.9-2.3.9-.9 2.3-.9-2.3-2.3-.9 2.3-.9.9-2.3z" />
     </svg>
   );
 }

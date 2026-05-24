@@ -86,7 +86,7 @@ export default function QueryLauncher() {
       href="/product-queries"
       className="fixed bottom-[92px] right-[18px] left-auto z-[120] inline-flex min-w-[56px] items-center gap-3 rounded-[18px] border border-[#dbe5ef] bg-white px-3 py-3 shadow-[0_18px_32px_rgba(15,23,42,0.14)] transition hover:-translate-y-0.5 hover:shadow-[0_24px_38px_rgba(15,23,42,0.18)] md:right-[20px] md:min-w-[190px] md:px-4"
     >
-      <span className="relative grid h-11 w-11 shrink-0 place-items-center rounded-[14px] bg-[#111827] text-white">
+      <span className="relative grid h-11 w-11 shrink-0 place-items-center rounded-[14px] bg-[#edf4ff] text-[#1b6dff]">
         <ChatIcon />
         {badge > 0 && (
           <span className="absolute -right-1 -top-1 inline-flex min-w-[20px] items-center justify-center rounded-full bg-[#dc2626] px-1.5 py-0.5 text-[10px] font-bold leading-none text-white">
@@ -110,8 +110,21 @@ export default function QueryLauncher() {
 
 function ChatIcon() {
   return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
+    <svg
+      width="22"
+      height="22"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M8 12h.01" />
+      <path d="M12 12h.01" />
+      <path d="M16 12h.01" />
+      <path d="M21 12c0 4.4-4 8-9 8-1.5 0-3-.3-4.2-.9L3 21l1.2-4.1C3.4 15.5 3 13.8 3 12c0-4.4 4-8 9-8s9 3.6 9 8z" />
     </svg>
   );
 }
