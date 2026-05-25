@@ -474,7 +474,7 @@ export default function MainHeader({ header_template, theme_settings, website_se
                   <div className=''>
                     {/* /h-[100px] */}
                     {/* {theme_settings.website_logo && <Image onClick={() => { router.push('/') }} className='cursor-pointer  w-[150px] object-cover' height={60} width={100} alt='logo' src={check_Image(theme_settings.website_logo)}></Image>} */}
-                    {theme_settings.website_logo && <Image onClick={() => { router.push('/') }} className='cursor-pointer object-cover' height={41} width={51} alt='logo' src={'/logo.png'}></Image>}
+                    <Image onClick={() => { router.push('/') }} className='cursor-pointer object-cover' height={41} width={51} alt='logo' src={'/logo.png'}></Image>
                   </div>
                 }
 

@@ -429,7 +429,7 @@ export default function LogIn({ hide, checkModal }) {
                         <Image
                             height={56}
                             width={56}
-                            src="/ihg-logo.svg"
+                            src="/logo.png"
                             alt="IHG Logo"
                             priority
                         />

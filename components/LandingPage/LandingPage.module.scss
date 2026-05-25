@@ -161,15 +161,34 @@
   margin: 0;
   max-width: 16ch;
   text-wrap: balance;
+  display: inline-flex;
+  align-items: baseline;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: clamp(10px, 1.2vw, 18px);
 
-  em {
-    font-style: normal;
-    font-family: 'Geist', sans-serif;
-    background: linear-gradient(90deg, #0a0a0a 0%, #2a2a2e 100%);
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
-  }
+}
+
+.headlineTitle {
+  display: inline-block;
+  font-size: clamp(46px, 8vw, 108px);
+  font-weight: 700;
+  line-height: 0.95;
+}
+
+.versionTag {
+  display: inline-block;
+  font-style: normal;
+  font-family: 'Geist', sans-serif;
+  font-weight: 800;
+  font-size: clamp(30px, 4.8vw, 56px);
+  line-height: 0.96;
+  letter-spacing: -0.04em;
+  background: linear-gradient(95deg, #0a0a0a 0%, #34343a 55%, #111111 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.4);
 }
 
 .sub {
@@ -239,4 +258,7 @@
   .userPill { padding: 4px; }
   .hero { padding: 110px 20px 60px; }
   .cta { height: 48px; padding: 0 22px; font-size: 14.5px; }
+  .headline { gap: 8px; }
+  .headlineTitle { font-size: clamp(42px, 11vw, 76px); }
+  .versionTag { font-size: clamp(28px, 7.2vw, 46px); }
 }

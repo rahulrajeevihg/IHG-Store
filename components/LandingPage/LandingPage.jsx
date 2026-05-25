@@ -270,7 +270,8 @@ export default function LandingPage() {
           </span>
 
           <h1 className={styles.headline}>
-            Products App <em>2.0</em>
+            <span className={styles.headlineTitle}>Products App</span>
+            <span className={styles.versionTag}>2.0</span>
           </h1>
 
           <p className={styles.sub}>
@@ -282,12 +283,6 @@ export default function LandingPage() {
               Explore Products
               <svg viewBox="0 0 16 16" fill="none" aria-hidden="true" width="16" height="16">
                 <path d="M4 8h8m0 0l-3-3m3 3l-3 3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </button>
-            <button className={`${styles.cta} ${styles.ctaSecondary}`} onClick={() => router.push('/search?ai=1')}>
-              Ask AI
-              <svg viewBox="0 0 16 16" fill="none" aria-hidden="true" width="16" height="16">
-                <path d="M8 2a6 6 0 100 12A6 6 0 008 2zm0 2.5a.75.75 0 110 1.5.75.75 0 010-1.5zm-.75 3h1.5v4H7.25V7.5z" fill="currentColor" />
               </svg>
             </button>
           </div>
