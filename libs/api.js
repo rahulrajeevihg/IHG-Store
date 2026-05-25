@@ -1004,6 +1004,62 @@ function normalizeRelatedSection(section, fallbackField = "", fallbackValue = ""
     };
 }
 
+function normalizeRelatedItemsGroups(section) {
+    const rawGroups = Array.isArray(section?.groups) ? section.groups : [];
+    const groups = rawGroups
+        .map((group) => {
+            const items = Array.isArray(group?.items)
+                ? group.items.map(normalizeRelatedProductCard).filter(Boolean)
+                : [];
+            return {
+                type: group?.type || "Related Item",
+                total: Number(group?.total || items.length || 0),
+                items,
+            };
+        })
+        .filter((group) => group.items.length > 0);
+    const total = groups.reduce((sum, group) => sum + group.items.length, 0);
+    return { total: Number(section?.total || total || 0), groups };
+}
+
+function normalizeBundleComponent(component) {
+    if (!component) return null;
+    const card = normalizeRelatedProductCard(component);
+    if (!card) return null;
+    return {
+        ...card,
+        qty: Number(component.qty || 1),
+        uom: component.uom || card.stock_uom || "Nos",
+    };
+}
+
+function normalizeBundle(bundle) {
+    if (!bundle || !bundle.parent_item_code) return null;
+    const components = Array.isArray(bundle.components)
+        ? bundle.components.map(normalizeBundleComponent).filter(Boolean)
+        : [];
+    return {
+        bundle_name: bundle.bundle_name || bundle.parent_item_code,
+        parent_item_code: bundle.parent_item_code,
+        parent_item_name: bundle.parent_item_name || bundle.parent_item_code,
+        parent_image: bundle.parent_image || "",
+        parent_rate: Number(bundle.parent_rate || 0),
+        parent_offer_rate: Number(bundle.parent_offer_rate || 0),
+        bundle_price: Number(bundle.bundle_price || 0),
+        original_total: Number(bundle.original_total || 0),
+        savings: Number(bundle.savings || 0),
+        is_current_parent: Boolean(bundle.is_current_parent),
+        description: bundle.description || "",
+        components,
+    };
+}
+
+function normalizeBundles(section) {
+    const rawItems = Array.isArray(section?.items) ? section.items : [];
+    const items = rawItems.map(normalizeBundle).filter(Boolean);
+    return { total: Number(section?.total || items.length || 0), items };
+}
+
 function normalizeManufactureEntries(entries = []) {
     if (!Array.isArray(entries)) return [];
     return entries.map((entry) => {
@@ -1059,6 +1115,8 @@ export async function get_product_related_context(itemCode, previewLimit = 8) {
         ),
         bundle_parent_products: normalizeRelatedSection(message?.bundle_parent_products),
         bundle_sibling_components: normalizeRelatedSection(message?.bundle_sibling_components),
+        related_items: normalizeRelatedItemsGroups(message?.related_items),
+        bundles: normalizeBundles(message?.bundles),
         manufacture_preview: {
             total_stock_entries: Number(message?.manufacture_preview?.total_stock_entries || 0),
             total_distinct_items: Number(message?.manufacture_preview?.total_distinct_items || 0),

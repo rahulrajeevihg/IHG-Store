@@ -7,7 +7,7 @@ import dynamic from 'next/dynamic';
 
 const AddToCartModal = dynamic(() => import('./AddToCartModal'), { ssr: false });
 
-export default function CardButton({ item, index, variantOpen, text_btn, quickView, is_big, list }) {
+export default function CardButton({ item, index, variantOpen, text_btn, quickView, is_big, list, full_width }) {
 
   const [loader, setLoader] = useState(-1);
   const [modalOpen, setModalOpen] = useState(false);
@@ -181,7 +181,7 @@ export default function CardButton({ item, index, variantOpen, text_btn, quickVi
       )}
 
       {(text_btn && (item.count == 0 || !item.count)) ? (
-        <div>
+        <div className={full_width ? 'w-full' : ''}>
           <button
             type="button"
             onClick={(event) => {
@@ -189,7 +189,7 @@ export default function CardButton({ item, index, variantOpen, text_btn, quickVi
               if (loader === index || item.disable_add_to_cart_button == 1) return;
               setModalOpen(true);
             }}
-            className={`${item.disable_add_to_cart_button == 1 ? 'opacity-[0.8]' : ''} border-1 rounded-[5px] primary_bg text-white text-[15px] font-semibold px-[8px] h-[40px] w-[150px] flex items-center justify-center gap-2`}
+            className={`${item.disable_add_to_cart_button == 1 ? 'opacity-[0.8]' : ''} border-1 rounded-[5px] primary_bg text-white text-[15px] font-semibold px-[8px] h-[40px] ${full_width ? 'w-full' : 'w-[150px]'} flex items-center justify-center gap-2`}
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
               <circle cx="9" cy="21" r="1" /><circle cx="20" cy="21" r="1" />

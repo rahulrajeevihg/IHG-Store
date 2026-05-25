@@ -1,5 +1,7 @@
 import Image from "next/image";
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, Fragment } from "react";
+import { check_Image } from "@/libs/api";
+import CardButton from "../Product/CardButton";
 
 const SPEC_FIELDS = [
   { label: "Product Type",    key: "product_type" },
@@ -20,17 +22,28 @@ const SPEC_FIELDS = [
   { label: "Warranty",        key: "warranty_" },
 ];
 
-const TABS = [
+const BASE_TABS = [
   { id: 0, label: "Product Details" },
   { id: 1, label: "Stock Details"   },
   { id: 2, label: "QR Code"         },
 ];
+const BUNDLE_TAB = { id: 3, label: "Product Bundle" };
 
-export default function Tabs({ stockDetails, productDetails }) {
+export default function Tabs({ stockDetails, productDetails, bundles, onOpenProduct }) {
   const [activeTab, setActiveTab]   = useState(0);
   const [expanded, setExpanded]     = useState(false);
   const [overflows, setOverflows]   = useState(false);
   const descRef                     = useRef(null);
+
+  const bundleItems = Array.isArray(bundles) ? bundles.filter((b) => b && b.parent_item_code) : [];
+  const hasBundles = bundleItems.length > 0;
+  const tabs = hasBundles ? [...BASE_TABS, BUNDLE_TAB] : BASE_TABS;
+
+  // Reset to the first tab whenever the product changes so a stale bundle tab
+  // selection never lingers on a product that has no bundle.
+  useEffect(() => {
+    setActiveTab(0);
+  }, [productDetails?.item_code]);
 
   const filteredStock = Array.isArray(stockDetails)
     ? stockDetails.filter((item) => Number(item?.actual_qty) > 0)
@@ -57,26 +70,34 @@ export default function Tabs({ stockDetails, productDetails }) {
 
   return (
     <div className="w-full mt-2">
-      {/* ── Tab bar ── */}
-      <div className="flex border-b border-[#e9edf2] overflow-x-auto scrollbarHide">
-        {TABS.map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            className={`relative flex-none px-4 py-2.5 text-[13px] font-medium transition-colors whitespace-nowrap
-              ${activeTab === tab.id
-                ? "text-[#111] after:absolute after:bottom-0 after:left-0 after:right-0 after:h-[2px] after:bg-[#111] after:content-['']"
-                : "text-[#9ca3af] hover:text-[#4b5563]"
-              }`}
-          >
-            {tab.label}
-            {tab.id === 1 && filteredStock.length > 0 && (
-              <span className={`ml-1.5 inline-flex items-center justify-center rounded-full px-1.5 py-px text-[10px] font-bold ${activeTab === 1 ? "bg-[#111] text-white" : "bg-[#f3f4f6] text-[#6b7280]"}`}>
-                {filteredStock.length}
-              </span>
-            )}
-          </button>
-        ))}
+      {/* ── Tab bar (segmented) ── */}
+      <div className="flex gap-1 p-1 rounded-[14px] bg-[#f4f4f5] overflow-x-auto scrollbarHide">
+        {tabs.map((tab) => {
+          const badge =
+            tab.id === 1 && filteredStock.length > 0
+              ? filteredStock.length
+              : tab.id === 3 && bundleItems.length > 0
+                ? bundleItems.length
+                : null;
+          return (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`relative flex-1 min-w-fit flex items-center justify-center gap-1.5 px-4 py-2 rounded-[10px] text-[13px] font-semibold transition-all whitespace-nowrap
+                ${activeTab === tab.id
+                  ? "bg-white text-[#111] shadow-[0_1px_3px_rgba(15,23,42,0.1)]"
+                  : "text-[#9ca3af] hover:text-[#4b5563]"
+                }`}
+            >
+              {tab.label}
+              {badge !== null && (
+                <span className={`inline-flex items-center justify-center rounded-full px-1.5 py-px text-[10px] font-bold ${activeTab === tab.id ? "bg-[#111] text-white" : "bg-[#e5e7eb] text-[#6b7280]"}`}>
+                  {badge}
+                </span>
+              )}
+            </button>
+          );
+        })}
       </div>
 
       {/* ── Tab content ── */}
@@ -117,18 +138,17 @@ export default function Tabs({ stockDetails, productDetails }) {
             {/* Spec grid */}
             {specs.length > 0 && (
               <div>
-                <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-[#9ca3af]">Specifications</p>
-                <div className="grid grid-cols-2 gap-px bg-[#e9edf2] rounded-md overflow-hidden border border-[#e9edf2]">
-                  {specs.map(({ label, key }) => (
-                    <div key={key} className="flex flex-col gap-0.5 bg-white px-3 py-2.5">
-                      <span className="text-[10px] font-medium uppercase tracking-[0.1em] text-[#9ca3af]">{label}</span>
-                      <span className="text-[13px] font-semibold text-[#111] leading-snug">{productDetails[key]}</span>
+                <p className="mb-2.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-[#9ca3af]">Specifications</p>
+                <div className="rounded-[14px] border border-[#ececf0] overflow-hidden">
+                  {specs.map(({ label, key }, i) => (
+                    <div
+                      key={key}
+                      className={`flex items-center justify-between gap-4 px-4 py-2.5 ${i % 2 === 0 ? "bg-white" : "bg-[#fafafa]"}`}
+                    >
+                      <span className="text-[12px] font-medium text-[#6b7280]">{label}</span>
+                      <span className="text-[13px] font-semibold text-[#111] leading-snug text-right">{productDetails[key]}</span>
                     </div>
                   ))}
-                  {/* Pad odd row so border grid looks even */}
-                  {specs.length % 2 !== 0 && (
-                    <div className="bg-white" />
-                  )}
                 </div>
               </div>
             )}
@@ -232,6 +252,121 @@ export default function Tabs({ stockDetails, productDetails }) {
           </div>
         )}
 
+        {/* ──── PRODUCT BUNDLE ──── */}
+        {activeTab === 3 && (
+          <div className="space-y-4">
+            {hasBundles ? (
+              bundleItems.map((bundle) => (
+                <BundleCard
+                  key={bundle.bundle_name || bundle.parent_item_code}
+                  bundle={bundle}
+                  onOpenProduct={onOpenProduct}
+                />
+              ))
+            ) : (
+              <p className="text-[13px] text-[#9ca3af] italic">No bundle available for this product.</p>
+            )}
+          </div>
+        )}
+
+      </div>
+    </div>
+  );
+}
+
+const formatAed = (value) => `AED ${Number(value || 0).toFixed(2)}`;
+
+function BundleComponentChip({ component, onOpenProduct }) {
+  const image = check_Image(component?.website_image_url || component?.image || "");
+  const qty = Number(component?.qty || 1);
+  const clickable = typeof onOpenProduct === "function";
+  return (
+    <button
+      type="button"
+      disabled={!clickable}
+      onClick={() => clickable && onOpenProduct(component)}
+      className={`flex w-[120px] flex-none flex-col rounded-[12px] border border-[#ececf0] bg-white p-2 text-left ${clickable ? "transition hover:border-[#111827]" : "cursor-default"}`}
+    >
+      <div className="relative mb-1.5 h-[64px] w-full overflow-hidden rounded-[8px] bg-[#fafafa]">
+        {!!image && (
+          <Image src={image} alt={component?.item_name || component?.item_code || "item"} fill className="object-contain p-1.5" />
+        )}
+        <span className="absolute right-1 top-1 rounded-full bg-[#111] px-1.5 py-px text-[10px] font-bold text-white">×{qty}</span>
+      </div>
+      <p className="truncate font-mono text-[10px] font-semibold text-[#111827]">{component?.item_code || "-"}</p>
+      <p className="line-clamp-2 min-h-[26px] text-[10px] leading-[1.3] text-[#6b7280]">{component?.item_name || "-"}</p>
+    </button>
+  );
+}
+
+function BundleCard({ bundle, onOpenProduct }) {
+  const components = Array.isArray(bundle?.components) ? bundle.components : [];
+  const originalTotal = Number(bundle?.original_total || 0);
+  const bundlePrice = Number(bundle?.bundle_price || 0);
+  const savings = Number(bundle?.savings || 0);
+  const hasDiscount = originalTotal > 0 && bundlePrice > 0 && bundlePrice < originalTotal;
+
+  // Reuse the standard cart flow: "Add bundle" adds the parent (new_item_code).
+  const parentItem = {
+    item_code: bundle?.parent_item_code,
+    item_name: bundle?.parent_item_name || bundle?.parent_item_code,
+    rate: Number(bundle?.parent_rate || 0),
+    offer_rate: Number(bundle?.parent_offer_rate || 0),
+    website_image_url: bundle?.parent_image || "",
+    stock: 1, // bundle parent is a non-stock sales item; treat as purchasable
+    has_variants: 0,
+    stock_uom: "Nos",
+  };
+
+  return (
+    <div className="rounded-[16px] border border-[#ececf0] bg-white p-4">
+      <div className="mb-3 flex items-center gap-2">
+        <span className="inline-flex items-center rounded-full bg-[#111] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-white">
+          Buy as bundle
+        </span>
+        <span className="font-mono text-[11px] text-[#94a3b8]">{bundle?.parent_item_code}</span>
+      </div>
+
+      {/* Equation: comp1 + comp2 + … = bundle */}
+      <div className="scrollbarHide flex items-stretch gap-2 overflow-x-auto pb-1">
+        {components.map((component, idx) => (
+          <Fragment key={`${component.item_code}-${idx}`}>
+            {idx > 0 && <span className="flex-none self-center text-[18px] font-bold text-[#9ca3af]">+</span>}
+            <BundleComponentChip component={component} onOpenProduct={onOpenProduct} />
+          </Fragment>
+        ))}
+        {components.length > 0 && (
+          <span className="flex-none self-center text-[18px] font-bold text-[#9ca3af]">=</span>
+        )}
+        <div className="flex w-[150px] flex-none flex-col justify-center rounded-[12px] border border-[#111] bg-[#fafafa] p-3">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-[#6b7280]">Bundle</p>
+          {hasDiscount && (
+            <p className="text-[12px] text-[#9ca3af] line-through">{formatAed(originalTotal)}</p>
+          )}
+          <p className="text-[18px] font-extrabold text-[#0b0c0e] tracking-[-0.02em] leading-tight">
+            {formatAed(bundlePrice > 0 ? bundlePrice : originalTotal)}
+          </p>
+        </div>
+      </div>
+
+      {/* Pricing summary + CTA */}
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-[#f0f2f5] pt-3">
+        <div className="flex items-baseline gap-2">
+          {hasDiscount && (
+            <span className="text-[14px] text-[#9ca3af] line-through">{formatAed(originalTotal)}</span>
+          )}
+          <span className="text-[22px] font-extrabold text-[#0b0c0e] tracking-[-0.02em]">
+            {formatAed(bundlePrice > 0 ? bundlePrice : originalTotal)}
+          </span>
+          {savings > 0 && (
+            <span className="rounded-full bg-[#dcfce7] px-2 py-0.5 text-[11px] font-bold text-[#15803d]">
+              Save {formatAed(savings)}
+            </span>
+          )}
+        </div>
+        {parentItem.item_code && (
+          <CardButton item={parentItem} index={0} text_btn={true} is_big={true} />
+        )}
       </div>
     </div>
   );

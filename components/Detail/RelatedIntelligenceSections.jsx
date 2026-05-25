@@ -14,9 +14,9 @@ function ProductMiniCard({ item, onClick }) {
     <button
       type="button"
       onClick={() => onClick(item)}
-      className="flex w-[78vw] min-w-[170px] max-w-[220px] flex-none snap-start flex-col rounded-[10px] border border-[#e9eef4] bg-white p-2 text-left transition hover:border-[#111827] hover:bg-[#f8fafc] sm:w-[190px] sm:min-w-[190px]"
+      className="flex w-[78vw] min-w-[170px] max-w-[220px] flex-none snap-start flex-col rounded-[14px] border border-[#ececf0] bg-white p-2.5 text-left transition hover:border-[#111827] hover:shadow-[0_6px_20px_rgba(15,23,42,0.08)] sm:w-[190px] sm:min-w-[190px]"
     >
-      <div className="relative mb-2 h-[84px] w-full overflow-hidden rounded-[8px] bg-[#f3f5f8]">
+      <div className="relative mb-2 h-[88px] w-full overflow-hidden rounded-[10px] bg-[#fafafa]">
         {!!image && (
           <Image
             src={image}
@@ -51,9 +51,10 @@ function SectionHeader({ title, count, onSeeMore, seeMoreLabel = "See more" }) {
         <button
           type="button"
           onClick={onSeeMore}
-          className="shrink-0 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#1d4ed8] hover:text-[#1e3a8a]"
+          className="shrink-0 inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#111827] hover:text-[#6b7280] transition-colors"
         >
           {seeMoreLabel}
+          <span className="text-[13px] leading-none">›</span>
         </button>
       ) : null}
     </div>
@@ -270,11 +271,34 @@ function ManufactureModal({ open, onClose, itemCode, onOpenProduct }) {
   );
 }
 
+function SkeletonRow() {
+  return (
+    <div className="flex gap-2 overflow-hidden">
+      {[...Array(4)].map((_, i) => (
+        <div key={i} className="w-[190px] flex-none rounded-[14px] border border-[#ececf0] bg-white p-2.5">
+          <div className="mb-2 h-[88px] w-full animate-pulse rounded-[10px] bg-slate-200" />
+          <div className="mb-1 h-3 w-2/3 animate-pulse rounded bg-slate-200" />
+          <div className="h-3 w-full animate-pulse rounded bg-slate-200" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function EmptyRow({ label = "No products available" }) {
+  return (
+    <div className="flex items-center justify-center rounded-[12px] border border-dashed border-[#e2e6ec] bg-[#fafbfc] px-4 py-7 text-center">
+      <p className="text-[12px] font-medium text-[#9ca3af]">{label}</p>
+    </div>
+  );
+}
+
 export default function RelatedIntelligenceSections({
   itemCode,
   relatedContext,
   onOpenProduct,
   className = "",
+  loading = false,
 }) {
   const router = useRouter();
   const [manufactureModalOpen, setManufactureModalOpen] = useState(false);
@@ -283,11 +307,31 @@ export default function RelatedIntelligenceSections({
   const context = relatedContext || {};
   const relatedCategory = context.related_category || {};
   const relatedSeries = context.related_series || {};
-  const bundleParent = context.bundle_parent_products || {};
-  const bundleSibling = context.bundle_sibling_components || {};
   const manufacturePreview = context.manufacture_preview || {};
+  const relatedItemsCtx = context.related_items || {};
+  const relatedItemGroups = Array.isArray(relatedItemsCtx.groups)
+    ? relatedItemsCtx.groups
+    : [];
 
-  const sections = [
+  const handleOpenProduct = (item) => {
+    if (typeof onOpenProduct === "function") {
+      onOpenProduct(item);
+      return;
+    }
+    const code = item?.item_code || item?.name;
+    if (code) router.push(`/pr/${code}`);
+  };
+
+  const scrollSectionNext = (sectionKey) => {
+    const row = rowRefs.current[sectionKey];
+    if (!row) return;
+    const delta = Math.max(row.clientWidth * 0.9, 220);
+    row.scrollBy({ left: delta, behavior: "smooth" });
+  };
+
+  // These three always render — with a loading skeleton while fetching and an
+  // empty placeholder when there's nothing to show.
+  const fixedSections = [
     {
       key: "related-category",
       title: "Related Category",
@@ -307,28 +351,13 @@ export default function RelatedIntelligenceSections({
       title: "Related Series",
       total: Number(relatedSeries.total || 0),
       items: (relatedSeries.items || []).slice(0, CARD_LIMIT),
-      onSeeMore:
-        relatedSeries.value
-          ? () =>
-              router.push({
-                pathname: "/list",
-                query: { series: relatedSeries.value },
-              })
-          : null,
-    },
-    {
-      key: "bundle-parent",
-      title: "Bundle (Parent Products)",
-      total: Number(bundleParent.total || 0),
-      items: (bundleParent.items || []).slice(0, CARD_LIMIT),
-      onSeeMore: null,
-    },
-    {
-      key: "bundle-sibling",
-      title: "Bundle (Sibling Components)",
-      total: Number(bundleSibling.total || 0),
-      items: (bundleSibling.items || []).slice(0, CARD_LIMIT),
-      onSeeMore: null,
+      onSeeMore: relatedSeries.value
+        ? () =>
+            router.push({
+              pathname: "/list",
+              query: { series: relatedSeries.value },
+            })
+        : null,
     },
     {
       key: "manufacture",
@@ -341,59 +370,79 @@ export default function RelatedIntelligenceSections({
           : null,
       seeMoreLabel: "See all entries",
     },
-  ].filter((section) => Array.isArray(section.items) && section.items.length > 0);
+  ];
 
-  if (!sections.length) return null;
+  // Related Items (custom doctype), grouped by Type. Show each non-empty group;
+  // if there are none, surface one empty "Related Items" placeholder so the
+  // section is still discoverable.
+  const relatedItemSections = relatedItemGroups
+    .filter((group) => Array.isArray(group.items) && group.items.length > 0)
+    .map((group) => ({
+      key: `related-items-${group.type}`,
+      title: group.type || "Related Item",
+      total: Number(group.total || 0),
+      items: (group.items || []).slice(0, CARD_LIMIT),
+      onSeeMore: null,
+    }));
 
-  const handleOpenProduct = (item) => {
-    if (typeof onOpenProduct === "function") {
-      onOpenProduct(item);
-      return;
-    }
-    const code = item?.item_code || item?.name;
-    if (code) router.push(`/pr/${code}`);
-  };
+  const relatedItemsToRender = relatedItemSections.length
+    ? relatedItemSections
+    : [
+        {
+          key: "related-items-empty",
+          title: "Related Items",
+          total: 0,
+          items: [],
+          onSeeMore: null,
+        },
+      ];
 
-  const scrollSectionNext = (sectionKey) => {
-    const row = rowRefs.current[sectionKey];
-    if (!row) return;
-    const delta = Math.max(row.clientWidth * 0.9, 220);
-    row.scrollBy({ left: delta, behavior: "smooth" });
-  };
+  const sections = [...fixedSections, ...relatedItemsToRender];
 
   return (
     <div className={`min-w-0 space-y-3 overflow-x-hidden ${className}`}>
       {sections.map((section) => (
-        <div key={section.key} className="min-w-0 overflow-x-hidden rounded-[12px] border border-[#e5e7eb] bg-[#fcfdff] p-3">
+        <div
+          key={section.key}
+          className="min-w-0 overflow-x-hidden rounded-[16px] border border-[#ececf0] bg-white p-4"
+        >
           <SectionHeader
             title={section.title}
-            count={section.total}
-            onSeeMore={section.onSeeMore}
+            count={loading ? 0 : section.total}
+            onSeeMore={loading ? null : section.onSeeMore}
             seeMoreLabel={section.seeMoreLabel}
           />
-          <div
-            ref={(node) => {
-              rowRefs.current[section.key] = node;
-            }}
-            className="scrollbarHide flex snap-x snap-mandatory gap-2 overflow-x-auto pb-1"
-          >
-            {section.items.map((item) => (
-              <ProductMiniCard
-                key={`${section.key}-${item.item_code}`}
-                item={item}
-                onClick={handleOpenProduct}
-              />
-            ))}
-            <button
-              type="button"
-              onClick={() => scrollSectionNext(section.key)}
-              className="flex h-[160px] w-[42px] flex-none items-center justify-center self-center rounded-[10px] border border-[#dbe5ef] bg-white text-[#334155] transition hover:border-[#111827] hover:text-[#111827]"
-              aria-label={`Show more ${section.title}`}
-              title={`Show more ${section.title}`}
+          {loading ? (
+            <SkeletonRow />
+          ) : section.items.length > 0 ? (
+            <div
+              ref={(node) => {
+                rowRefs.current[section.key] = node;
+              }}
+              className="scrollbarHide flex snap-x snap-mandatory gap-2 overflow-x-auto pb-1"
             >
-              <span className="text-[20px] leading-none">›</span>
-            </button>
-          </div>
+              {section.items.map((item) => (
+                <ProductMiniCard
+                  key={`${section.key}-${item.item_code}`}
+                  item={item}
+                  onClick={handleOpenProduct}
+                />
+              ))}
+              {section.items.length > 3 && (
+                <button
+                  type="button"
+                  onClick={() => scrollSectionNext(section.key)}
+                  className="flex h-[160px] w-[42px] flex-none items-center justify-center self-center rounded-[10px] border border-[#dbe5ef] bg-white text-[#334155] transition hover:border-[#111827] hover:text-[#111827]"
+                  aria-label={`Show more ${section.title}`}
+                  title={`Show more ${section.title}`}
+                >
+                  <span className="text-[20px] leading-none">›</span>
+                </button>
+              )}
+            </div>
+          ) : (
+            <EmptyRow />
+          )}
         </div>
       ))}
 

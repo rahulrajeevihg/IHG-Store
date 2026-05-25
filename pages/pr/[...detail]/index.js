@@ -48,6 +48,7 @@ const Detail = () => {
     const [details, setDetails] = useState({});
     const [productDetail, setProductDetail] = useState();
     const [relatedContext, setRelatedContext] = useState(null);
+    const [relatedLoading, setRelatedLoading] = useState(false);
 
     useEffect(() => {
         // let breadcrumb = [{ name: "Home", route: "/" }];
@@ -114,14 +115,19 @@ const Detail = () => {
     const fetchRelatedContext = async (itemCode) => {
         if (!itemCode) {
             setRelatedContext(null);
+            setRelatedLoading(false);
             return;
         }
+        setRelatedLoading(true);
+        setRelatedContext(null);
         try {
             const context = await get_product_related_context(itemCode, 8);
             setRelatedContext(context || null);
         } catch (error) {
             console.error("fetchRelatedContext error", error);
             setRelatedContext(null);
+        } finally {
+            setRelatedLoading(false);
         }
     };
 
@@ -197,6 +203,7 @@ const Detail = () => {
                         toast={toast}
                         details={details}
                         relatedContext={relatedContext}
+                        relatedLoading={relatedLoading}
                     />
                 )}
             </div>
@@ -206,7 +213,7 @@ const Detail = () => {
 
 // export default function Detail({metaData, productDetail}) {
 
-const DetailPage = ({ productDetail, toast, details, relatedContext }) => {
+const DetailPage = ({ productDetail, toast, details, relatedContext, relatedLoading }) => {
     let [data, setData] = useState();
     let [additionalInfo, setAdditionalInfo] = useState({});
     let [sample, setSample] = useState(1);
@@ -993,6 +1000,11 @@ const DetailPage = ({ productDetail, toast, details, relatedContext }) => {
                                                 <Tabs
                                                     stockDetails={stockRows}
                                                     productDetails={{ ...data, total_stock: totalStock }}
+                                                    bundles={relatedContext?.bundles?.items}
+                                                    onOpenProduct={(item) => {
+                                                        const code = item?.item_code || item?.name;
+                                                        if (code) router.push(`/pr/${code}`);
+                                                    }}
                                                 />
                                             </>
                                         ) : (
@@ -1003,6 +1015,7 @@ const DetailPage = ({ productDetail, toast, details, relatedContext }) => {
                                 <RelatedIntelligenceSections
                                     itemCode={data.item_code}
                                     relatedContext={relatedContext}
+                                    loading={relatedLoading}
                                     className="m-[15px_0] overflow-x-hidden md:px-[10px]"
                                 />
 
