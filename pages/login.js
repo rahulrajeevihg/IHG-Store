@@ -22,6 +22,9 @@ export default function login() {
     } else if (sessionReason === 'expired') {
       toast.info('Your session expired. Please log in again.');
       sessionStorage.removeItem(SESSION_EXPIRED_FLAG);
+    } else if (sessionReason === 'required') {
+      toast.info('Please log in to continue.');
+      sessionStorage.removeItem(SESSION_EXPIRED_FLAG);
     }
 
     // Use full_name as the logged-in signal (sid is HttpOnly, not readable here)

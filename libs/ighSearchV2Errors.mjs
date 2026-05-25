@@ -25,6 +25,43 @@ export const isSearchV2DisabledError = (error) =>
         error.isSearchV2DisabledError === true)
   );
 
+// The backend (`ensure_query_access`) calls `frappe.throw(_("Authentication
+// required"))` when there is no valid session. Frappe maps that ValidationError
+// to HTTP 417 — NOT 401 — so the 401-only `handleUnauthorizedResponse` never
+// catches it. We detect it by message (and treat a bare 401 as auth too) so the
+// app can route the user to /login instead of showing a generic error.
+export const AUTH_REQUIRED_MESSAGE_PATTERN = /authentication\s+required/i;
+
+export const AUTH_REQUIRED_DISPLAY_MESSAGE = "Please log in to continue.";
+
+export class AuthRequiredError extends Error {
+  constructor(rawMessage) {
+    super(AUTH_REQUIRED_DISPLAY_MESSAGE);
+    this.name = "AuthRequiredError";
+    this.isAuthRequiredError = true;
+    this.rawMessage = rawMessage || "Authentication required";
+  }
+}
+
+export const isAuthRequiredError = (error) =>
+  Boolean(
+    error &&
+      (error.name === "AuthRequiredError" || error.isAuthRequiredError === true)
+  );
+
+export const isAuthRequiredResponse = (status, data) => {
+  if (status === 401) return true;
+  if (typeof status === "number" && status >= 500) return false;
+  const messages = collectFrappeErrorMessages(data);
+  return messages.some((msg) => AUTH_REQUIRED_MESSAGE_PATTERN.test(msg));
+};
+
+export const buildAuthRequiredError = (data) => {
+  const messages = collectFrappeErrorMessages(data);
+  const raw = messages.find((msg) => AUTH_REQUIRED_MESSAGE_PATTERN.test(msg));
+  return new AuthRequiredError(raw);
+};
+
 const pushIfString = (target, value) => {
   if (typeof value === "string" && value.trim() !== "") {
     target.push(value);

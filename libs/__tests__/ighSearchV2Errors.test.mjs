@@ -20,6 +20,11 @@ import {
   collectFrappeErrorMessages,
   isSearchV2DisabledError,
   isSearchV2DisabledResponse,
+  AUTH_REQUIRED_DISPLAY_MESSAGE,
+  AuthRequiredError,
+  buildAuthRequiredError,
+  isAuthRequiredError,
+  isAuthRequiredResponse,
 } from "../ighSearchV2Errors.mjs";
 
 const require = createRequire(import.meta.url);
@@ -58,6 +63,48 @@ test("isSearchV2DisabledResponse: ignores 5xx errors even with the message", () 
 test("isSearchV2DisabledResponse: ignores unrelated 4xx errors", () => {
   const data = { exception: "frappe.exceptions.ValidationError: Filter invalid" };
   assert.equal(isSearchV2DisabledResponse(417, data), false);
+});
+
+test("isAuthRequiredResponse: detects 417 + 'Authentication required' envelope", () => {
+  const data = {
+    exc_type: "ValidationError",
+    _server_messages: buildServerMessages(["Authentication required"]),
+  };
+  assert.equal(isAuthRequiredResponse(417, data), true);
+});
+
+test("isAuthRequiredResponse: detects message via traceback in `exc`", () => {
+  const data = {
+    exc: "frappe.exceptions.ValidationError: Authentication required",
+  };
+  assert.equal(isAuthRequiredResponse(417, data), true);
+});
+
+test("isAuthRequiredResponse: treats a bare 401 as auth required", () => {
+  assert.equal(isAuthRequiredResponse(401, {}), true);
+});
+
+test("isAuthRequiredResponse: ignores 5xx and unrelated 4xx", () => {
+  assert.equal(isAuthRequiredResponse(500, { message: "Authentication required" }), false);
+  assert.equal(isAuthRequiredResponse(417, { exception: "Filter invalid" }), false);
+});
+
+test("buildAuthRequiredError: returns a typed AuthRequiredError", () => {
+  const data = {
+    _server_messages: buildServerMessages(["Authentication required"]),
+  };
+  const err = buildAuthRequiredError(data);
+  assert.ok(err instanceof AuthRequiredError);
+  assert.equal(err.name, "AuthRequiredError");
+  assert.equal(err.message, AUTH_REQUIRED_DISPLAY_MESSAGE);
+  assert.match(err.rawMessage, /Authentication required/);
+  assert.equal(isAuthRequiredError(err), true);
+});
+
+test("isAuthRequiredError: only accepts the typed error", () => {
+  assert.equal(isAuthRequiredError(new Error("nope")), false);
+  assert.equal(isAuthRequiredError(null), false);
+  assert.equal(isAuthRequiredError({ isAuthRequiredError: true }), true);
 });
 
 test("collectFrappeErrorMessages: handles non-string entries gracefully", () => {

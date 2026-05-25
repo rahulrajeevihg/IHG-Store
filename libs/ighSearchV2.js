@@ -1,11 +1,16 @@
 import { domain } from "./config/siteConfig";
-import { handleUnauthorizedResponse } from "./auth";
+import { handleUnauthorizedResponse, logoutAndRedirect } from "./auth";
 import {
   SearchV2DisabledError,
   buildSearchV2DisabledError,
   isSearchV2DisabledError,
   isSearchV2DisabledResponse,
   SEARCH_V2_DISABLED_DISPLAY_MESSAGE,
+  AuthRequiredError,
+  buildAuthRequiredError,
+  isAuthRequiredError,
+  isAuthRequiredResponse,
+  AUTH_REQUIRED_DISPLAY_MESSAGE,
 } from "./ighSearchV2Errors.mjs";
 import { logV2Event } from "./ighSearchV2Metrics";
 
@@ -13,6 +18,9 @@ export {
   SearchV2DisabledError,
   isSearchV2DisabledError,
   SEARCH_V2_DISABLED_DISPLAY_MESSAGE,
+  AuthRequiredError,
+  isAuthRequiredError,
+  AUTH_REQUIRED_DISPLAY_MESSAGE,
 };
 
 // Route all igh_search API calls through the ERP cookie-forwarding proxy
@@ -240,6 +248,15 @@ const parseJsonResponse = async (response) => {
   const data = await response.json().catch(() => ({}));
 
   if (!response.ok) {
+    // The backend signals "Authentication required" via a ValidationError
+    // (HTTP 417), not a 401, so handle it explicitly here: route the user to
+    // the login page instead of surfacing a generic "unable to load" error.
+    if (isAuthRequiredResponse(response.status, data)) {
+      // Clear any stale localStorage session first, otherwise /login bounces
+      // straight back to "/" (it treats a leftover `full_name` as logged-in).
+      logoutAndRedirect("required");
+      throw buildAuthRequiredError(data);
+    }
     if (isSearchV2DisabledResponse(response.status, data)) {
       throw buildSearchV2DisabledError(data);
     }
@@ -371,6 +388,9 @@ export const searchProductsV2 = async (payload, options = {}) => {
       const timedOut = error?.message?.toLowerCase?.().includes("timed out");
       const isAbort = error?.name === "AbortError";
       if (isAbort) throw error;
+      // Auth errors are terminal — don't retry or wrap (the user is being
+      // redirected to /login); preserve the typed error for callers.
+      if (isAuthRequiredError(error)) throw error;
       const isNetwork = !error?.status && !timedOut && !isAbort;
       const canRetry = attempt === 1 && (timedOut || isNetwork);
       if (canRetry) {

@@ -14,6 +14,7 @@ import {
   buildMasterOptions,
   DEFAULT_V2_STATE,
   getIsSystemManager,
+  isAuthRequiredError,
   isSearchV2DisabledError,
   normalizeSearchHit,
   queryFromState,
@@ -790,6 +791,12 @@ export default function V2SearchPage({
       }
     } catch (err) {
       if (err?.name === "AbortError") return;
+      // Not authenticated — parseJsonResponse already kicked off the redirect to
+      // /login; bail out without rendering the generic error state. (The
+      // `finally` below still resets the loading flag.)
+      if (isAuthRequiredError(err)) {
+        return;
+      }
       if (isSearchV2DisabledError(err)) {
         reportSearchV2DisabledOnce({
           source: isAiSearch ? "ai_search_products_v2" : "search_products_v2",
