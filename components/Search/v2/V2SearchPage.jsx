@@ -1447,7 +1447,11 @@ export default function V2SearchPage({
       explanation: response?.explanation || "",
       found: Number(response?.found) || 0,
     });
-    setSearchInput(message);
+    // Keep the bar empty so it matches the reset searchState.q ("") below —
+    // otherwise the live-search effect sees searchInput !== searchState.q and
+    // fires a keyword search that wipes the AI session. The prompt is preserved
+    // in aiPrompt (for re-entry) and shown via the applied AI filter chips.
+    setSearchInput("");
     const rawHits = Array.isArray(response?.hits) ? response.hits : [];
     const sortedHits = applyInventoryValueSortFallback(rawHits, searchState.sort_by);
     setResults(sortedHits);
