@@ -1323,10 +1323,29 @@ function throwIfQueryUnavailable(payload, methodName) {
     }
 }
 
+/**
+ * Frappe returns a JSON body even for errors (HTTP 417 ValidationError, 403
+ * PermissionError, …) and postMethod does NOT throw on those — it returns the
+ * payload. Detail-returning mutations would then normalize an error object into
+ * an empty `query`, masking the real reason ("item_code is required", "is not
+ * whitelisted", …). This guard surfaces the actual backend message instead.
+ */
+function assertNoFrappeError(response, fallback) {
+    const raw = response?.message ?? response;
+    const isError =
+        raw &&
+        typeof raw === "object" &&
+        (raw.exc_type || raw.exception || raw._server_messages || raw.status === "error");
+    if (isError) {
+        throw new Error(extractFrappeErrorMessage(response, fallback));
+    }
+}
+
 export async function createProductQuery(payload) {
     const api = methodUrl + 'igh_search.igh_search.api.create_product_query';
     const response = await postMethod(api, payload);
     if (!response) return null;
+    assertNoFrappeError(response, 'Could not start the query.');
     return normalizeProductQueryDetail(response?.message || response);
 }
 
@@ -1369,6 +1388,7 @@ export async function postProductQueryMessage(payload) {
     const api = methodUrl + 'igh_search.igh_search.api.post_product_query_message';
     const response = await postMethod(api, payload);
     if (!response) return null;
+    assertNoFrappeError(response, 'Message failed to send.');
     return normalizeProductQueryDetail(response?.message || response);
 }
 
