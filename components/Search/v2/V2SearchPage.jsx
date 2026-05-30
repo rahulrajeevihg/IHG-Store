@@ -1020,7 +1020,10 @@ export default function V2SearchPage({
       const normalized = normalizeSearchHit(firstResult);
       setDetailModalProduct(normalized);
       setDetailModalOpen(true);
-      if (typeof window !== "undefined") window.document.body.style.overflow = "hidden";
+      // Body scroll-lock is owned by <ProductDetail> (self-cleaning on close/
+      // unmount). Don't toggle body.style.overflow here too — they used to race
+      // and leave the page un-scrollable when the modal closed via back/escape/
+      // unmount instead of the hide() button.
     }
     dispatch(setTourFlag({ key: "requestOpenProductDetail", value: false }));
   }, [tourRequestOpenDetail, results, dispatch]);
@@ -1358,7 +1361,7 @@ export default function V2SearchPage({
     }
     setDetailModalProduct(productDoc);
     setDetailModalOpen(true);
-    window.document.body.style.overflow = "hidden";
+    // Scroll-lock owned by <ProductDetail> (self-cleaning); see note above.
   };
 
   // Interpret the prompt: fetch the AI response (filters + count + hits) and
@@ -1916,7 +1919,8 @@ export default function V2SearchPage({
           hide={() => {
             setDetailModalOpen(false);
             setDetailModalProduct(null);
-            window.document.body.style.overflow = "unset";
+            // <ProductDetail>'s own effect restores body scroll on unmount —
+            // no manual overflow reset here (the old "unset" raced with it).
           }}
         />
       )}

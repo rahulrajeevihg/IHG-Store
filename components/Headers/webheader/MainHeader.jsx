@@ -376,18 +376,20 @@ export default function MainHeader({ header_template, theme_settings, website_se
   // }
 
 
-  useMemo(() => {
-    if (cartValue && typeof window !== 'undefined') {
-      // console.log(cartValue,'Cart Value in Modal')
-      if (visible || isOpen) {
-        !document.body.classList.contains('active_visible') ? document.body.style.overflow = "hidden" : null;
-        // !document.body.classList.contains('active_visible') ?  document.body.classList.add('active_visible') : null
-      } else {
-        // document.body.classList.remove('active_visible')
-        document.body.style.overflow = "unset";
-      }
-    }
-  }, [cartValue, visible, isOpen])
+  // Lock body scroll while the cart/menu overlay is open, restoring the previous
+  // value on close OR unmount. Previously this ran in a useMemo gated on
+  // cartValue, so closing the overlay while the cart was empty never restored
+  // scroll — a stuck-scroll leak.
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    if (!(visible || isOpen)) return;
+    if (document.body.classList.contains('active_visible')) return;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [visible, isOpen])
 
   // console.log(isOpen,"open")
 

@@ -394,15 +394,27 @@ function App({ Component, pageProps }) {
     }
   }, [detailVisible]);
 
+  // Body scroll-lock driven solely by detailVisible, with a cleanup that always
+  // restores the previous value. Doing it imperatively in navigateDetail/
+  // DetailHide leaked: if the detail view closed by any path other than
+  // DetailHide (route change, unmount, back button), overflow stayed "hidden"
+  // and the whole app became un-scrollable.
+  useEffect(() => {
+    if (typeof document === "undefined" || !detailVisible) return;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [detailVisible]);
+
   const navigateDetail = (item) => {
     setCurrentProduct(item)
-    document.body.style.overflow = "hidden"
     setDetailVisible(true)
   }
 
   const DetailHide = (status) => {
     setDetailVisible(false)
-    document.body.style.overflow = "unset"
     setCurrentProduct(null)
   }
 
