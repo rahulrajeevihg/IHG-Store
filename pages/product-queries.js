@@ -3,8 +3,8 @@ import Link from "next/link";
 import { useRouter } from "next/router";
 import { useEffect, useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { listProductQueries, isProductTeamAdmin, isSuperAdmin } from "@/libs/api";
-import { openQueryChat } from "@/redux/slice/productQuerySlice";
+import { listProductQueries, isProductTeamAdmin } from "@/libs/api";
+import { openQueryChat, openRaiseQuery } from "@/redux/slice/productQuerySlice";
 import {
   PRODUCT_QUERY_STAGES,
   PRODUCT_QUERY_STATUSES,
@@ -30,7 +30,6 @@ export default function ProductQueriesPage() {
   const [mineOnly, setMineOnly] = useState(false);
 
   const isAdmin = useMemo(() => isProductTeamAdmin(), [hydrated]);
-  const superAdmin = useMemo(() => isSuperAdmin(), [hydrated]);
 
   useEffect(() => setHydrated(true), []);
 
@@ -101,14 +100,23 @@ export default function ProductQueriesPage() {
                 : "Chat with the product team about any product. Tap a query to continue the conversation."}
             </p>
           </div>
-          {superAdmin && (
-            <Link
-              href="/product-queries/rankings"
-              className="inline-flex h-10 items-center rounded-xl border border-[#dbe5ef] px-4 text-[13px] font-semibold text-[#344054] transition hover:bg-[#f8fafc]"
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => dispatch(openRaiseQuery(null))}
+              className="inline-flex h-10 items-center gap-1 rounded-xl bg-[#111827] px-4 text-[13px] font-semibold text-white transition hover:bg-black"
             >
-              View rankings →
-            </Link>
-          )}
+              <span className="text-[15px] leading-none">＋</span> New chat
+            </button>
+            {isAdmin && (
+              <Link
+                href="/product-queries/rankings"
+                className="inline-flex h-10 items-center rounded-xl border border-[#dbe5ef] px-4 text-[13px] font-semibold text-[#344054] transition hover:bg-[#f8fafc]"
+              >
+                View rankings →
+              </Link>
+            )}
+          </div>
         </header>
 
         {/* Filters */}

@@ -176,15 +176,15 @@ export default function SearchHero({
                   onClick={aiInputMode ? onExitAiMode : onEnterAiMode}
                   className={
                     aiInputMode
-                      ? "group/ai m-[6px] inline-flex shrink-0 items-center gap-[7px] rounded-[12px] border border-[#cdddff] bg-[#eef5ff] px-[14px] text-[11px] font-semibold uppercase tracking-[0.14em] text-[#1d4ed8] transition hover:bg-[#e2eeff]"
-                      : "group/ai m-[6px] inline-flex shrink-0 items-center gap-[7px] rounded-[12px] bg-gradient-to-r from-[#1b6dff] to-[#3f86ff] px-[14px] text-[11px] font-semibold uppercase tracking-[0.14em] text-white shadow-[0_4px_14px_rgba(27,109,255,0.3)] transition hover:from-[#155fe0] hover:to-[#2f78f5] hover:shadow-[0_6px_18px_rgba(27,109,255,0.45)]"
+                      ? "group/ai ask-ai-btn m-[6px] inline-flex shrink-0 items-center gap-[7px] rounded-[12px] border border-[#cdddff] bg-[#eef5ff] px-[14px] text-[11px] font-semibold uppercase tracking-[0.14em] text-[#1d4ed8] transition"
+                      : "group/ai ask-ai-btn m-[6px] inline-flex shrink-0 items-center gap-[7px] rounded-[12px] bg-gradient-to-r from-[#1b6dff] to-[#3f86ff] px-[14px] text-[11px] font-semibold uppercase tracking-[0.14em] text-white shadow-[0_4px_14px_rgba(27,109,255,0.3)] transition hover:shadow-[0_6px_18px_rgba(27,109,255,0.45)]"
                   }
                   title="Describe what you need in plain English — AI turns it into filters"
                 >
-                  <SparkIcon className="h-[13px] w-[13px]" />
-                  <span>{aiInputMode ? "Exit AI" : "Ask AI"}</span>
+                  <SparkIcon className="ask-ai-icon h-[13px] w-[13px]" />
+                  <span className="ask-ai-label">{aiInputMode ? "Exit AI" : "Ask AI"}</span>
                   {!aiInputMode && (
-                    <kbd className="ml-[3px] hidden h-[18px] items-center rounded-[5px] border border-white/30 bg-white/15 px-[5px] text-[10px] font-semibold not-italic text-white sm:inline-flex">
+                    <kbd className="ask-ai-kbd ml-[3px] hidden h-[18px] items-center rounded-[5px] border border-white/30 bg-white/15 px-[5px] text-[10px] font-semibold not-italic text-white sm:inline-flex">
                       ⌘K
                     </kbd>
                   )}
@@ -289,6 +289,94 @@ export default function SearchHero({
           )}
         </div>
       </div>
+      <style jsx>{`
+        .ask-ai-btn {
+          position: relative;
+          z-index: 0;
+          overflow: visible;
+          transition: transform 0.2s ease;
+        }
+
+        .ask-ai-btn::before {
+          content: "";
+          position: absolute;
+          inset: -2px;
+          border-radius: 14px;
+          padding: 2px;
+          background: linear-gradient(
+            45deg,
+            #ff0000,
+            #ff7300,
+            #fffb00,
+            #48ff00,
+            #00ffd5,
+            #002bff,
+            #7a00ff,
+            #ff00c8,
+            #ff0000
+          );
+          background-size: 400%;
+          z-index: -1;
+          opacity: 0;
+          transition: opacity 0.3s ease-in-out;
+          animation: ask-ai-glow 20s linear infinite;
+          pointer-events: none;
+          -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+          -webkit-mask-composite: xor;
+          mask-composite: exclude;
+        }
+
+        .ask-ai-icon {
+          position: relative;
+          z-index: 2;
+          transition: transform 0.28s ease, filter 0.28s ease;
+        }
+
+        .ask-ai-label,
+        .ask-ai-kbd {
+          position: relative;
+          z-index: 2;
+        }
+
+        .ask-ai-btn:hover {
+          transform: translateY(-1px);
+        }
+
+        .ask-ai-btn:hover .ask-ai-icon {
+          transform: rotate(-8deg) scale(1.12);
+          filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.55));
+          animation: ask-ai-float 0.9s ease-in-out infinite alternate;
+        }
+
+        .ask-ai-btn:hover::before {
+          opacity: 1;
+        }
+
+        .ask-ai-btn:focus-visible::before {
+          opacity: 1;
+        }
+
+        @keyframes ask-ai-glow {
+          0% {
+            background-position: 0 0;
+          }
+          50% {
+            background-position: 400% 0;
+          }
+          100% {
+            background-position: 0 0;
+          }
+        }
+
+        @keyframes ask-ai-float {
+          from {
+            transform: rotate(-6deg) translateY(0) scale(1.1);
+          }
+          to {
+            transform: rotate(7deg) translateY(-1px) scale(1.15);
+          }
+        }
+      `}</style>
     </section>
   );
 }

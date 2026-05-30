@@ -281,9 +281,6 @@ export default function LandingPage() {
           <div className={styles.ctas}>
             <button className={`${styles.cta} ${styles.ctaPrimary}`} onClick={() => router.push('/list')}>
               Explore Products
-              <svg viewBox="0 0 16 16" fill="none" aria-hidden="true" width="16" height="16">
-                <path d="M4 8h8m0 0l-3-3m3 3l-3 3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
             </button>
           </div>
 

@@ -5,6 +5,7 @@ import {
   escalateProductQueryToTicket,
   extractFrappeErrorMessage,
   getProductQuery,
+  notifyProductQueryTyping,
   postProductQueryMessage,
   rateProductQuerySolution,
   reopenProductQuery,
@@ -12,6 +13,7 @@ import {
   updateProductQuery,
   uploadFileToErp,
 } from "@/libs/api";
+import { subscribeToQuery } from "@/libs/realtimeQuery";
 import { bumpQueryRefresh } from "@/redux/slice/productQuerySlice";
 import {
   PRODUCT_QUERY_STATUSES,
@@ -20,7 +22,7 @@ import {
   getQueryStatusMeta,
 } from "./shared";
 
-const POLL_INTERVAL_MS = 4000;
+const frappeNow = () => new Date().toISOString().replace("T", " ").slice(0, 19);
 
 export default function ChatDrawer({ open, queryId, onClose }) {
   const dispatch = useDispatch();
@@ -35,15 +37,12 @@ export default function ChatDrawer({ open, queryId, onClose }) {
   const [busy, setBusy] = useState(false);
   const [rating, setRating] = useState(0);
   const [ratingComment, setRatingComment] = useState("");
+  const [typingName, setTypingName] = useState("");
 
-  const messagesRef = useRef([]);
   const scrollRef = useRef(null);
-  messagesRef.current = messages;
-
-  const lastTs = useCallback(() => {
-    const rows = messagesRef.current;
-    return rows.length ? rows[rows.length - 1].created_at : "";
-  }, []);
+  const typingThrottleRef = useRef(0);
+  const typingStopRef = useRef(null);
+  const typingClearRef = useRef(null);
 
   const mergeMessages = useCallback((incoming) => {
     if (!Array.isArray(incoming) || !incoming.length) return;
@@ -84,23 +83,55 @@ export default function ChatDrawer({ open, queryId, onClose }) {
     };
   }, [open, queryId]);
 
-  // Polling for new messages while open + tab visible.
+  // Live updates while open: realtime (socket) when available, adaptive polling
+  // otherwise. The transport is abstracted in libs/realtimeQuery.
   useEffect(() => {
     if (!open || !queryId) return undefined;
-    const tick = async () => {
-      if (typeof document !== "undefined" && document.hidden) return;
-      try {
-        const data = await getProductQuery(queryId, lastTs());
-        if (!data) return;
-        setDetail((prev) => ({ ...(prev || {}), ...data, messages: undefined }));
-        mergeMessages(data.messages);
-      } catch (_) {
-        /* transient poll failure — keep last good state */
-      }
+    setTypingName("");
+    const unsubscribe = subscribeToQuery(queryId, {
+      onMessage: (msg) => mergeMessages([msg]),
+      onThread: (data) => setDetail((prev) => ({ ...(prev || {}), ...data, messages: undefined })),
+      onTyping: (payload) => {
+        if (payload?.is_typing) {
+          setTypingName(payload.sender_name || "Someone");
+          if (typingClearRef.current) clearTimeout(typingClearRef.current);
+          // Auto-clear in case the "stopped typing" event is missed.
+          typingClearRef.current = setTimeout(() => setTypingName(""), 5000);
+        } else {
+          if (typingClearRef.current) clearTimeout(typingClearRef.current);
+          setTypingName("");
+        }
+      },
+    });
+    return () => {
+      unsubscribe();
+      if (typingClearRef.current) clearTimeout(typingClearRef.current);
     };
-    const id = window.setInterval(tick, POLL_INTERVAL_MS);
-    return () => window.clearInterval(id);
-  }, [open, queryId, lastTs, mergeMessages]);
+  }, [open, queryId, mergeMessages]);
+
+  // Emit our own typing indicator (throttled on start, debounced on stop).
+  const sendTyping = useCallback(
+    (isTyping) => {
+      if (!queryId) return;
+      if (isTyping) {
+        const now = Date.now();
+        if (now - typingThrottleRef.current > 2000) {
+          typingThrottleRef.current = now;
+          notifyProductQueryTyping(queryId, true);
+        }
+        if (typingStopRef.current) clearTimeout(typingStopRef.current);
+        typingStopRef.current = setTimeout(() => {
+          notifyProductQueryTyping(queryId, false);
+          typingThrottleRef.current = 0;
+        }, 3000);
+      } else {
+        if (typingStopRef.current) clearTimeout(typingStopRef.current);
+        typingThrottleRef.current = 0;
+        notifyProductQueryTyping(queryId, false);
+      }
+    },
+    [queryId]
+  );
 
   // Auto-scroll to newest.
   useEffect(() => {
@@ -143,27 +174,55 @@ export default function ChatDrawer({ open, queryId, onClose }) {
 
   const handleSend = async (event) => {
     event?.preventDefault?.();
-    if (!input.trim() && !attachment) return;
+    const text = input.trim();
+    const pendingFile = attachment;
+    if (!text && !pendingFile) return;
+
     setSending(true);
+    setInput("");
+    setAttachment(null);
+    sendTyping(false);
+
+    const tempId = `tmp-${Date.now()}`;
     try {
       let attachmentUrl = "";
-      if (attachment) {
-        const uploaded = await uploadFileToErp(attachment, { folder: "Home/Attachments" });
+      if (pendingFile) {
+        const uploaded = await uploadFileToErp(pendingFile, { folder: "Home/Attachments" });
         attachmentUrl = uploaded?.file_url || uploaded?.message?.file_url || "";
       }
+
+      // Optimistic echo — the sender sees the message instantly.
+      setMessages((cur) => [
+        ...cur,
+        {
+          id: tempId,
+          query: queryId,
+          sender_user: "",
+          sender_name: "You",
+          sender_role: viewerSide,
+          message_type: "message",
+          message: text,
+          attachment: attachmentUrl,
+          created_at: frappeNow(),
+          pending: true,
+        },
+      ]);
+
       const data = await postProductQueryMessage({
         query_id: queryId,
-        message: input.trim(),
+        message: text,
         attachment: attachmentUrl,
       });
-      setInput("");
-      setAttachment(null);
       if (data) {
         setDetail((prev) => ({ ...(prev || {}), ...data, messages: undefined }));
+        setMessages((cur) => cur.filter((m) => m.id !== tempId));
         mergeMessages(data.messages);
       }
       dispatch(bumpQueryRefresh());
     } catch (error) {
+      // Roll back the optimistic message and restore the draft.
+      setMessages((cur) => cur.filter((m) => m.id !== tempId));
+      setInput((cur) => cur || text);
       toast.error(extractFrappeErrorMessage(error, "Message failed to send."));
     } finally {
       setSending(false);
@@ -229,9 +288,11 @@ export default function ChatDrawer({ open, queryId, onClose }) {
                 )}
               </div>
               <h3 className="mt-1 truncate text-[16px] font-semibold text-[#111827]">
-                {query?.item_name_snapshot || query?.item_code || "Product query"}
+                {query?.item_name_snapshot || query?.item_code || "Chat with the team"}
               </h3>
-              <p className="truncate text-[12px] text-[#667085]">{query?.item_code}</p>
+              <p className="truncate text-[12px] text-[#667085]">
+                {query?.item_code || "General chat"}
+              </p>
             </div>
             <button
               type="button"
@@ -328,6 +389,14 @@ export default function ChatDrawer({ open, queryId, onClose }) {
               <p className="mt-1 whitespace-pre-wrap text-[13px] text-[#065f46]">{query.solution_notes}</p>
             </div>
           )}
+
+          {typingName && (
+            <div className="flex justify-start">
+              <span className="inline-flex items-center gap-1 rounded-full bg-[#eef2f7] px-3 py-1 text-[11px] text-[#667085]">
+                {typingName} is typing<span className="animate-pulse">…</span>
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Reporter rating */}
@@ -392,7 +461,10 @@ export default function ChatDrawer({ open, queryId, onClose }) {
             <div className="flex items-end gap-2">
               <textarea
                 value={input}
-                onChange={(event) => setInput(event.target.value)}
+                onChange={(event) => {
+                  setInput(event.target.value);
+                  if (event.target.value.trim()) sendTyping(true);
+                }}
                 onKeyDown={(event) => {
                   if (event.key === "Enter" && !event.shiftKey) {
                     event.preventDefault();
@@ -451,9 +523,10 @@ function MessageBubble({ message, viewerSide }) {
 
   const mine = message.sender_role === viewerSide;
   const isSolution = message.message_type === "solution";
+  const pending = Boolean(message.pending);
 
   return (
-    <div className={`flex ${mine ? "justify-end" : "justify-start"}`}>
+    <div className={`flex ${mine ? "justify-end" : "justify-start"} ${pending ? "opacity-60" : ""}`}>
       <div className={`max-w-[80%] ${mine ? "items-end" : "items-start"}`}>
         {!mine && (
           <p className="mb-0.5 px-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-[#98a2b3]">
@@ -482,7 +555,7 @@ function MessageBubble({ message, viewerSide }) {
           )}
         </div>
         <p className={`mt-0.5 px-1 text-[10px] text-[#98a2b3] ${mine ? "text-right" : "text-left"}`}>
-          {formatRelativeTime(message.created_at)}
+          {pending ? "Sending…" : formatRelativeTime(message.created_at)}
         </p>
       </div>
     </div>

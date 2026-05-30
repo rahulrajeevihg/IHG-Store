@@ -1,0 +1,2979 @@
+import copy
+import hashlib
+import json
+import os
+import re
+import time
+from collections import defaultdict
+
+import frappe
+import requests
+from frappe import _
+from frappe.utils import cint, cstr, flt, now_datetime
+
+from igh_search.igh_search.search_normalization import (
+    expand_search_aliases,
+    get_alias_map,
+    load_glossary,
+    normalize_color_temp,
+    normalize_ip_rate,
+    normalize_text,
+)
+
+try:
+    from rapidfuzz import fuzz as _rf_fuzz, process as _rf_process
+
+    _HAS_RAPIDFUZZ = True
+except Exception:  # pragma: no cover - fuzzy matching degrades gracefully
+    _HAS_RAPIDFUZZ = False
+
+OPENAI_API_URL = "https://api.openai.com/v1/chat/completions"
+GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
+DEFAULT_OPENAI_MODEL = "gpt-4o-mini"
+DEFAULT_GROQ_MODEL = "llama-3.3-70b-versatile"
+DEFAULT_RANGE_MAX = 1000000000
+KNOWN_VALUES_CACHE_TTL = 60 * 60
+VOCABULARY_CACHE_TTL = 15 * 60
+METRICS_CACHE_TTL = 24 * 60 * 60
+# Spec/environment words captured by structured filters — stripped from the
+# free-text query so they don't over-constrain the Typesense text match.
+SPEC_SYNONYM_QUERY_TERMS = (
+    "warm white",
+    "cool white",
+    "cold white",
+    "neutral white",
+    "natural white",
+    "daylight",
+    "day light",
+    "waterproof",
+    "water proof",
+    "weatherproof",
+    "weather proof",
+    "ip rated",
+    "ip-rated",
+    "ingress protection",
+    "outdoor",
+    "exterior",
+    "indoor",
+    "interior",
+)
+FEEDBACK_WEIGHTS = {
+    "search_click": 1,
+    "shortlist": 3,
+    "quotation_created": 5,
+}
+
+SUPPORTED_SORT_VALUES = {
+    "",
+    "creation:asc",
+    "creation:desc",
+    "rate:asc",
+    "rate:desc",
+    "offer_rate:asc",
+    "offer_rate:desc",
+    "stock:asc",
+    "stock:desc",
+    "sold_last_30_days:asc",
+    "sold_last_30_days:desc",
+    "discount_percentage:asc",
+    "discount_percentage:desc",
+    "priority_score:asc",
+    "priority_score:desc",
+    "popularity_score:asc",
+    "popularity_score:desc",
+    "business_score:asc",
+    "business_score:desc",
+    "modified_ts:asc",
+    "modified_ts:desc",
+}
+
+FILTER_MASTER_KEY_MAP = {
+    "brand": "brand",
+    "category_list": "category_list",
+    "product_type": "product_type",
+    "item_group": "item_group",
+    "ip_rate": "ip_rate",
+    "power": "power",
+    "color_temp": "color_temp_",
+    "body_finish": "body_finish",
+    "input_voltage": "input",
+    "mounting": "mounting",
+    "output_current": "output_current",
+    "output_voltage": "output_voltage",
+    "lamp_type": "lamp_type",
+    "beam_angle": "beam_angle",
+    "material": "material",
+    "warranty": "warranty_",
+}
+
+ARRAY_FILTER_KEYS = tuple(FILTER_MASTER_KEY_MAP.keys()) + ("variant_of",)
+BOOLEAN_FILTER_KEYS = ("in_stock",)
+RANGE_FILTER_DEFAULTS = {
+    "rate_range": {"min": 0, "max": DEFAULT_RANGE_MAX},
+    "offer_rate_range": {"min": 0, "max": DEFAULT_RANGE_MAX},
+    "discount_percentage_range": {"min": 0, "max": DEFAULT_RANGE_MAX},
+    "stock_range": {"min": 0, "max": DEFAULT_RANGE_MAX},
+    "sold_last_30_days_range": {"min": 0, "max": DEFAULT_RANGE_MAX},
+    "inventory_value_range": {"min": 0, "max": DEFAULT_RANGE_MAX},
+    "priority_score_range": {"min": 0, "max": DEFAULT_RANGE_MAX},
+    "popularity_score_range": {"min": 0, "max": DEFAULT_RANGE_MAX},
+    "business_score_range": {"min": 0, "max": DEFAULT_RANGE_MAX},
+    "power_value_range": {"min": 0, "max": DEFAULT_RANGE_MAX},
+    "color_temp_kelvin_range": {"min": 0, "max": DEFAULT_RANGE_MAX},
+    "ip_rating_numeric_range": {"min": 0, "max": DEFAULT_RANGE_MAX},
+}
+PAGE_CONTEXT_KEYS = ("route", "category", "brand", "search")
+LEGACY_FILTER_KEY_ALIASES = {
+    "color_temp_": "color_temp",
+    "input": "input_voltage",
+    "warranty_": "warranty",
+    "price_range": "rate_range",
+}
+LEGACY_SORT_ALIASES = {
+    "creation_on:desc": "creation:desc",
+    "creation_on:asc": "creation:asc",
+}
+DISPLAY_FILTER_LABELS = {
+    "brand": "Brand",
+    "category_list": "Category",
+    "product_type": "Product Type",
+    "item_group": "Item Group",
+    "ip_rate": "IP Rating",
+    "power": "Power",
+    "color_temp": "Color Temperature",
+    "body_finish": "Body Finish",
+    "input_voltage": "Input Voltage",
+    "mounting": "Mounting",
+    "output_current": "Output Current",
+    "output_voltage": "Output Voltage",
+    "lamp_type": "Lamp Type",
+    "beam_angle": "Beam Angle",
+    "material": "Material",
+    "warranty": "Warranty",
+    "variant_of": "Variant Of",
+    "in_stock": "In Stock",
+    "rate_range": "Rate",
+    "offer_rate_range": "Offer Rate",
+    "discount_percentage_range": "Discount Percentage",
+    "stock_range": "Stock",
+    "sold_last_30_days_range": "Sold Last 30 Days",
+    "inventory_value_range": "Inventory Value",
+    "priority_score_range": "Priority Score",
+    "popularity_score_range": "Popularity Score",
+    "business_score_range": "Business Score",
+    "power_value_range": "Power",
+    "color_temp_kelvin_range": "Color Temp Kelvin",
+    "ip_rating_numeric_range": "IP Rating Numeric",
+}
+DISPLAY_FILTER_UNITS = {
+    "rate_range": "AED",
+    "offer_rate_range": "AED",
+    "inventory_value_range": "AED",
+    "discount_percentage_range": "%",
+    "power_value_range": "W",
+    "color_temp_kelvin_range": "K",
+    "output_current": "MA",
+    "input_voltage": "V",
+    "output_voltage": "V",
+}
+RANGE_QUERY_PATTERNS = {
+    "rate_range": (
+        r"\b(?:under|below|less than|over|above|more than)\s*(?:aed\s*)?\d+(?:\.\d+)?(?:\s*aed)?\b",
+        r"\bbetween\s*(?:aed\s*)?\d+(?:\.\d+)?(?:\s*aed)?\s*(?:and|to)\s*(?:aed\s*)?\d+(?:\.\d+)?(?:\s*aed)?\b",
+        r"\b\d+(?:\.\d+)?\s*aed\b",
+    ),
+    "power_value_range": (
+        r"\b(?:under|below|less than|over|above|more than|between)\s*\d+(?:\.\d+)?\s*w\b(?:\s*(?:and|to)\s*\d+(?:\.\d+)?\s*w)?",
+        r"\b\d+(?:\.\d+)?\s*w\b",
+    ),
+    "stock_range": (
+        r"\bstock\s+(?:under|below|less than|over|above|more than)\s*\d+(?:\.\d+)?(?:\s*(?:qty|quantity))?\b",
+        r"\b(?:under|below|less than|over|above|more than)\s*\d+(?:\.\d+)?\s*(?:qty|quantity)\b",
+        r"\bstock\s+between\s*\d+(?:\.\d+)?(?:\s*(?:qty|quantity))?\s*(?:and|to)\s*\d+(?:\.\d+)?(?:\s*(?:qty|quantity))?\b",
+        r"\bbetween\s*\d+(?:\.\d+)?\s*(?:qty|quantity)\s*(?:and|to)\s*\d+(?:\.\d+)?(?:\s*(?:qty|quantity))?\b",
+    ),
+    "color_temp_kelvin_range": (r"\b\d{4,5}\s*k\b",),
+    "ip_rating_numeric_range": (r"\bip\s*\d{2,3}\b",),
+}
+DISPLAY_QUERY_STOPWORDS = {
+    "show",
+    "find",
+    "need",
+    "search",
+    "products",
+    "product",
+    "items",
+    "item",
+}
+DISPLAY_QUERY_PHRASES = {
+    "in_stock": (
+        "in stock",
+        "stock available",
+        "available stock",
+        "available now",
+        "only in stock",
+        "on stock",
+        "instock",
+    ),
+    "stock:desc": (
+        "high stock",
+        "most stock",
+        "stock high to low",
+        "quantity wise",
+        "quantity high to low",
+    ),
+    "stock:asc": ("low stock", "stock low to high", "quantity low to high"),
+    "discount_percentage:desc": (
+        "highest discount",
+        "discount high to low",
+        "biggest discount",
+        "best offer",
+    ),
+    "creation:desc": ("latest", "newest", "recent"),
+    "rate:asc": ("cheapest", "lowest price", "low price", "price low to high"),
+    "rate:desc": ("highest price", "most expensive", "price high to low"),
+}
+
+
+def build_default_filters():
+    filters = {key: [] for key in ARRAY_FILTER_KEYS}
+    filters.update({key: None for key in BOOLEAN_FILTER_KEYS})
+    # NOTE: in_stock is intentionally NOT defaulted to True. Defaulting it on
+    # silently hid every out-of-stock product on every search and (combined with
+    # the LLM gate in needs_model_reasoning) suppressed the LLM. in_stock is now
+    # only set when the user explicitly asks for in-stock items.
+    filters.update(copy.deepcopy(RANGE_FILTER_DEFAULTS))
+    return filters
+
+
+def build_default_response(explanation=""):
+    return {
+        "query": "",
+        "sort_by": "",
+        "filters": build_default_filters(),
+        "explanation": cstr(explanation).strip(),
+    }
+
+
+def _get_conf():
+    return frappe.get_conf() or {}
+
+
+def is_ai_product_search_enabled():
+    return bool(cint(_get_conf().get("enable_ai_product_search") or 0))
+
+
+def get_ai_product_search_rate_limit():
+    return max(cint(_get_conf().get("ai_product_search_rate_limit") or 20), 1)
+
+
+def get_openai_api_key():
+    conf = _get_conf()
+    return os.environ.get("OPENAI_API_KEY") or conf.get("openai_api_key")
+
+
+def get_openai_model():
+    conf = _get_conf()
+    return (
+        conf.get("ai_product_search_model")
+        or conf.get("openai_model")
+        or DEFAULT_OPENAI_MODEL
+    )
+
+
+def get_groq_api_key():
+    conf = _get_conf()
+    return os.environ.get("GROQ_API_KEY") or conf.get("groq_api_key")
+
+
+def get_groq_model():
+    conf = _get_conf()
+    return conf.get("ai_product_search_groq_model") or DEFAULT_GROQ_MODEL
+
+
+def log_ai_product_search(event, payload):
+    try:
+        frappe.logger().info(
+            "AI Product Search %s: %s",
+            event,
+            json.dumps(payload, ensure_ascii=True, default=str),
+        )
+    except Exception:
+        pass
+
+
+def record_ai_metric(metric_name, increment=1):
+    try:
+        key = f"ai_product_search|metric|{metric_name}"
+        cache = frappe.cache()
+        current = cint(cache.get_value(key) or 0)
+        cache.set_value(key, current + cint(increment), expires_in_sec=METRICS_CACHE_TTL)
+    except Exception:
+        pass
+
+
+def get_ai_search_quality_report():
+    metrics = {}
+    for metric_name in (
+        "requests",
+        "deterministic_only",
+        "intent_cache_hit",
+        "provider_openai",
+        "provider_groq",
+        "provider_fallback",
+        "llm_failures",
+        "search_relaxations",
+        "zero_results",
+        "final_results",
+    ):
+        try:
+            metrics[metric_name] = cint(
+                frappe.cache().get_value(f"ai_product_search|metric|{metric_name}") or 0
+            )
+        except Exception:
+            metrics[metric_name] = 0
+    metrics.update(get_ai_event_quality_report())
+    return metrics
+
+
+def _json_dumps(value):
+    return json.dumps(value or {}, ensure_ascii=True, default=str)
+
+
+def _json_loads(value, default=None):
+    default = {} if default is None else default
+    if not value:
+        return copy.deepcopy(default)
+    if isinstance(value, (dict, list)):
+        return value
+    try:
+        return json.loads(value)
+    except Exception:
+        return copy.deepcopy(default)
+
+
+def _doctype_exists(doctype_name):
+    try:
+        return bool(frappe.db.exists("DocType", doctype_name))
+    except Exception:
+        return False
+
+
+def _serialize_roles():
+    try:
+        return sorted(frappe.get_roles())
+    except Exception:
+        return []
+
+
+def _async_event_logging_enabled():
+    # Defaults to ON. Set `ai_product_search_async_logging: 0` in site_config to
+    # force synchronous inserts (e.g. if background workers are unavailable).
+    val = _get_conf().get("ai_product_search_async_logging")
+    return True if val is None else bool(cint(val))
+
+
+def _build_ai_search_event_dict(name, event_type, payload):
+    # Build the full doc dict in the REQUEST context so session/user/roles are
+    # captured correctly even when the actual insert is deferred to a worker.
+    payload = payload or {}
+    page_context = payload.get("page_context") or {}
+    resolved_intent = payload.get("resolved_intent") or {}
+    top_item_codes = payload.get("top_item_codes") or []
+    deterministic_signals = payload.get("deterministic_signals") or resolved_intent.get("signals") or []
+    return {
+        "doctype": "AI Product Search Event",
+        "name": name,
+        "event_type": event_type,
+        "search_event_reference": cstr(payload.get("search_event_reference") or ""),
+        "raw_message": cstr(payload.get("raw_message") or ""),
+        "normalized_query": cstr(payload.get("normalized_query") or ""),
+        "selected_item_code": cstr(payload.get("selected_item_code") or ""),
+        "related_item_code": cstr(payload.get("related_item_code") or ""),
+        "provider": cstr(payload.get("provider") or ""),
+        "llm_used": cint(payload.get("llm_used") or 0),
+        "applied_sort": cstr(payload.get("applied_sort") or ""),
+        "result_count": cint(payload.get("result_count") or 0),
+        "latency_ms": flt(payload.get("latency_ms") or 0),
+        "route": cstr(page_context.get("route") or payload.get("route") or ""),
+        "session_id": cstr(getattr(frappe.session, "sid", "") or ""),
+        "user_id": cstr(getattr(frappe.session, "user", "") or ""),
+        "user_roles": _json_dumps(_serialize_roles()),
+        "resolved_intent_json": _json_dumps(resolved_intent),
+        "deterministic_signals_json": _json_dumps(deterministic_signals),
+        "applied_filters_json": _json_dumps(payload.get("applied_filters") or {}),
+        "applied_relaxations_json": _json_dumps(payload.get("applied_relaxations") or []),
+        "quality_signals_json": _json_dumps(payload.get("quality_signals") or {}),
+        "top_item_codes_json": _json_dumps(top_item_codes),
+        "page_context_json": _json_dumps(page_context),
+        "benchmark_case_name": cstr(payload.get("benchmark_case_name") or ""),
+        "outcome_status": cstr(payload.get("outcome_status") or ""),
+        "reformulated_from": cstr(payload.get("reformulated_from") or ""),
+    }
+
+
+def _insert_ai_search_event(doc_dict=None):
+    # Performs the actual insert. Runs either inline (sync fallback) or inside a
+    # background worker. `in_import` is toggled so our pre-generated `name`
+    # survives the doctype's naming series (AIQEV-.#####) on Frappe v14.
+    if not doc_dict or not _doctype_exists("AI Product Search Event"):
+        return
+    prev_in_import = frappe.flags.in_import
+    try:
+        frappe.flags.in_import = True
+        frappe.get_doc(doc_dict).insert(ignore_permissions=True)
+    except Exception:
+        log_ai_product_search(
+            "event_log_failure",
+            {"event_type": doc_dict.get("event_type"), "error": frappe.get_traceback()},
+        )
+    finally:
+        frappe.flags.in_import = prev_in_import
+
+
+def log_ai_search_event(event_type, payload=None):
+    if not _doctype_exists("AI Product Search Event"):
+        return None
+
+    # Pre-generate the id so we can return it immediately and hand the insert to
+    # a background worker, keeping the search hot path off the DB write + the
+    # naming-series row lock.
+    name = frappe.generate_hash(length=14)
+    doc_dict = _build_ai_search_event_dict(name, event_type, payload)
+
+    if _async_event_logging_enabled():
+        try:
+            frappe.enqueue(
+                "igh_search.igh_search.ai_product_search._insert_ai_search_event",
+                queue="short",
+                enqueue_after_commit=True,
+                doc_dict=doc_dict,
+            )
+            return name
+        except Exception:
+            # Redis/worker unavailable — fall back to a synchronous insert.
+            log_ai_product_search(
+                "event_enqueue_failure",
+                {"event_type": event_type, "error": frappe.get_traceback()},
+            )
+
+    _insert_ai_search_event(doc_dict)
+    return name
+
+
+def _fetch_event_doc(event_name):
+    if not event_name or not _doctype_exists("AI Product Search Event"):
+        return None
+    if not frappe.db.exists("AI Product Search Event", event_name):
+        return None
+    return frappe.get_doc("AI Product Search Event", event_name)
+
+
+def get_ai_event_quality_report():
+    if not _doctype_exists("AI Product Search Event"):
+        return {
+            "tracked_searches": 0,
+            "top_failed_queries": [],
+            "top_reformulated_queries": [],
+            "top_clicked_results": [],
+            "zero_result_rate": 0,
+            "relaxation_rate": 0,
+        }
+
+    search_rows = frappe.get_all(
+        "AI Product Search Event",
+        filters={"event_type": "search_issued"},
+        fields=["name", "normalized_query", "result_count", "applied_relaxations_json", "selected_item_code"],
+        limit_page_length=500,
+        order_by="modified desc",
+    )
+    if not search_rows:
+        return {
+            "tracked_searches": 0,
+            "top_failed_queries": [],
+            "top_reformulated_queries": [],
+            "top_clicked_results": [],
+            "zero_result_rate": 0,
+            "relaxation_rate": 0,
+        }
+
+    failed_counts = defaultdict(int)
+    reformulation_counts = defaultdict(int)
+    click_counts = defaultdict(int)
+    zero_results = 0
+    relaxations = 0
+
+    for row in search_rows:
+        normalized_query = cstr(row.normalized_query or "").strip()
+        if cint(row.result_count) <= 0 and normalized_query:
+            failed_counts[normalized_query] += 1
+            zero_results += 1
+        applied_relaxations = _json_loads(row.applied_relaxations_json, default=[])
+        if applied_relaxations:
+            relaxations += 1
+
+    reformulation_rows = frappe.get_all(
+        "AI Product Search Event",
+        filters={"event_type": "reformulated_query"},
+        fields=["reformulated_from", "raw_message"],
+        limit_page_length=200,
+        order_by="modified desc",
+    )
+    for row in reformulation_rows:
+        reformulated_message = cstr(row.raw_message or "").strip()
+        if reformulated_message:
+            reformulation_counts[reformulated_message] += 1
+
+    click_rows = frappe.get_all(
+        "AI Product Search Event",
+        filters={"event_type": ["in", ["search_click", "shortlist", "quotation_created"]]},
+        fields=["selected_item_code", "event_type"],
+        limit_page_length=500,
+        order_by="modified desc",
+    )
+    for row in click_rows:
+        if not cstr(row.selected_item_code or "").strip():
+            continue
+        click_counts[row.selected_item_code] += FEEDBACK_WEIGHTS.get(row.event_type, 1)
+
+    tracked_searches = len(search_rows)
+    return {
+        "tracked_searches": tracked_searches,
+        "top_failed_queries": [
+            {"query": query, "count": count}
+            for query, count in sorted(failed_counts.items(), key=lambda item: item[1], reverse=True)[:10]
+        ],
+        "top_reformulated_queries": [
+            {"query": query, "count": count}
+            for query, count in sorted(reformulation_counts.items(), key=lambda item: item[1], reverse=True)[:10]
+        ],
+        "top_clicked_results": [
+            {"item_code": item_code, "score": score}
+            for item_code, score in sorted(click_counts.items(), key=lambda item: item[1], reverse=True)[:10]
+        ],
+        "zero_result_rate": round((zero_results / tracked_searches) * 100, 2) if tracked_searches else 0,
+        "relaxation_rate": round((relaxations / tracked_searches) * 100, 2) if tracked_searches else 0,
+    }
+
+
+def track_ai_search_outcome(
+    event_type,
+    search_event_id,
+    item_code=None,
+    related_item_code=None,
+    reformulated_message=None,
+    page_context=None,
+    benchmark_case_name=None,
+):
+    event_doc = _fetch_event_doc(search_event_id)
+    if not event_doc:
+        frappe.throw(_("AI search event not found"))
+
+    raw_message = cstr(reformulated_message or event_doc.raw_message or "").strip()
+    if event_type == "reformulated_query" and not raw_message:
+        frappe.throw(_("Reformulated message is required"))
+
+    payload = {
+        "search_event_reference": search_event_id,
+        "raw_message": raw_message,
+        "normalized_query": cstr(event_doc.normalized_query or ""),
+        "selected_item_code": cstr(item_code or ""),
+        "related_item_code": cstr(related_item_code or ""),
+        "provider": cstr(event_doc.provider or ""),
+        "llm_used": cint(event_doc.llm_used or 0),
+        "applied_sort": cstr(event_doc.applied_sort or ""),
+        "applied_filters": _json_loads(event_doc.applied_filters_json, default={}),
+        "resolved_intent": _json_loads(event_doc.resolved_intent_json, default={}),
+        "deterministic_signals": _json_loads(event_doc.deterministic_signals_json, default=[]),
+        "applied_relaxations": _json_loads(event_doc.applied_relaxations_json, default=[]),
+        "page_context": _json_loads(event_doc.page_context_json, default={}) or parse_page_context(page_context),
+        "reformulated_from": search_event_id if event_type == "reformulated_query" else "",
+        "benchmark_case_name": benchmark_case_name or "",
+        "outcome_status": event_type,
+        "quality_signals": _json_loads(event_doc.quality_signals_json, default={}),
+    }
+    outcome_event_id = log_ai_search_event(event_type, payload)
+    return {"search_event_id": search_event_id, "outcome_event_id": outcome_event_id}
+
+
+def _benchmark_filters_match(expected, applied):
+    # Returns True/False if the case asserts filters, else None (no assertion).
+    # Lists = subset (normalized); bools = equality; dict = active range with
+    # each given bound within 20% tolerance (covers the ±10% / ±500 widening the
+    # resolver applies to single values like "10w").
+    if not expected:
+        return None
+    applied = applied or {}
+    for key, exp_val in expected.items():
+        act_val = applied.get(key)
+        if isinstance(exp_val, dict):
+            act = act_val if isinstance(act_val, dict) else {}
+            amin, amax = flt(act.get("min")), flt(act.get("max"))
+            if amin == 0 and amax in (0, DEFAULT_RANGE_MAX):
+                return False  # range is default/unset
+            for bound in ("min", "max"):
+                if bound in exp_val:
+                    tol = max(1.0, abs(flt(exp_val[bound])) * 0.2)
+                    if abs(flt(act.get(bound)) - flt(exp_val[bound])) > tol:
+                        return False
+        elif isinstance(exp_val, bool):
+            if bool(act_val) != exp_val:
+                return False
+        elif isinstance(exp_val, list):
+            act_norm = {normalize_text(v) for v in (act_val or [])}
+            if any(normalize_text(v) not in act_norm for v in exp_val):
+                return False
+        else:
+            if normalize_text(exp_val) != normalize_text(act_val):
+                return False
+    return True
+
+
+def load_ai_search_benchmark_cases():
+    benchmark_path = frappe.get_app_path(
+        "igh_search", "igh_search", "data", "ai_product_search_benchmark.json"
+    )
+    with open(benchmark_path, "r", encoding="utf-8") as handle:
+        payload = json.load(handle)
+    return payload.get("cases", [])
+
+
+def evaluate_ai_search_benchmark(feature_flag_override=0):
+    from igh_search.igh_search.product_search_v2 import ensure_query_access
+
+    ensure_query_access(feature_flag_override=feature_flag_override)
+
+    summary = {
+        "total_cases": 0,
+        "intent_matches": 0,
+        "sort_matches": 0,
+        "filter_matches": 0,
+        "filter_cases": 0,
+        "non_zero_results": 0,
+        "details": [],
+    }
+    for case in load_ai_search_benchmark_cases():
+        result = ai_search_products_v2(
+            message=case.get("message"),
+            page_context=case.get("page_context"),
+            page=1,
+            page_length=5,
+            include_inactive=0,
+            feature_flag_override=feature_flag_override,
+        )
+        summary["total_cases"] += 1
+        intent_match = (
+            cstr(result.get("resolved_intent", {}).get("intent_class"))
+            == cstr(case.get("expected_intent_class"))
+        )
+        sort_match = (
+            cstr(case.get("expected_sort_by") or "")
+            == cstr(result.get("applied_sort") or "")
+        )
+        expected_filters = case.get("expected_filters")
+        filter_match = _benchmark_filters_match(expected_filters, result.get("applied_filters"))
+        if intent_match:
+            summary["intent_matches"] += 1
+        if sort_match:
+            summary["sort_matches"] += 1
+        if expected_filters:
+            summary["filter_cases"] += 1
+            if filter_match:
+                summary["filter_matches"] += 1
+        if cint(result.get("found")) > 0:
+            summary["non_zero_results"] += 1
+
+        detail = {
+            "case_name": case.get("name"),
+            "message": case.get("message"),
+            "expected_intent_class": case.get("expected_intent_class"),
+            "actual_intent_class": result.get("resolved_intent", {}).get("intent_class"),
+            "expected_sort_by": case.get("expected_sort_by") or "",
+            "actual_sort_by": result.get("applied_sort") or "",
+            "expected_filters": expected_filters or {},
+            "actual_filters": result.get("applied_filters") or {},
+            "filter_match": filter_match,
+            "found": result.get("found"),
+            "intent_match": intent_match,
+            "sort_match": sort_match,
+            "search_event_id": result.get("search_event_id"),
+        }
+        summary["details"].append(detail)
+        if result.get("search_event_id"):
+            log_ai_search_event(
+                "benchmark_run",
+                {
+                    "search_event_reference": result.get("search_event_id"),
+                    "raw_message": case.get("message"),
+                    "normalized_query": normalize_text(case.get("message")),
+                    "provider": result.get("resolved_intent", {}).get("provider"),
+                    "llm_used": result.get("resolved_intent", {}).get("llm_used"),
+                    "applied_sort": result.get("applied_sort"),
+                    "result_count": result.get("found"),
+                    "benchmark_case_name": case.get("name"),
+                    "outcome_status": "benchmark",
+                    "quality_signals": result.get("quality_signals"),
+                },
+            )
+
+    if summary["total_cases"]:
+        summary["intent_match_rate"] = round(
+            (summary["intent_matches"] / summary["total_cases"]) * 100, 2
+        )
+        summary["sort_match_rate"] = round(
+            (summary["sort_matches"] / summary["total_cases"]) * 100, 2
+        )
+        summary["non_zero_result_rate"] = round(
+            (summary["non_zero_results"] / summary["total_cases"]) * 100, 2
+        )
+    else:
+        summary["intent_match_rate"] = 0
+        summary["sort_match_rate"] = 0
+        summary["non_zero_result_rate"] = 0
+
+    summary["filter_match_rate"] = (
+        round((summary["filter_matches"] / summary["filter_cases"]) * 100, 2)
+        if summary["filter_cases"]
+        else 0
+    )
+
+    return summary
+
+
+def parse_page_context(page_context):
+    if not page_context:
+        return {}
+
+    if isinstance(page_context, str):
+        try:
+            page_context = json.loads(page_context)
+        except Exception:
+            return {}
+
+    if not isinstance(page_context, dict):
+        return {}
+
+    return {
+        key: cstr(page_context.get(key) or "").strip()
+        for key in PAGE_CONTEXT_KEYS
+        if cstr(page_context.get(key) or "").strip()
+    }
+
+
+def _get_model_names(model_name):
+    cache_key = f"ai_product_search|values|{model_name}"
+    cached_value = frappe.cache().get_value(cache_key)
+    if cached_value:
+        return cached_value
+
+    if model_name == "Item Group":
+        values = frappe.get_list(
+            model_name,
+            pluck="name",
+            filters={"disable": 0, "name": ("!=", "All Item Groups")},
+        )
+    else:
+        values = frappe.get_list(model_name, pluck="name")
+
+    frappe.cache().set_value(cache_key, values, expires_in_sec=KNOWN_VALUES_CACHE_TTL)
+    return values
+
+
+def get_known_filter_values():
+    cache_key = "ai_product_search|known_filter_values|v2"
+    cached_value = frappe.cache().get_value(cache_key)
+    if cached_value:
+        return cached_value
+
+    from igh_search.igh_search.api import get_all_masters
+
+    masters = get_all_masters() or {}
+    known_values = {}
+    for filter_key in ARRAY_FILTER_KEYS:
+        master_key = FILTER_MASTER_KEY_MAP.get(filter_key)
+        if master_key is None:
+            known_values[filter_key] = []
+            continue
+        known_values[filter_key] = masters.get(master_key) or []
+
+    known_values["product_type"] = masters.get("product_type") or ["Listed", "Unlisted", "Obsolete"]
+    known_values["variant_of"] = []
+
+    frappe.cache().set_value(cache_key, known_values, expires_in_sec=KNOWN_VALUES_CACHE_TTL)
+    return known_values
+
+
+def get_typesense_vocabulary(max_values=50):
+    cache_key = f"ai_product_search|typesense_vocabulary|{max_values}"
+    cached_value = frappe.cache().get_value(cache_key)
+    if cached_value:
+        return cached_value
+
+    vocabulary = {}
+    try:
+        from igh_search.igh_search.product_search_v2 import (
+            FACET_FIELDS,
+            create_typesense_client,
+            get_default_collection,
+        )
+
+        client = create_typesense_client()
+        response = client.collections[get_default_collection()].documents.search(
+            {
+                "q": "*",
+                "query_by": "searchable_text",
+                "facet_by": ",".join(FACET_FIELDS),
+                "max_facet_values": max_values,
+                "per_page": 1,
+                "page": 1,
+                "include_fields": "item_code",
+            }
+        )
+        for facet in response.get("facet_counts", []):
+            field_name = facet.get("field_name")
+            counts = facet.get("counts") or []
+            vocabulary[field_name] = [
+                cstr(count.get("value")).strip()
+                for count in counts
+                if cstr(count.get("value")).strip()
+            ]
+    except Exception:
+        vocabulary = {}
+
+    frappe.cache().set_value(cache_key, vocabulary, expires_in_sec=VOCABULARY_CACHE_TTL)
+    return vocabulary
+
+
+def get_ai_search_vocabulary():
+    cache_key = "ai_product_search|search_vocabulary|v2"
+    cached_value = frappe.cache().get_value(cache_key)
+    if cached_value:
+        return cached_value
+
+    master_values = get_known_filter_values()
+    facet_values = get_typesense_vocabulary()
+    merged = {}
+
+    for field_name in ARRAY_FILTER_KEYS:
+        values = []
+        for source_values in (facet_values.get(field_name), master_values.get(field_name)):
+            for value in source_values or []:
+                cleaned = cstr(value).strip()
+                if cleaned and cleaned not in values:
+                    values.append(cleaned)
+        merged[field_name] = values
+
+    alias_map = {
+        normalize_text(alias): normalize_text(canonical)
+        for alias, canonical in get_alias_map().items()
+    }
+    glossary_entries = []
+    for entry in load_glossary().get("entries", []):
+        canonical = cstr(entry.get("canonical") or "").strip()
+        if not canonical:
+            continue
+        glossary_entries.append(
+            {
+                "canonical": canonical,
+                "aliases": [cstr(value).strip() for value in entry.get("aliases", []) if cstr(value).strip()],
+            }
+        )
+
+    vocabulary = {
+        "known_values": merged,
+        "sort_values": sorted(SUPPORTED_SORT_VALUES),
+        "field_aliases": copy.deepcopy(LEGACY_FILTER_KEY_ALIASES),
+        "sort_aliases": copy.deepcopy(LEGACY_SORT_ALIASES),
+        "glossary_entries": glossary_entries,
+        "alias_map": alias_map,
+    }
+    frappe.cache().set_value(cache_key, vocabulary, expires_in_sec=VOCABULARY_CACHE_TTL)
+    return vocabulary
+
+
+def _trim_known_values_for_prompt(known_values, max_values=100):
+    return {key: values[:max_values] for key, values in (known_values or {}).items()}
+
+
+def preprocess_user_message(message, page_context=None):
+    sanitized_page_context = parse_page_context(page_context)
+    base_message = cstr(message).strip()
+    normalized_message = normalize_text(base_message)
+    expanded_message = expand_search_aliases(base_message)
+    return {
+        "message": base_message,
+        "normalized_message": normalized_message,
+        "expanded_message": expanded_message,
+        "page_context": sanitized_page_context,
+        "word_count": len([word for word in normalized_message.split(" ") if word]),
+    }
+
+
+def _build_intent_state():
+    return {
+        "query": "",
+        "sort_by": "",
+        "item_code_hint": "",
+        "filters": build_default_filters(),
+        "intent_class": "general_search",
+        "signals": [],
+        "hard_constraints": {"item_code_hint": False, "ranges": {}, "filters": set()},
+        "confidence_map": {},
+        "explanation_parts": [],
+        "derived_specs": {},
+    }
+
+
+def _add_signal(intent, text):
+    if text and text not in intent["signals"]:
+        intent["signals"].append(text)
+
+
+def _set_query(intent, query, source):
+    query = cstr(query).strip()
+    if not query:
+        return
+    if not intent["query"]:
+        intent["query"] = query
+        _add_signal(intent, f"query:{source}")
+
+
+def _set_item_code_hint(intent, item_code):
+    item_code = cstr(item_code).strip()
+    if not item_code:
+        return
+    intent["item_code_hint"] = item_code
+    intent["intent_class"] = "sku_lookup"
+    intent["hard_constraints"]["item_code_hint"] = True
+    _add_signal(intent, "sku")
+
+
+def _set_sort(intent, sort_by, source, confidence=1.0):
+    sort_by = LEGACY_SORT_ALIASES.get(cstr(sort_by).strip(), cstr(sort_by).strip())
+    if sort_by not in SUPPORTED_SORT_VALUES:
+        return
+    if not intent["sort_by"] or confidence >= intent["confidence_map"].get("sort_by", 0):
+        intent["sort_by"] = sort_by
+        intent["confidence_map"]["sort_by"] = confidence
+        _add_signal(intent, f"sort:{source}")
+
+
+def _add_filter_value(intent, filter_key, value, source, confidence=1.0, hard=False):
+    if filter_key not in intent["filters"] or filter_key not in ARRAY_FILTER_KEYS:
+        return
+    value = cstr(value).strip()
+    if not value:
+        return
+
+    normalized_value = normalize_text(value).replace(" ", "")
+    if filter_key in {"input_voltage", "output_voltage"} and normalized_value.endswith("ma"):
+        return
+    if filter_key == "output_current" and normalized_value.endswith("v"):
+        return
+
+    existing_values = {
+        normalize_text(existing).replace(" ", "")
+        for existing in (intent["filters"].get(filter_key) or [])
+        if cstr(existing).strip()
+    }
+    if normalized_value in existing_values:
+        return
+
+    intent["filters"][filter_key].append(value)
+    intent["confidence_map"][filter_key] = max(
+        flt(intent["confidence_map"].get(filter_key)),
+        confidence,
+    )
+    if hard:
+        intent["hard_constraints"]["filters"].add(filter_key)
+    _add_signal(intent, f"{filter_key}:{source}")
+
+
+def _set_boolean_filter(intent, filter_key, value, source, confidence=1.0):
+    if filter_key not in BOOLEAN_FILTER_KEYS:
+        return
+    intent["filters"][filter_key] = bool(value)
+    intent["confidence_map"][filter_key] = max(
+        flt(intent["confidence_map"].get(filter_key)),
+        confidence,
+    )
+    if value:
+        intent["hard_constraints"]["filters"].add(filter_key)
+    _add_signal(intent, f"{filter_key}:{source}")
+
+
+def _set_range(intent, range_key, min_value=None, max_value=None, source="deterministic", confidence=1.0, hard=False):
+    if range_key not in RANGE_FILTER_DEFAULTS:
+        return
+    current = copy.deepcopy(intent["filters"][range_key])
+    if min_value is not None:
+        current["min"] = flt(min_value)
+    if max_value is not None:
+        current["max"] = flt(max_value)
+    if current["max"] < current["min"]:
+        current["min"], current["max"] = current["max"], current["min"]
+    intent["filters"][range_key] = current
+    intent["confidence_map"][range_key] = max(
+        flt(intent["confidence_map"].get(range_key)),
+        confidence,
+    )
+    if hard:
+        intent["hard_constraints"]["ranges"][range_key] = True
+    _add_signal(intent, f"{range_key}:{source}")
+
+
+def _normalize_allowed_lookup(known_values):
+    lookup = {}
+    for filter_key, values in (known_values or {}).items():
+        field_lookup = {}
+        for value in values or []:
+            cleaned = cstr(value).strip()
+            normalized = normalize_text(cleaned)
+            if cleaned and normalized:
+                field_lookup[normalized] = cleaned
+        lookup[filter_key] = field_lookup
+    return lookup
+
+
+def _normalize_family_token(value):
+    normalized = normalize_text(value)
+    if not normalized:
+        return ""
+    compact = re.sub(r"[^a-z0-9]+", "", normalized)
+    if compact.endswith("ies") and len(compact) > 4:
+        compact = f"{compact[:-3]}y"
+    elif compact.endswith("s") and len(compact) > 3:
+        compact = compact[:-1]
+    return compact
+
+
+def _extract_family_phrase_candidates(normalized_message):
+    words = [word for word in cstr(normalized_message or "").split(" ") if word]
+    phrases = set(words)
+    for size in (2, 3):
+        for idx in range(0, max(len(words) - size + 1, 0)):
+            phrases.add(" ".join(words[idx : idx + size]))
+    return {phrase for phrase in phrases if phrase}
+
+
+def _iter_known_values_for_family(field_values):
+    if isinstance(field_values, dict):
+        return field_values.values()
+    if isinstance(field_values, (list, tuple, set)):
+        return field_values
+    return []
+
+
+def _build_family_lookup(known_lookup):
+    category_map = defaultdict(set)
+    item_group_map = defaultdict(set)
+
+    def add_value(target, raw_value):
+        cleaned = cstr(raw_value).strip()
+        token = _normalize_family_token(cleaned)
+        if cleaned and token:
+            target[token].add(cleaned)
+
+    for value in _iter_known_values_for_family((known_lookup or {}).get("category_list")):
+        add_value(category_map, value)
+    for value in _iter_known_values_for_family((known_lookup or {}).get("item_group")):
+        add_value(item_group_map, value)
+
+    alias_map = get_alias_map() or {}
+    for alias, canonical in alias_map.items():
+        alias_token = _normalize_family_token(alias)
+        canonical_token = _normalize_family_token(canonical)
+        if not alias_token or not canonical_token:
+            continue
+        for category_value in category_map.get(canonical_token, set()):
+            category_map[alias_token].add(category_value)
+        for item_group_value in item_group_map.get(canonical_token, set()):
+            item_group_map[alias_token].add(item_group_value)
+
+    return category_map, item_group_map
+
+
+def _fuzzy_family_candidate(phrases, category_map, item_group_map, score_cutoff=88):
+    # Typo/spacing tolerance: when exact token matching fails, fuzzy-match the
+    # message's family tokens against known category/item-group tokens. Only for
+    # reasonably long tokens, with a high cutoff, taking the single best hit —
+    # so "donwlight"/"spot lite"/"pannel light" still resolve to the facet.
+    if not _HAS_RAPIDFUZZ:
+        return None
+    cat_tokens = list(category_map.keys())
+    ig_tokens = list(item_group_map.keys())
+    best = None  # (score, kind, matched_token, phrase)
+    for phrase in phrases:
+        token = _normalize_family_token(phrase)
+        if not token or len(token) < 6:
+            continue
+        for kind, choices in (("category", cat_tokens), ("item_group", ig_tokens)):
+            if not choices:
+                continue
+            match = _rf_process.extractOne(
+                token, choices, scorer=_rf_fuzz.ratio, score_cutoff=score_cutoff
+            )
+            if match and (best is None or match[1] > best[0]):
+                best = (match[1], kind, match[0], phrase)
+    if best:
+        return {"kind": best[1], "token": best[2], "phrase": best[3]}
+    return None
+
+
+def _resolve_family_match(normalized_message, known_lookup):
+    phrases = _extract_family_phrase_candidates(normalized_message)
+    category_map, item_group_map = _build_family_lookup(known_lookup)
+
+    # Group hits by the normalized token that produced them. Values sharing a
+    # token are naming variants of the SAME family (e.g. "SPOT LIGHT",
+    # "SPOTLIGHT", "SPOT LIGHTS") and are safe to OR together. Different tokens
+    # mean different families — keep only the most specific one (longest matched
+    # phrase) instead of broadening the facet across unrelated families.
+    token_hits = {}
+    fuzzy_used = False
+    for phrase in phrases:
+        token = _normalize_family_token(phrase)
+        if not token:
+            continue
+        categories = category_map.get(token, set())
+        item_groups = item_group_map.get(token, set())
+        if not categories and not item_groups:
+            continue
+        entry = token_hits.setdefault(
+            token, {"phrase": phrase, "categories": set(), "item_groups": set()}
+        )
+        if len(phrase) > len(entry["phrase"]):
+            entry["phrase"] = phrase
+        entry["categories"].update(categories)
+        entry["item_groups"].update(item_groups)
+
+    # Fuzzy fallback only when exact matching found nothing (typos/spacing).
+    fuzzy_used = False
+    if not token_hits:
+        fuzzy = _fuzzy_family_candidate(phrases, category_map, item_group_map)
+        if fuzzy:
+            fuzzy_used = True
+            entry = {"phrase": fuzzy["phrase"], "categories": set(), "item_groups": set()}
+            if fuzzy["kind"] == "category":
+                entry["categories"] = set(category_map.get(fuzzy["token"], set()))
+            else:
+                entry["item_groups"] = set(item_group_map.get(fuzzy["token"], set()))
+            token_hits[fuzzy["token"]] = entry
+
+    if not token_hits:
+        return {"filter_key": "", "values": [], "matched_phrases": [], "signal": "family_match:none"}
+
+    best_token = max(token_hits, key=lambda t: (len(token_hits[t]["phrase"]), len(t)))
+    best = token_hits[best_token]
+
+    # Defensive cap: a single token resolving to a huge set is suspicious — fall
+    # back to keyword search rather than over-broadening the facet filter.
+    MAX_FAMILY_VALUES = 8
+
+    suffix = ":fuzzy" if fuzzy_used else ""
+
+    if best["categories"] and len(best["categories"]) <= MAX_FAMILY_VALUES:
+        return {
+            "filter_key": "category_list",
+            "values": sorted(best["categories"]),
+            "matched_phrases": [best["phrase"]],
+            "signal": f"family_match:category_list{suffix}",
+        }
+
+    if best["item_groups"] and len(best["item_groups"]) <= MAX_FAMILY_VALUES:
+        return {
+            "filter_key": "item_group",
+            "values": sorted(best["item_groups"]),
+            "matched_phrases": [best["phrase"]],
+            "signal": f"family_match:item_group_fallback{suffix}",
+        }
+
+    return {"filter_key": "", "values": [], "matched_phrases": [], "signal": "family_match:none"}
+
+
+def _remove_matched_family_phrases(query_text, matched_phrases):
+    cleaned = cstr(query_text or "")
+    for phrase in sorted(
+        {cstr(value or "").strip() for value in matched_phrases if cstr(value or "").strip()},
+        key=len,
+        reverse=True,
+    ):
+        cleaned = re.sub(rf"(?<![a-z0-9]){re.escape(phrase)}(?![a-z0-9])", " ", cleaned)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    return cleaned
+
+
+def _extract_sku_hint(normalized_message):
+    candidates = re.findall(r"\b[a-z0-9]+(?:[-_/][a-z0-9]+)+\b|\b[a-z]*\d[a-z0-9-]{2,}\b", normalized_message)
+    for candidate in candidates:
+        normalized_candidate = normalize_text(candidate)
+        if not any(char.isdigit() for char in normalized_candidate):
+            continue
+        if re.match(r"^ip\d{2,3}$", normalized_candidate):
+            continue
+        if re.match(r"^\d+(?:k|w|v|ma|a|d|aed|qty)$", normalized_candidate):
+            continue
+        if re.match(r"^\d{4,5}k$", normalized_candidate):
+            continue
+        if "-" not in candidate and "_" not in candidate and len(normalized_candidate) < 5:
+            continue
+        return cstr(candidate).upper()
+    return ""
+
+
+def _extract_voltage_values(normalized_message):
+    return re.findall(r"\b\d+(?:\.\d+)?(?:\s*-\s*\d+(?:\.\d+)?)?\s*v\b", normalized_message)
+
+
+def _extract_current_values(normalized_message):
+    return re.findall(r"\b\d+(?:\.\d+)?\s*ma\b", normalized_message)
+
+
+def _extract_beam_values(normalized_message):
+    return re.findall(r"\b\d{1,3}\s*(?:d|deg|degree)\b", normalized_message)
+
+
+def _extract_numeric_first(text):
+    match = re.search(r"(-?\d+(?:\.\d+)?)", cstr(text or ""))
+    return flt(match.group(1)) if match else None
+
+
+def _extract_dimension_token(raw_message):
+    match = re.search(
+        r"\b(\d+(?:\.\d+)?\s*[x×]\s*\d+(?:\.\d+)?(?:\s*[x×]\s*\d+(?:\.\d+)?)?)\s*(?:mm|cm)?\b",
+        cstr(raw_message or ""),
+        re.IGNORECASE,
+    )
+    return cstr(match.group(1)).replace("×", "x").strip() if match else ""
+
+
+def _extract_cut_out_token(normalized_message):
+    match = re.search(
+        r"\bcut\s*out\s*(\d+(?:\.\d+)?(?:\s*[x×]\s*\d+(?:\.\d+)?)?)\b",
+        normalized_message,
+    )
+    return cstr(match.group(1)).replace("×", "x").strip() if match else ""
+
+
+def _extract_lumens_value(normalized_message):
+    match = re.search(r"\b(\d+(?:\.\d+)?)\s*l(?:m|umen|umens)\b", normalized_message)
+    return flt(match.group(1)) if match else 0
+
+
+def _extract_cri_value(normalized_message):
+    match = re.search(r"\bcri\s*(?:>=|>|=)?\s*(\d+(?:\.\d+)?)\b", normalized_message)
+    return flt(match.group(1)) if match else 0
+
+
+def _infer_environment(normalized_message):
+    if any(term in normalized_message for term in ("outdoor", "exterior", "landscape", "facade", "garden")):
+        return "outdoor"
+    if any(term in normalized_message for term in ("indoor", "interior", "office", "hotel room", "bedroom")):
+        return "indoor"
+    return ""
+
+
+def _append_derived_query_token(intent, token, source):
+    token = cstr(token).strip()
+    if not token:
+        return
+    if not intent["query"]:
+        intent["query"] = token
+    elif token.lower() not in cstr(intent["query"]).lower():
+        intent["query"] = f'{intent["query"]} {token}'.strip()
+    _add_signal(intent, f"query_token:{source}")
+
+
+def _extract_additional_specs(intent, preprocessed_message):
+    normalized_message = preprocessed_message["normalized_message"]
+    raw_message = preprocessed_message["message"]
+    derived_specs = {}
+
+    lumens = _extract_lumens_value(normalized_message)
+    if lumens:
+        derived_specs["lumens_min"] = lumens * 0.85
+        derived_specs["lumens_max"] = lumens * 1.15
+        _append_derived_query_token(intent, f"{int(lumens)}lm", "lumens")
+
+    cri = _extract_cri_value(normalized_message)
+    if cri:
+        derived_specs["cri_min"] = cri
+        _append_derived_query_token(intent, f"CRI {int(cri)}", "cri")
+
+    dimension = _extract_dimension_token(raw_message)
+    if dimension:
+        derived_specs["dimension_text"] = dimension
+        _append_derived_query_token(intent, dimension, "dimension")
+
+    cut_out = _extract_cut_out_token(normalized_message)
+    if cut_out:
+        derived_specs["cut_out_text"] = cut_out
+        _append_derived_query_token(intent, f"cut out {cut_out}", "cut_out")
+
+    environment = _infer_environment(normalized_message)
+    if environment:
+        derived_specs["environment"] = environment
+
+    # Weatherproofing words imply a minimum ingress-protection rating. Applied
+    # only when the user did not already give an explicit IP value.
+    wants_weatherproof = environment == "outdoor" or any(
+        term in normalized_message
+        for term in (
+            "waterproof",
+            "water proof",
+            "weatherproof",
+            "weather proof",
+            "ip rated",
+            "ip-rated",
+            "ingress protection",
+        )
+    )
+    if (
+        wants_weatherproof
+        and not intent["filters"].get("ip_rate")
+        and _is_default_range_value(
+            "ip_rating_numeric_range", intent["filters"].get("ip_rating_numeric_range")
+        )
+    ):
+        _set_range(
+            intent,
+            "ip_rating_numeric_range",
+            min_value=65,
+            source="weatherproof_synonym",
+            confidence=0.75,
+        )
+        derived_specs["weatherproof"] = "IP65+"
+
+    if derived_specs:
+        intent["derived_specs"].update(derived_specs)
+        _add_signal(intent, "derived_specs")
+
+
+def _match_known_values(normalized_message, known_values):
+    matches = {}
+    for filter_key, values in (known_values or {}).items():
+        if filter_key in {"category_list", "item_group"}:
+            continue
+        for normalized_value, canonical_value in values.items():
+            if not normalized_value:
+                continue
+
+            compact_value = cstr(normalized_value).replace(" ", "")
+            if filter_key in {"input_voltage", "output_voltage"} and compact_value.endswith("ma"):
+                continue
+            if filter_key == "output_current" and compact_value.endswith("v"):
+                continue
+
+            if re.search(rf"(?<![a-z0-9]){re.escape(normalized_value)}(?![a-z0-9])", normalized_message):
+                matches.setdefault(filter_key, []).append(canonical_value)
+    return matches
+
+
+def _extract_comparative_range(normalized_message, range_key):
+    between_patterns = {
+        "rate_range": (
+            r"\bbetween\s*(?:aed\s*)?(\d+(?:\.\d+)?)\s*(?:aed\s*)?(?:and|to)\s*(?:aed\s*)?(\d+(?:\.\d+)?)(?:\s*aed)\b",
+            r"\bprice\s+between\s*(\d+(?:\.\d+)?)\s*(?:and|to)\s*(\d+(?:\.\d+)?)\b",
+        ),
+        "power_value_range": (
+            r"\bbetween\s*(\d+(?:\.\d+)?)\s*w?\s*(?:and|to)\s*(\d+(?:\.\d+)?)\s*w\b",
+            r"\bpower\s+between\s*(\d+(?:\.\d+)?)\s*(?:and|to)\s*(\d+(?:\.\d+)?)\b",
+        ),
+        "stock_range": (
+            r"\bstock\s+between\s*(\d+(?:\.\d+)?)(?:\s*(?:qty|quantity))?\s*(?:and|to)\s*(\d+(?:\.\d+)?)(?:\s*(?:qty|quantity))?\b",
+            r"\bbetween\s*(\d+(?:\.\d+)?)\s*(?:qty|quantity)\s*(?:and|to)\s*(\d+(?:\.\d+)?)(?:\s*(?:qty|quantity))?\b",
+        ),
+    }
+    single_patterns = {
+        "rate_range": (
+            r"\b(under|below|less than|over|above|more than)\s*(?:aed\s*)?(\d+(?:\.\d+)?)(?:\s*aed)\b",
+            r"\bprice\s+(under|below|less than|over|above|more than)\s*(\d+(?:\.\d+)?)\b",
+            r"(?<!stock )\b(under|below|less than|over|above|more than)\s*(\d+(?:\.\d+)?)(?!\s*(?:w|qty|quantity|k|v|ma)\b)\b",
+        ),
+        "power_value_range": (
+            r"\b(under|below|less than|over|above|more than)\s*(\d+(?:\.\d+)?)\s*w\b",
+            r"\bpower\s+(under|below|less than|over|above|more than)\s*(\d+(?:\.\d+)?)\b",
+        ),
+        "stock_range": (
+            r"\bstock\s+(under|below|less than|over|above|more than)\s*(\d+(?:\.\d+)?)(?:\s*(?:qty|quantity))?\b",
+            r"\b(under|below|less than|over|above|more than)\s*(\d+(?:\.\d+)?)\s*(?:qty|quantity)\b",
+        ),
+    }
+
+    for pattern in between_patterns.get(range_key, ()):
+        match = re.search(pattern, normalized_message)
+        if match:
+            return {
+                "min": match.group(1),
+                "max": match.group(2),
+                "phrase": match.group(0),
+            }
+
+    for pattern in single_patterns.get(range_key, ()):
+        match = re.search(pattern, normalized_message)
+        if not match:
+            continue
+        operator = cstr(match.group(1)).strip().lower()
+        value = match.group(2)
+        if operator in {"under", "below", "less than"}:
+            return {"min": None, "max": value, "phrase": match.group(0)}
+        if operator in {"over", "above", "more than"}:
+            return {"min": value, "max": None, "phrase": match.group(0)}
+
+    return None
+
+
+def extract_deterministic_intent(preprocessed_message, vocabulary):
+    intent = _build_intent_state()
+    normalized_message = preprocessed_message["normalized_message"]
+    expanded_message = preprocessed_message["expanded_message"]
+    page_context = preprocessed_message["page_context"]
+    known_lookup = _normalize_allowed_lookup(vocabulary.get("known_values"))
+
+    sku_hint = _extract_sku_hint(normalized_message)
+    if sku_hint:
+        _set_item_code_hint(intent, sku_hint)
+        _set_query(intent, sku_hint, "sku")
+
+    ip_match = re.search(r"\bip\s*([0-9]{2,3})\b", normalized_message)
+    if ip_match:
+        ip_rating = normalize_ip_rate(ip_match.group(0))
+        _add_filter_value(intent, "ip_rate", ip_rating, "regex", confidence=1.0, hard=True)
+
+    color_phrase_match = re.search(
+        r"\b(\d{4,5}\s*k|warm white|cool white|daylight|neutral white)\b",
+        normalized_message,
+    )
+    if color_phrase_match:
+        color_temp = normalize_color_temp(color_phrase_match.group(1))
+        _add_filter_value(intent, "color_temp", color_temp, "regex", confidence=1.0, hard=True)
+        kelvin = _extract_numeric_first(color_temp)
+        if kelvin is not None:
+            _set_range(
+                intent,
+                "color_temp_kelvin_range",
+                max(0, kelvin - 500),
+                kelvin + 500,
+                source="regex",
+                confidence=1.0,
+                hard=True,
+            )
+
+    for range_key in ("power_value_range", "stock_range", "rate_range"):
+        comparative_range = _extract_comparative_range(normalized_message, range_key)
+        if comparative_range:
+            _set_range(
+                intent,
+                range_key,
+                comparative_range.get("min"),
+                comparative_range.get("max"),
+                source="regex",
+                confidence=1.0,
+                hard=True,
+            )
+
+    if _is_default_range_value("power_value_range", intent["filters"].get("power_value_range")):
+        power_match = re.search(r"\b(\d+(?:\.\d+)?)\s*w\b", normalized_message)
+        if power_match:
+            power_value = flt(power_match.group(1))
+            _add_filter_value(intent, "power", f"{power_match.group(1)}W", "regex", confidence=1.0, hard=True)
+            _set_range(
+                intent,
+                "power_value_range",
+                power_value * 0.9,
+                power_value * 1.1,
+                source="regex",
+                confidence=1.0,
+                hard=True,
+            )
+
+    for voltage in _extract_voltage_values(normalized_message):
+        _add_filter_value(intent, "input_voltage", voltage.upper().replace(" ", ""), "regex", confidence=0.95, hard=True)
+        break
+
+    for current in _extract_current_values(normalized_message):
+        _add_filter_value(intent, "output_current", current.upper().replace(" ", ""), "regex", confidence=0.95, hard=True)
+        break
+
+    for beam in _extract_beam_values(normalized_message):
+        beam_value = beam.upper().replace("DEG", "D").replace("DEGREE", "D").replace(" ", "")
+        _add_filter_value(intent, "beam_angle", beam_value, "regex", confidence=0.9, hard=True)
+        break
+
+    if any(phrase in normalized_message for phrase in ("in stock", "on stock", "instock", "available stock", "available now")):
+        _set_boolean_filter(intent, "in_stock", True, "phrase", confidence=1.0)
+
+    if any(phrase in normalized_message for phrase in ("high stock", "most stock", "stock high to low", "quantity wise", "quantity high to low")):
+        _set_sort(intent, "stock:desc", "phrase", confidence=1.0)
+        intent["intent_class"] = "stock_priority"
+    elif any(phrase in normalized_message for phrase in ("low stock", "stock low to high", "quantity low to high")):
+        _set_sort(intent, "stock:asc", "phrase", confidence=1.0)
+        intent["intent_class"] = "stock_priority"
+    elif any(phrase in normalized_message for phrase in ("highest discount", "discount high to low", "biggest discount")):
+        _set_sort(intent, "discount_percentage:desc", "phrase", confidence=1.0)
+        intent["intent_class"] = "discount_priority"
+    elif any(phrase in normalized_message for phrase in ("latest", "newest", "recent")):
+        _set_sort(intent, "creation:desc", "phrase", confidence=1.0)
+        intent["intent_class"] = "recent_products"
+    elif any(phrase in normalized_message for phrase in ("cheapest", "lowest price", "low price", "price low to high")):
+        _set_sort(intent, "rate:asc", "phrase", confidence=1.0)
+    elif any(phrase in normalized_message for phrase in ("highest price", "most expensive", "price high to low")):
+        _set_sort(intent, "rate:desc", "phrase", confidence=1.0)
+
+    _extract_additional_specs(intent, preprocessed_message)
+
+    # Strip colour-temperature phrases before vocabulary matching so the
+    # standalone "white" in "warm white"/"cool white" doesn't leak into the
+    # body_finish facet (it's a CCT signal, not a finish).
+    vocab_message = expanded_message
+    for term in (
+        "warm white",
+        "cool white",
+        "cold white",
+        "neutral white",
+        "natural white",
+        "daylight",
+        "day light",
+    ):
+        vocab_message = re.sub(
+            rf"(?<![a-z0-9]){re.escape(term)}(?![a-z0-9])", " ", vocab_message
+        )
+    matched_values = _match_known_values(vocab_message, known_lookup)
+    for filter_key, values in matched_values.items():
+        if filter_key in ("ip_rate", "color_temp", "power"):
+            continue
+        for value in values[:3]:
+            _add_filter_value(intent, filter_key, value, "vocabulary", confidence=0.9, hard=False)
+
+    family_resolution = _resolve_family_match(
+        normalized_message,
+        vocabulary.get("known_values") or {},
+    )
+    if family_resolution.get("signal"):
+        _add_signal(intent, family_resolution["signal"])
+    family_values = family_resolution.get("values") or []
+    if family_resolution.get("filter_key") and family_values:
+        for family_value in family_values:
+            _add_filter_value(
+                intent,
+                family_resolution["filter_key"],
+                family_value,
+                "family_match",
+                confidence=0.95,
+                hard=True,
+            )
+
+    if page_context.get("brand"):
+        _add_filter_value(intent, "brand", page_context["brand"], "page_context", confidence=0.6, hard=False)
+    if page_context.get("category"):
+        _add_filter_value(intent, "category_list", page_context["category"], "page_context", confidence=0.6, hard=False)
+    if page_context.get("search") and not intent["query"]:
+        _set_query(intent, page_context["search"], "page_context")
+
+    query_candidate = normalized_message
+    for range_key, patterns in RANGE_QUERY_PATTERNS.items():
+        if _is_default_range_value(range_key, intent["filters"].get(range_key)):
+            continue
+        for pattern in patterns:
+            query_candidate = re.sub(pattern, " ", query_candidate)
+    for value in re.findall(r"\b(?:ip\s*\d+|\d+(?:\.\d+)?\s*w|\d{4,5}\s*k)\b", normalized_message):
+        query_candidate = re.sub(re.escape(value), " ", query_candidate)
+    query_candidate = _remove_matched_family_phrases(
+        query_candidate,
+        (family_resolution.get("matched_phrases") or []) if family_resolution.get("filter_key") else [],
+    )
+    # Spec/environment words that are now represented as structured filters are
+    # noise in the free-text query — leaving them in would over-constrain the
+    # Typesense text match (e.g. excluding IP65 items that don't literally say
+    # "waterproof"). Strip them so the filters do the narrowing.
+    for term in SPEC_SYNONYM_QUERY_TERMS:
+        query_candidate = re.sub(
+            rf"(?<![a-z0-9]){re.escape(term)}(?![a-z0-9])", " ", query_candidate
+        )
+    query_candidate = re.sub(r"\s+", " ", query_candidate).strip()
+    if intent["intent_class"] != "sku_lookup" and query_candidate:
+        _set_query(intent, query_candidate, "message")
+
+    if any(phrase in normalized_message for phrase in ("alternative", "similar", "equivalent", "replacement")):
+        intent["intent_class"] = "alternatives"
+        _add_signal(intent, "alternatives")
+    elif (
+        intent["intent_class"] == "general_search"
+        and (intent["hard_constraints"]["filters"] or intent["hard_constraints"]["ranges"])
+    ):
+        intent["intent_class"] = "spec_match"
+
+    return intent
+
+
+ENQUIRY_SPEC_UNIT_PATTERN = re.compile(
+    r"\b\d+(?:\.\d+)?\s*(?:w|watt|watts|kw|ma|a|vdc|vac|kv|v|lm|lumens?|mm|cm|deg|degree|°)\b"
+    r"|\bip\s?\d{2}\b"
+    r"|\b\d{3,5}\s?k\b"
+    r"|\b\d+(?:\.\d+)?\s?-\s?\d+(?:\.\d+)?\s?(?:ma|w|v|k|a|lm)\b",
+    re.IGNORECASE,
+)
+
+
+def _enquiry_spec_density(preprocessed_message):
+    message = cstr(preprocessed_message.get("normalized_message") or "")
+    return len(ENQUIRY_SPEC_UNIT_PATTERN.findall(message))
+
+
+def needs_model_reasoning(preprocessed_message, deterministic_intent):
+    # Sales users paste raw customer enquiry lines — a product plus many specs,
+    # ranges, voltages and finishes (e.g. "Lumibright Spot light 15 Watts 2700K
+    # Off white 700mA 20.75 VDC IP20"). Those are exactly where the deterministic
+    # regex parser mis-reads ("15 Watts" -> beam 15°), drops voltages/series and
+    # collapses ranges. So fire the model whenever the message is spec-dense /
+    # enquiry-like; keep the cheap deterministic-only path only for short
+    # single-concept browse queries and clean SKU lookups.
+    word_count = cint(preprocessed_message.get("word_count"))
+    spec_hits = _enquiry_spec_density(preprocessed_message)
+    enquiry_like = (
+        spec_hits >= 2
+        or (spec_hits >= 1 and word_count >= 4)
+        or word_count >= 6
+    )
+    if enquiry_like:
+        return True
+    if deterministic_intent["intent_class"] == "sku_lookup":
+        return False
+    return word_count >= 4
+
+
+def _build_model_messages(message, page_context, vocabulary, deterministic_intent):
+    response_shape = {
+        "query": "string",
+        "sort_by": "one of the allowed sort values",
+        "filters": {
+            **{key: ["string"] for key in ARRAY_FILTER_KEYS},
+            **copy.deepcopy(RANGE_FILTER_DEFAULTS),
+            **{key: False for key in BOOLEAN_FILTER_KEYS},
+        },
+        "explanation": "short explanation string",
+    }
+
+    examples = [
+        {
+            "message": "ip65 3000k downlight",
+            "response": {
+                "query": "downlight",
+                "sort_by": "",
+                "filters": {"ip_rate": ["IP65"], "color_temp": ["3000K"]},
+            },
+        },
+        {
+            "message": "driver 24v 350ma",
+            "response": {
+                "query": "led driver",
+                "sort_by": "",
+                "filters": {"input_voltage": ["24V"], "output_current": ["350MA"]},
+            },
+        },
+        {
+            "message": "10w 3000k spotlight for hotel corridor",
+            "response": {
+                "query": "spotlight",
+                "sort_by": "",
+                "filters": {"power": ["10W"], "color_temp": ["3000K"]},
+            },
+        },
+        {
+            "message": "warm white led strip 24v waterproof",
+            "response": {
+                "query": "led strip",
+                "sort_by": "",
+                "filters": {"input_voltage": ["24V"], "color_temp": ["3000K"], "ip_rate": ["IP65"]},
+            },
+        },
+        {
+            "message": "high stock surface lights under 500",
+            "response": {
+                "query": "surface lights",
+                "sort_by": "stock:desc",
+                "filters": {"rate_range": {"min": 0, "max": 500}, "in_stock": True},
+            },
+        },
+        {
+            "message": "3000k spotlights below 10w",
+            "note": "spotlight matches a known category value, so it goes to category_list (exact known value), not query",
+            "response": {
+                "query": "",
+                "sort_by": "",
+                "filters": {
+                    "category_list": ["SPOT LIGHT"],
+                    "color_temp": ["3000K"],
+                    "power_value_range": {"min": 0, "max": 10},
+                },
+            },
+        },
+        {
+            "message": "Lumibright Spot light 15 Watts 2700K with Off white colour 700mA 20.75 VDC IP20",
+            "note": "Raw customer enquiry. Extract EVERY spec. '15 Watts' is POWER (15W), never a beam angle. Map the brand to a known value. query is empty because every token was mapped to a filter.",
+            "response": {
+                "query": "",
+                "sort_by": "",
+                "filters": {
+                    "brand": ["LUMIBRIGHT"],
+                    "category_list": ["SPOT LIGHT"],
+                    "power": ["15W"],
+                    "color_temp": ["2700K"],
+                    "body_finish": ["WHITE"],
+                    "output_current": ["700MA"],
+                    "output_voltage": ["20V"],
+                    "ip_rate": ["IP20"],
+                },
+            },
+        },
+        {
+            "message": "LED Driver LCA 60W 900-1750mA",
+            "note": "'LCA' is a product series/model code and '900-1750mA' is a distinctive selectable-current range: keep BOTH in query so they match by product name. Map the clean specs to filters; do not drop the lower bound of the range.",
+            "response": {
+                "query": "LCA 900-1750mA",
+                "sort_by": "",
+                "filters": {"category_list": ["LED DRIVERS"], "power": ["60W"]},
+            },
+        },
+    ]
+
+    system_prompt = f"""
+You convert natural-language product discovery requests into structured search intent for a Typesense-backed product listing API.
+This catalog is focused on lighting products and related electrical items such as luminaires, LED strips, profiles, drivers, dimming gear, switches, sockets, and switchgear.
+Return ONLY valid JSON. Do not return markdown. Do not add keys outside the required schema.
+
+Required JSON shape:
+{json.dumps(response_shape, ensure_ascii=True)}
+
+Domain rules:
+- Interpret the request as a lighting and electrical sourcing request first, not as general ecommerce.
+- Prefer lighting nouns in the query such as downlight, spotlight, track light, panel light, flood light, high bay, wall washer, LED strip, aluminium profile, batten light, emergency light, driver, dimmer, sensor, switchgear.
+- Treat electrical specification language as high-signal: wattage, color temperature/CCT, IP rating, beam angle, input voltage, output current, output voltage, dimming protocol, mounting type, lumen output.
+- If the user mentions a use case like outdoor, facade, corridor, hotel, office, retail, or display, prefer lighting interpretations that support that use case.
+- For terms like driver, strip, profile, track, panel, batten, flood, spot, and emergency, keep the query aligned to the lighting product family rather than generic meanings.
+- If a product-family noun (spotlight, downlight, panel light, track light, flood light, high bay, batten, wall washer, etc.) matches a value in known_filter_values.category_list, put that EXACT known category value into filters.category_list and leave it OUT of query. Use query only for free-text not already captured by a structured filter.
+- Map spec wording to filters: "warm white"≈3000K, "cool white"≈4000K, "daylight"≈6000K; "waterproof"/"weatherproof"/"outdoor"≈IP65 or higher. Prefer the matching range field when the user implies a bound (e.g. "below 10w", "under 500 aed").
+
+Customer enquiry mode (IMPORTANT):
+- Sales users frequently paste a full customer enquiry line that names a product and many specifications at once (brand, wattage, CCT, IP rating, beam angle, output current, input/output voltage, body finish/colour, lumen, mounting). Extract EVERY specification you can recognise into filters.
+- A number followed by W/Watt/Watts is POWER (e.g. "15 Watts" -> power ["15W"]). NEVER read a wattage as a beam angle. Only set beam_angle when the value is explicitly in degrees ("24°", "24 deg", "wide beam"). If the deterministic_seed tagged a wattage as beam_angle, drop that beam_angle.
+- Values in V/VDC/VAC are voltage -> output_voltage (driver/strip output) or input_voltage as the wording implies. Values in mA/A are output_current.
+- For a value RANGE such as "900-1750mA" or "10-40V", keep the original range token in the query so it still matches the product name; never silently drop the lower bound.
+- Map brand names to filters.brand using a known value. Product SERIES or MODEL codes (e.g. LCA, LCAI, LBE2077) are NOT in the known filter values — keep them in the query so they match the product name/series. Also keep in the query anything you could not confidently map to a filter.
+- Remove from the query every spec token you DID map into a filter. The query should hold only product/series free-text (or be empty when everything was mapped).
+- Product vs context: the product is what the customer wants to BUY. Phrases like "light for a bathroom mirror", "lighting for a garden", "lamp for a desk" describe a LIGHT for a location/surface — do NOT map the surface to category_list (a "light for a mirror" is NOT category MIRRORS). Treat the location/surface as a use-case hint and keep the lighting noun (light, lamp, etc.) in the query or a lighting category.
+
+General rules:
+- Use ONLY the current V2 contract field names.
+- Never use legacy keys such as color_temp_, input, warranty_, or price_range.
+- Prefer existing supported filters and known values.
+- If the deterministic seed already contains strong filters, only add missing fields.
+- Use sort_by only when the user clearly asked for ordering such as stock high-to-low, latest, cheapest, or highest discount.
+- Keep query short and useful for product search.
+- If unsure, leave arrays empty, booleans false, and ranges at broad defaults.
+
+Allowed sort values:
+{json.dumps(sorted(SUPPORTED_SORT_VALUES), ensure_ascii=True)}
+
+Few-shot examples:
+{json.dumps(examples, ensure_ascii=True)}
+""".strip()
+
+    user_payload = {
+        "message": cstr(message).strip(),
+        "page_context": page_context,
+        "deterministic_seed": {
+            "query": deterministic_intent.get("query"),
+            "sort_by": deterministic_intent.get("sort_by"),
+            "filters": deterministic_intent.get("filters"),
+            "intent_class": deterministic_intent.get("intent_class"),
+        },
+        "known_filter_values": _trim_known_values_for_prompt(vocabulary.get("known_values")),
+    }
+    return [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": json.dumps(user_payload, ensure_ascii=True)},
+    ]
+
+
+def parse_json_response(content):
+    content = (content or "").strip()
+    if not content:
+        raise ValueError("AI returned an empty response")
+
+    try:
+        return json.loads(content)
+    except Exception:
+        pass
+
+    start = content.find("{")
+    end = content.rfind("}")
+    if start != -1 and end != -1 and end > start:
+        return json.loads(content[start : end + 1])
+
+    raise ValueError("AI response was not valid JSON")
+
+
+def _call_ai_provider(provider, messages):
+    if provider == "openai":
+        api_key = get_openai_api_key()
+        if not api_key:
+            raise ValueError("OpenAI API key is not configured")
+        response = requests.post(
+            OPENAI_API_URL,
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": get_openai_model(),
+                "messages": messages,
+                "temperature": 0.1,
+                "max_tokens": 1200,
+                "response_format": {"type": "json_object"},
+            },
+            timeout=30,
+        )
+        response.raise_for_status()
+        payload = response.json() or {}
+        content = ((payload.get("choices") or [{}])[0].get("message") or {}).get("content", "")
+        record_ai_metric("provider_openai")
+        return content, parse_json_response(content)
+
+    if provider == "groq":
+        api_key = get_groq_api_key()
+        if not api_key:
+            raise ValueError("Groq API key is not configured")
+        response = requests.post(
+            GROQ_API_URL,
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": get_groq_model(),
+                "messages": messages,
+                "temperature": 0.1,
+                "max_tokens": 1200,
+                "response_format": {"type": "json_object"},
+            },
+            timeout=20,
+        )
+        response.raise_for_status()
+        payload = response.json() or {}
+        content = ((payload.get("choices") or [{}])[0].get("message") or {}).get("content", "")
+        record_ai_metric("provider_groq")
+        return content, parse_json_response(content)
+
+    raise ValueError(f"Unsupported AI provider: {provider}")
+
+
+def call_ai_for_product_search(message, page_context, vocabulary, deterministic_intent):
+    messages = _build_model_messages(message, page_context, vocabulary, deterministic_intent)
+    last_error = None
+
+    for provider in ("openai", "groq"):
+        try:
+            if provider == "openai" and not get_openai_api_key():
+                continue
+            if provider == "groq" and not get_groq_api_key():
+                continue
+            raw_content, parsed = _call_ai_provider(provider, messages)
+            return provider, raw_content, parsed
+        except Exception as exc:
+            last_error = exc
+            log_ai_product_search(
+                "provider_failure",
+                {"provider": provider, "error": cstr(exc)},
+            )
+            continue
+
+    record_ai_metric("provider_fallback")
+    raise last_error or ValueError("No AI provider is configured")
+
+
+def _to_number(value):
+    if value is None or isinstance(value, bool):
+        return None
+    if isinstance(value, str):
+        value = value.strip()
+        if not value:
+            return None
+    try:
+        return flt(value)
+    except Exception:
+        return None
+
+
+def _to_boolean(value):
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)) and value in (0, 1):
+        return bool(value)
+    value = cstr(value).strip().lower()
+    return value in {"true", "1", "yes", "y"}
+
+
+def _display_label(filter_key):
+    return DISPLAY_FILTER_LABELS.get(filter_key, cstr(filter_key).replace("_", " ").title())
+
+
+def _format_number_for_display(value):
+    number = flt(value)
+    if number.is_integer():
+        return str(int(number))
+    return f"{number:.2f}".rstrip("0").rstrip(".")
+
+
+def _format_filter_value_for_display(filter_key, value):
+    cleaned = cstr(value).strip()
+    if not cleaned:
+        return ""
+    unit = DISPLAY_FILTER_UNITS.get(filter_key)
+    normalized = normalize_text(cleaned)
+    if filter_key == "in_stock":
+        return "Yes" if _to_boolean(value) else ""
+    if filter_key in {"color_temp", "ip_rate"}:
+        return cleaned.upper().replace(" ", "")
+    if unit and re.fullmatch(r"-?\d+(?:\.\d+)?", cleaned):
+        return f"{_format_number_for_display(cleaned)} {unit}"
+    if unit and filter_key in {"input_voltage", "output_voltage", "output_current"} and normalized.endswith(unit.lower()):
+        return cleaned.upper().replace(" ", "")
+    return cleaned
+
+
+def _is_default_range_value(range_key, value):
+    defaults = RANGE_FILTER_DEFAULTS.get(range_key)
+    if defaults is None:
+        return True
+    return sanitize_range(value, defaults) == defaults
+
+
+def _format_range_for_display(range_key, value):
+    defaults = RANGE_FILTER_DEFAULTS.get(range_key)
+    if defaults is None:
+        return ""
+    sanitized = sanitize_range(value, defaults)
+    minimum = sanitized.get("min")
+    maximum = sanitized.get("max")
+    unit = DISPLAY_FILTER_UNITS.get(range_key, "")
+    min_changed = minimum != defaults["min"]
+    max_changed = maximum != defaults["max"]
+
+    if min_changed and max_changed:
+        text = f"{_format_number_for_display(minimum)}-{_format_number_for_display(maximum)}"
+    elif min_changed:
+        text = f"Above {_format_number_for_display(minimum)}"
+    elif max_changed:
+        text = f"Below {_format_number_for_display(maximum)}"
+    else:
+        return ""
+
+    return f"{text} {unit}".strip()
+
+
+def build_ai_display_filters(applied_filters):
+    filters = applied_filters or {}
+    display_filters = []
+    hidden_range_keys = set()
+
+    if filters.get("color_temp"):
+        hidden_range_keys.add("color_temp_kelvin_range")
+    if filters.get("ip_rate"):
+        hidden_range_keys.add("ip_rating_numeric_range")
+    if filters.get("power"):
+        hidden_range_keys.add("power_value_range")
+
+    for filter_key in ARRAY_FILTER_KEYS:
+        values = filters.get(filter_key) or []
+        for value in values:
+            value_display = _format_filter_value_for_display(filter_key, value)
+            if not value_display:
+                continue
+            display_filters.append(
+                {
+                    "key": filter_key,
+                    "label": _display_label(filter_key),
+                    "value": value,
+                    "value_display": value_display,
+                    "type": "multi" if len(values) > 1 else "single",
+                }
+            )
+
+    for filter_key in BOOLEAN_FILTER_KEYS:
+        if not filters.get(filter_key):
+            continue
+        display_filters.append(
+            {
+                "key": filter_key,
+                "label": _display_label(filter_key),
+                "value": True,
+                "value_display": _format_filter_value_for_display(filter_key, True),
+                "type": "boolean",
+            }
+        )
+
+    for range_key in RANGE_FILTER_DEFAULTS:
+        if range_key in hidden_range_keys or _is_default_range_value(range_key, filters.get(range_key)):
+            continue
+        value_display = _format_range_for_display(range_key, filters.get(range_key))
+        if not value_display:
+            continue
+        display_filters.append(
+            {
+                "key": range_key,
+                "label": _display_label(range_key),
+                "value": sanitize_range(filters.get(range_key), RANGE_FILTER_DEFAULTS[range_key]),
+                "value_display": value_display,
+                "type": "range",
+            }
+        )
+
+    return display_filters
+
+
+def _replace_display_query_phrase(text, phrase):
+    if not phrase:
+        return text
+    return re.sub(rf"(?<![a-z0-9]){re.escape(normalize_text(phrase))}(?![a-z0-9])", " ", text)
+
+
+def build_ai_display_query(message, intent, applied_filters, applied_sort=""):
+    # Mirror the actual search query (intent.query). When the resolver emptied
+    # it on purpose — e.g. a family noun was mapped to the category facet —
+    # the displayed keyword must be empty too. Falling back to the raw message
+    # here would resurrect words like "spotlights" as a phantom keyword chip
+    # even though the search is filter-only.
+    candidate = normalize_text(intent.get("query") or intent.get("item_code_hint") or "")
+    if not candidate:
+        return ""
+
+    filters = applied_filters or {}
+    if filters.get("in_stock"):
+        for phrase in DISPLAY_QUERY_PHRASES["in_stock"]:
+            candidate = _replace_display_query_phrase(candidate, phrase)
+
+    for phrase in DISPLAY_QUERY_PHRASES.get(cstr(applied_sort).strip(), ()):
+        candidate = _replace_display_query_phrase(candidate, phrase)
+
+    for range_key, patterns in RANGE_QUERY_PATTERNS.items():
+        if _is_default_range_value(range_key, filters.get(range_key)):
+            continue
+        for pattern in patterns:
+            candidate = re.sub(pattern, " ", candidate)
+
+    for filter_key in ARRAY_FILTER_KEYS:
+        for value in filters.get(filter_key) or []:
+            normalized_value = normalize_text(value)
+            if normalized_value:
+                candidate = _replace_display_query_phrase(candidate, normalized_value)
+
+    candidate = re.sub(r"\b(?:aed|w|k|ma|v)\b", " ", candidate)
+    candidate = re.sub(r"[^a-z0-9\s-]", " ", candidate)
+    candidate = re.sub(r"\s+", " ", candidate).strip()
+    if not candidate:
+        return ""
+
+    residual_tokens = []
+    for token in candidate.split():
+        if token in DISPLAY_QUERY_STOPWORDS:
+            continue
+        if re.fullmatch(r"\d+(?:\.\d+)?", token):
+            continue
+        residual_tokens.append(token)
+
+    return " ".join(residual_tokens).strip()
+
+
+def sanitize_string_list(values, allowed_values):
+    if not isinstance(values, list):
+        return []
+
+    allowed_lookup = {
+        normalize_text(value): value
+        for value in (allowed_values or [])
+        if cstr(value).strip()
+    }
+    sanitized_values = []
+    seen = set()
+    for value in values:
+        cleaned = cstr(value).strip()
+        if not cleaned:
+            continue
+        canonical_value = allowed_lookup.get(normalize_text(cleaned))
+        if not canonical_value or canonical_value in seen:
+            continue
+        seen.add(canonical_value)
+        sanitized_values.append(canonical_value)
+    return sanitized_values
+
+
+def sanitize_range(value, defaults):
+    sanitized = copy.deepcopy(defaults)
+    if not isinstance(value, dict):
+        return sanitized
+
+    parsed_min = _to_number(value.get("min"))
+    parsed_max = _to_number(value.get("max"))
+    if parsed_min is not None:
+        sanitized["min"] = parsed_min
+    if parsed_max is not None:
+        sanitized["max"] = parsed_max
+    if sanitized["max"] < sanitized["min"]:
+        sanitized["min"], sanitized["max"] = sanitized["max"], sanitized["min"]
+    return sanitized
+
+
+def sanitize_ai_product_search_response(ai_response, vocabulary=None):
+    vocabulary = vocabulary or get_ai_search_vocabulary()
+    known_values = vocabulary.get("known_values") or {}
+    sanitized_response = build_default_response()
+
+    if not isinstance(ai_response, dict):
+        return sanitized_response
+
+    sanitized_response["query"] = cstr(ai_response.get("query") or "").strip()
+
+    sort_by = LEGACY_SORT_ALIASES.get(
+        cstr(ai_response.get("sort_by") or "").strip(),
+        cstr(ai_response.get("sort_by") or "").strip(),
+    )
+    if sort_by in SUPPORTED_SORT_VALUES:
+        sanitized_response["sort_by"] = sort_by
+
+    filters = ai_response.get("filters")
+    if not isinstance(filters, dict):
+        filters = {}
+
+    remapped_filters = {}
+    for filter_key, value in filters.items():
+        remapped_filters[LEGACY_FILTER_KEY_ALIASES.get(filter_key, filter_key)] = value
+
+    for filter_key in ARRAY_FILTER_KEYS:
+        sanitized_response["filters"][filter_key] = sanitize_string_list(
+            remapped_filters.get(filter_key),
+            known_values.get(filter_key),
+        )
+
+    for filter_key in BOOLEAN_FILTER_KEYS:
+        sanitized_response["filters"][filter_key] = _to_boolean(remapped_filters.get(filter_key))
+
+    for filter_key, defaults in RANGE_FILTER_DEFAULTS.items():
+        sanitized_response["filters"][filter_key] = sanitize_range(remapped_filters.get(filter_key), defaults)
+
+    sanitized_response["explanation"] = cstr(ai_response.get("explanation") or "").strip()
+    return sanitized_response
+
+
+def merge_structured_intent(deterministic_intent, ai_response):
+    merged = copy.deepcopy(deterministic_intent)
+    merged["explanation_parts"] = list(merged.get("explanation_parts") or [])
+    if not ai_response:
+        return merged
+
+    ai_filters = ai_response.get("filters") or {}
+    ai_has_structure = any(
+        ai_filters.get(key) for key in ("category_list", "brand", "product_type")
+    )
+    # If the model recognised a real product+spec enquiry, it is NOT a bare SKU
+    # lookup — clear the deterministic SKU hint so it stops forcing item-code mode
+    # (and stops blocking the query/relaxation logic below).
+    if ai_has_structure and merged.get("item_code_hint"):
+        merged["item_code_hint"] = ""
+        if isinstance(merged.get("hard_constraints"), dict):
+            merged["hard_constraints"]["item_code_hint"] = False
+        if merged.get("intent_class") == "sku_lookup":
+            merged["intent_class"] = "spec_match"
+
+    # The model is the authority on the free-text query in enquiry mode: when it
+    # fired it has already lifted every recognised spec into filters, so trust its
+    # (often empty) query instead of falling back to the spec-polluted
+    # deterministic query.
+    if not merged.get("item_code_hint"):
+        merged["query"] = cstr(ai_response.get("query") or "").strip()
+    if ai_response.get("sort_by") and not merged.get("sort_by"):
+        merged["sort_by"] = ai_response["sort_by"]
+
+    for filter_key in ARRAY_FILTER_KEYS:
+        for value in ai_response.get("filters", {}).get(filter_key, []) or []:
+            _add_filter_value(merged, filter_key, value, "ai", confidence=0.6, hard=False)
+
+    for filter_key in BOOLEAN_FILTER_KEYS:
+        if ai_response.get("filters", {}).get(filter_key):
+            _set_boolean_filter(merged, filter_key, True, "ai", confidence=0.6)
+
+    for range_key in RANGE_FILTER_DEFAULTS:
+        candidate_range = ai_response.get("filters", {}).get(range_key) or {}
+        defaults = RANGE_FILTER_DEFAULTS[range_key]
+        if candidate_range != defaults:
+            _set_range(
+                merged,
+                range_key,
+                candidate_range.get("min"),
+                candidate_range.get("max"),
+                source="ai",
+                confidence=0.6,
+                hard=False,
+            )
+
+    if ai_response.get("explanation"):
+        merged["explanation_parts"].append(ai_response["explanation"])
+    return merged
+
+
+_PREFERENCE_QUERY_TERMS = None
+
+
+def _preference_query_terms():
+    """Sort/stock/preference trigger words (e.g. 'cheapest', 'in stock', 'latest').
+    These are intent signals already captured in sort_by/in_stock and are never
+    product nouns, so they must be stripped from the free-text query — otherwise
+    Typesense searches for the literal word inside the category and returns zero
+    (e.g. 'cheapest outdoor wall light' searched for 'cheapest' in WALL LIGHT)."""
+    global _PREFERENCE_QUERY_TERMS
+    if _PREFERENCE_QUERY_TERMS is None:
+        terms = set(DISPLAY_QUERY_STOPWORDS)
+        for phrase_list in DISPLAY_QUERY_PHRASES.values():
+            terms.update(phrase_list)
+        _PREFERENCE_QUERY_TERMS = sorted(terms, key=len, reverse=True)
+    return _PREFERENCE_QUERY_TERMS
+
+
+def _strip_preference_terms_from_query(query):
+    cleaned = cstr(query or "").strip()
+    if not cleaned:
+        return ""
+    for term in _preference_query_terms():
+        cleaned = re.sub(rf"\b{re.escape(term)}\b", " ", cleaned, flags=re.IGNORECASE)
+    return re.sub(r"\s+", " ", cleaned).strip()
+
+
+def _finalize_intent(intent):
+    resolved = {
+        "query": cstr(intent.get("query") or "").strip(),
+        "sort_by": cstr(intent.get("sort_by") or "").strip(),
+        "item_code_hint": cstr(intent.get("item_code_hint") or "").strip(),
+        "filters": build_default_filters(),
+        "intent_class": intent.get("intent_class") or "general_search",
+        "query_mode": "fast_hybrid",
+        "provider": intent.get("provider") or "deterministic",
+        "llm_used": bool(intent.get("llm_used")),
+        "signals": list(intent.get("signals") or []),
+        "confidence_map": copy.deepcopy(intent.get("confidence_map") or {}),
+        "hard_constraints": {
+            "item_code_hint": bool(intent.get("hard_constraints", {}).get("item_code_hint")),
+            "ranges": copy.deepcopy(intent.get("hard_constraints", {}).get("ranges") or {}),
+            "filters": sorted(intent.get("hard_constraints", {}).get("filters") or []),
+        },
+        "explanation": " ".join(
+            part.strip() for part in (intent.get("explanation_parts") or []) if cstr(part).strip()
+        ).strip(),
+        "derived_specs": copy.deepcopy(intent.get("derived_specs") or {}),
+    }
+
+    for filter_key in ARRAY_FILTER_KEYS:
+        resolved["filters"][filter_key] = list(intent.get("filters", {}).get(filter_key) or [])
+    for filter_key in BOOLEAN_FILTER_KEYS:
+        resolved["filters"][filter_key] = bool(intent.get("filters", {}).get(filter_key))
+    for range_key, defaults in RANGE_FILTER_DEFAULTS.items():
+        resolved["filters"][range_key] = sanitize_range(intent.get("filters", {}).get(range_key), defaults)
+
+    resolved["query"] = _strip_preference_terms_from_query(resolved["query"])
+
+    if not resolved["query"] and not resolved["item_code_hint"]:
+        resolved["query"] = ""
+    return resolved
+
+
+INTENT_CACHE_DEFAULT_TTL = 60 * 60
+
+
+def _intent_cache_ttl():
+    # Seconds to cache a resolved intent. 0 disables the cache. Override with
+    # `ai_product_search_intent_cache_ttl` in site_config.
+    val = _get_conf().get("ai_product_search_intent_cache_ttl")
+    if val is None:
+        return INTENT_CACHE_DEFAULT_TTL
+    return max(cint(val), 0)
+
+
+def _vocabulary_version(vocabulary):
+    # Short fingerprint of the live vocabulary so that adding/removing catalog
+    # values (brands, categories, …) invalidates any stale cached intents.
+    try:
+        blob = json.dumps(vocabulary, sort_keys=True, default=str)
+    except Exception:
+        blob = str(vocabulary)
+    return hashlib.sha1(blob.encode("utf-8")).hexdigest()[:10]
+
+
+def _intent_cache_key(message, page_context, vocab_version):
+    route = ""
+    if isinstance(page_context, dict):
+        route = cstr(page_context.get("route") or "")
+    raw = f"{normalize_text(message)}|{route}|{vocab_version}"
+    return "ai_product_search|intent|" + hashlib.sha1(raw.encode("utf-8")).hexdigest()
+
+
+def resolve_ai_search_intent(message, page_context=None, mode="fast"):
+    message = cstr(message).strip()
+    if not message:
+        return build_default_response("Empty message supplied for AI product search.")
+
+    if not is_ai_product_search_enabled():
+        response = build_default_response("AI product search is disabled.")
+        response["resolved_intent"] = {
+            "intent_class": "disabled",
+            "query_mode": "disabled",
+            "provider": "disabled",
+            "llm_used": False,
+            "signals": [],
+            "confidence_map": {},
+            "hard_constraints": {"item_code_hint": False, "ranges": {}, "filters": []},
+        }
+        return response
+
+    start_ts = time.time()
+    record_ai_metric("requests")
+    vocabulary = get_ai_search_vocabulary()
+
+    # ── Resolved-intent cache ──────────────────────────────────────────────
+    # The intent (filters/query/sort) is deterministic for a given message +
+    # vocabulary, so cache it to skip the deterministic parse and (more
+    # importantly) the LLM call on repeated/identical prompts. Search RESULTS
+    # are never cached — execute_intent_search always runs live downstream.
+    intent_ttl = _intent_cache_ttl()
+    intent_cache_key = None
+    if intent_ttl > 0:
+        intent_cache_key = _intent_cache_key(
+            message, page_context, _vocabulary_version(vocabulary)
+        )
+        cached_intent = frappe.cache().get_value(intent_cache_key)
+        if cached_intent:
+            try:
+                finalized = (
+                    json.loads(cached_intent)
+                    if isinstance(cached_intent, str)
+                    else copy.deepcopy(cached_intent)
+                )
+                record_ai_metric("intent_cache_hit")
+                finalized["query_debug"] = {
+                    "latency_ms": round((time.time() - start_ts) * 1000, 2),
+                    "llm_used": finalized.get("llm_used", False),
+                    "provider": finalized.get("provider", "deterministic"),
+                    "signals": finalized.get("signals", []),
+                    "cached": True,
+                }
+                return finalized
+            except Exception:
+                pass
+
+    preprocessed = preprocess_user_message(message, page_context=page_context)
+    deterministic_intent = extract_deterministic_intent(preprocessed, vocabulary)
+    deterministic_intent["explanation_parts"].append(
+        "Deterministic parsing extracted SKU/spec/sort signals."
+    )
+    log_ai_product_search(
+        "deterministic_output",
+        {
+            "message": message,
+            "page_context": preprocessed["page_context"],
+            "intent": deterministic_intent,
+        },
+    )
+
+    llm_used = False
+    provider_name = "deterministic"
+    if mode == "fast" and needs_model_reasoning(preprocessed, deterministic_intent):
+        try:
+            provider_name, raw_content, ai_response = call_ai_for_product_search(
+                message,
+                preprocessed["page_context"],
+                vocabulary,
+                deterministic_intent,
+            )
+            llm_used = True
+            log_ai_product_search(
+                "raw_output",
+                {"provider": provider_name, "message": message, "raw_output": raw_content},
+            )
+            sanitized_ai_response = sanitize_ai_product_search_response(ai_response, vocabulary=vocabulary)
+            deterministic_intent = merge_structured_intent(deterministic_intent, sanitized_ai_response)
+        except Exception:
+            record_ai_metric("llm_failures")
+            log_ai_product_search(
+                "fallback_output",
+                {"message": message, "error": frappe.get_traceback()},
+            )
+
+    deterministic_intent["llm_used"] = llm_used
+    deterministic_intent["provider"] = provider_name
+    finalized = _finalize_intent(deterministic_intent)
+    if not finalized["explanation"]:
+        finalized["explanation"] = "Parsed natural-language search request into structured V2 filters."
+    finalized["resolved_intent"] = {
+        "intent_class": finalized["intent_class"],
+        "query_mode": finalized["query_mode"],
+        "provider": finalized["provider"],
+        "llm_used": finalized["llm_used"],
+        "signals": finalized["signals"],
+        "confidence_map": finalized["confidence_map"],
+        "hard_constraints": finalized["hard_constraints"],
+    }
+    finalized["query_debug"] = {
+        "latency_ms": round((time.time() - start_ts) * 1000, 2),
+        "llm_used": llm_used,
+        "provider": provider_name,
+        "signals": finalized["signals"],
+    }
+    if not llm_used:
+        record_ai_metric("deterministic_only")
+    if intent_cache_key and intent_ttl > 0:
+        try:
+            # Store as JSON (finalized is already JSON-serializable since it is
+            # returned to the client) to avoid pickling non-portable objects.
+            frappe.cache().set_value(
+                intent_cache_key, json.dumps(finalized), expires_in_sec=intent_ttl
+            )
+        except Exception:
+            pass
+    return finalized
+
+
+def parse_product_search_intent(message, page_context=None):
+    response = resolve_ai_search_intent(message=message, page_context=page_context, mode="fast")
+    return {
+        "query": response.get("query", ""),
+        "sort_by": response.get("sort_by", ""),
+        "filters": response.get("filters", build_default_filters()),
+        "explanation": response.get("explanation", ""),
+        "resolved_intent": response.get("resolved_intent", {}),
+        "query_debug": response.get("query_debug", {}),
+    }
+
+
+def _filters_are_default(filters):
+    for filter_key in ARRAY_FILTER_KEYS:
+        if filters.get(filter_key):
+            return False
+    for filter_key in BOOLEAN_FILTER_KEYS:
+        if filters.get(filter_key):
+            return False
+    for range_key, defaults in RANGE_FILTER_DEFAULTS.items():
+        if sanitize_range(filters.get(range_key), defaults) != defaults:
+            return False
+    return True
+
+
+def _make_relaxed_intent(intent, stage):
+    relaxed = copy.deepcopy(intent)
+    note = None
+
+    if stage == 1:
+        removed_fields = []
+        for filter_key in ARRAY_FILTER_KEYS:
+            if (
+                relaxed["filters"].get(filter_key)
+                and filter_key not in relaxed["hard_constraints"]["filters"]
+                and flt(relaxed["confidence_map"].get(filter_key)) < 0.8
+            ):
+                relaxed["filters"][filter_key] = []
+                removed_fields.append(filter_key)
+        if removed_fields:
+            note = f"Relaxed low-confidence filters: {', '.join(removed_fields)}"
+
+    if stage == 2:
+        for filter_key in ARRAY_FILTER_KEYS:
+            if filter_key not in relaxed["hard_constraints"]["filters"]:
+                relaxed["filters"][filter_key] = []
+        for range_key, defaults in RANGE_FILTER_DEFAULTS.items():
+            if range_key not in relaxed["hard_constraints"]["ranges"]:
+                relaxed["filters"][range_key] = copy.deepcopy(defaults)
+        if relaxed.get("sort_by") and flt(relaxed["confidence_map"].get("sort_by")) < 1.0:
+            relaxed["sort_by"] = ""
+        note = "Fell back to strongest query and hard constraints only."
+
+    return relaxed, note
+
+
+def _parse_numeric_string(value):
+    match = re.search(r"(-?\d+(?:\.\d+)?)", cstr(value or ""))
+    return flt(match.group(1)) if match else 0
+
+
+def _string_contains_token(value, token):
+    return normalize_text(token) in normalize_text(value)
+
+
+def calculate_ai_compatibility_score(document, intent):
+    score = 0.0
+    filters = intent.get("filters") or {}
+    derived_specs = intent.get("derived_specs") or {}
+
+    for field_name in ("mounting", "lamp_type", "material", "body_finish", "input_voltage", "output_voltage", "output_current"):
+        if filters.get(field_name) and cstr(document.get(field_name)) in filters.get(field_name):
+            score += 8
+
+    if filters.get("ip_rate") and cstr(document.get("ip_rate")) in filters.get("ip_rate"):
+        score += 10
+    if filters.get("color_temp") and cstr(document.get("color_temp")) in filters.get("color_temp"):
+        score += 10
+    if filters.get("power") and cstr(document.get("power")) in filters.get("power"):
+        score += 8
+
+    for range_key, doc_field, tolerance_weight in (
+        ("power_value_range", "power_value", 12),
+        ("color_temp_kelvin_range", "color_temp_kelvin", 12),
+        ("ip_rating_numeric_range", "ip_rating_numeric", 10),
+    ):
+        value_range = filters.get(range_key) or {}
+        doc_value = flt(document.get(doc_field))
+        if doc_value and doc_value >= flt(value_range.get("min")) and doc_value <= flt(value_range.get("max")):
+            score += tolerance_weight
+
+    if derived_specs.get("lumens_min") and derived_specs.get("lumens_max"):
+        lumens_value = _parse_numeric_string(document.get("lumen_output"))
+        if lumens_value and derived_specs["lumens_min"] <= lumens_value <= derived_specs["lumens_max"]:
+            score += 10
+
+    if derived_specs.get("cri_min"):
+        cri_value = _parse_numeric_string(document.get("cri"))
+        if cri_value and cri_value >= flt(derived_specs["cri_min"]):
+            score += 8
+
+    if derived_specs.get("dimension_text") and _string_contains_token(document.get("dimension"), derived_specs["dimension_text"]):
+        score += 6
+
+    if derived_specs.get("cut_out_text") and _string_contains_token(document.get("cut_out"), derived_specs["cut_out_text"]):
+        score += 6
+
+    if derived_specs.get("environment") == "outdoor" and flt(document.get("ip_rating_numeric")) >= 44:
+        score += 6
+
+    score += 4 if cint(document.get("in_stock")) else 0
+    score += min(flt(document.get("business_score")) / 20, 5)
+    return round(score, 2)
+
+
+def get_query_feedback_scores(normalized_query):
+    normalized_query = normalize_text(normalized_query)
+    if not normalized_query or not _doctype_exists("AI Product Search Event"):
+        return {}
+
+    rows = frappe.get_all(
+        "AI Product Search Event",
+        filters={
+            "event_type": ["in", list(FEEDBACK_WEIGHTS.keys())],
+            "normalized_query": normalized_query,
+        },
+        fields=["selected_item_code", "event_type"],
+        limit_page_length=500,
+    )
+    scores = defaultdict(int)
+    for row in rows:
+        item_code = cstr(row.selected_item_code or "").strip()
+        if not item_code:
+            continue
+        scores[item_code] += FEEDBACK_WEIGHTS.get(row.event_type, 0)
+    return dict(scores)
+
+
+def rerank_hits_with_feedback(hits, normalized_query, intent):
+    if not hits or intent.get("intent_class") == "sku_lookup":
+        return hits, {}
+    if cstr(intent.get("sort_by") or "").strip():
+        return hits, {}
+    feedback_scores = get_query_feedback_scores(normalized_query)
+    if not feedback_scores:
+        return hits, {}
+
+    ranked = list(hits)
+    ranked.sort(
+        key=lambda hit: (
+            feedback_scores.get(hit.get("document", {}).get("item_code"), 0),
+            hit.get("text_match") or 0,
+        ),
+        reverse=True,
+    )
+    return ranked, feedback_scores
+
+
+def rerank_hits_with_compatibility(hits, intent):
+    if not hits:
+        return hits
+    if cstr(intent.get("sort_by") or "").strip():
+        return hits
+    if intent.get("intent_class") not in {"spec_match", "alternatives", "stock_priority", "discount_priority"}:
+        return hits
+
+    ranked = list(hits)
+    ranked.sort(
+        key=lambda hit: (
+            calculate_ai_compatibility_score(hit.get("document", {}), intent),
+            hit.get("text_match") or 0,
+        ),
+        reverse=True,
+    )
+    return ranked
+
+
+def _compute_result_quality(found, applied_relaxations, intent):
+    if cint(found) <= 0:
+        return "zero"
+    if intent.get("intent_class") == "sku_lookup":
+        return "strong" if cint(found) >= 1 else "zero"
+    if cint(found) >= 5 and not applied_relaxations:
+        return "strong"
+    if cint(found) >= 1:
+        return "weak" if applied_relaxations else "medium"
+    return "zero"
+
+
+# Spec attributes are sparsely populated (lighting fill: power ~72%, lumen ~58%,
+# lamp_type ~27%). Applying them as HARD Typesense filters excluded every item
+# whose spec field was empty AND every near-match (10W hid 9W/11W), which is why
+# a common query like "10w 3000k ip65 downlight" returned a single result. These
+# keys are now applied as ranking BOOSTS (see build_soft_boost_clause) instead of
+# hard filters: matching items float to the top, non-matching/empty-spec items
+# rank lower but are never dropped. Only category/product_type/brand/variant and
+# explicit stock/price intent stay as hard constraints.
+SOFT_SPEC_ARRAY_KEYS = (
+    "power", "color_temp", "ip_rate", "beam_angle", "mounting",
+    "body_finish", "material", "input_voltage", "output_current",
+    "output_voltage", "lamp_type", "lumen_output",
+)
+SOFT_SPEC_RANGE_KEYS = (
+    "power_value_range", "color_temp_kelvin_range", "ip_rating_numeric_range",
+)
+
+
+def _split_hard_soft_filters(filters):
+    """Split resolved intent filters into HARD constraints (sent to Typesense
+    filter_by) and SOFT boosts (sent as _eval ranking). Spec attributes become
+    soft so sparse/near-miss data never zeroes out the result set. Default-valued
+    ranges are dropped entirely (they previously bloated every query with
+    redundant >=0 && <=1e9 clauses)."""
+    filters = filters or {}
+    hard = {}
+    soft = {}
+    for key, value in filters.items():
+        if key in SOFT_SPEC_ARRAY_KEYS:
+            if value:
+                soft[key] = value
+            continue
+        if key in SOFT_SPEC_RANGE_KEYS:
+            if isinstance(value, dict) and not _is_default_range_value(key, value):
+                soft[key] = value
+            continue
+        if key in RANGE_FILTER_DEFAULTS:
+            # Keep only user-set price/stock ranges; drop default range bloat.
+            if isinstance(value, dict) and not _is_default_range_value(key, value):
+                hard[key] = value
+            continue
+        if key in BOOLEAN_FILTER_KEYS:
+            if value:  # e.g. in_stock only when the user actually asked
+                hard[key] = value
+            continue
+        if value:
+            hard[key] = value
+    return hard, soft
+
+
+_CANONICALIZE_FILTER_KEYS = SOFT_SPEC_ARRAY_KEYS + (
+    "brand", "category_list", "product_type", "item_group", "variant_of", "warranty",
+)
+
+
+def _canonicalize_filter_values(filters, vocabulary):
+    """Remap each filter value to the exact casing/spelling stored in the index,
+    using the Typesense facet vocabulary. The deterministic parser upper-cases
+    values ("WHITE", "700MA") but the index stores facet-native casing ("White",
+    "700mA"), and Typesense `:=` matching is case-sensitive — so without this the
+    soft-boost (and hard filters) silently fail to match. Unknown values are kept
+    as-is."""
+    known = (vocabulary or {}).get("known_values") or {}
+    out = dict(filters or {})
+    for key in _CANONICALIZE_FILTER_KEYS:
+        values = out.get(key)
+        if not isinstance(values, list) or not values:
+            continue
+        lookup = {
+            normalize_text(known_value): known_value
+            for known_value in (known.get(key) or [])
+            if cstr(known_value).strip()
+        }
+        if not lookup:
+            continue
+        canonical = []
+        seen = set()
+        for value in values:
+            mapped = lookup.get(normalize_text(value), value)
+            if mapped not in seen:
+                seen.add(mapped)
+                canonical.append(mapped)
+        out[key] = canonical
+    return out
+
+
+def _leading_number(value):
+    match = re.search(r"(\d+(?:\.\d+)?)", cstr(value or ""))
+    return flt(match.group(1)) if match else None
+
+
+def _derive_numeric_boost_ranges(soft_boosts):
+    """Derive numeric tolerance ranges (power/CCT/IP) from the string spec values
+    when the parser didn't already set them. The numeric range conditions are the
+    highest-priority, case-free boost signals, so without this a string-only spec
+    like power ["15W"] is out-ranked by a broad CCT tolerance band and never leads
+    the result set."""
+    soft = dict(soft_boosts or {})
+
+    def needs(range_key):
+        value = soft.get(range_key)
+        return not (isinstance(value, dict) and not _is_default_range_value(range_key, value))
+
+    if needs("power_value_range"):
+        values = [n for n in (_leading_number(v) for v in soft.get("power") or []) if n]
+        if values:
+            # ±10% tolerance keeps the asked wattage distinct from neighbours.
+            soft["power_value_range"] = {"min": min(values) * 0.9, "max": max(values) * 1.1}
+    if needs("color_temp_kelvin_range"):
+        values = [n for n in (_leading_number(v) for v in soft.get("color_temp") or []) if n]
+        if values:
+            soft["color_temp_kelvin_range"] = {"min": min(values) - 300, "max": max(values) + 300}
+    if needs("ip_rating_numeric_range"):
+        values = [n for n in (_leading_number(v) for v in soft.get("ip_rate") or []) if n]
+        if values:
+            soft["ip_rating_numeric_range"] = {"min": min(values), "max": max(values)}
+    return soft
+
+
+def execute_intent_search(intent, page=1, page_length=20, include_inactive=0, feature_flag_override=0):
+    from igh_search.igh_search.product_search_v2 import search_products_v2 as search_products_v2_impl
+
+    canonical_filters = _canonicalize_filter_values(
+        intent.get("filters"), get_ai_search_vocabulary()
+    )
+    hard_filters, soft_boosts = _split_hard_soft_filters(canonical_filters)
+    soft_boosts = _derive_numeric_boost_ranges(soft_boosts)
+    return search_products_v2_impl(
+        query=intent.get("query"),
+        filters=hard_filters,
+        sort_by=intent.get("sort_by"),
+        page=page,
+        page_length=page_length,
+        include_inactive=include_inactive,
+        item_code_hint=intent.get("item_code_hint"),
+        feature_flag_override=feature_flag_override,
+        strict_sort=1 if intent.get("sort_by") else 0,
+        soft_boosts=soft_boosts,
+        use_hybrid=1,  # AI search opts in; the igh_search_hybrid_enabled flag gates actual use
+    )
+
+
+def ai_search_products_v2(
+    message=None,
+    page_context=None,
+    page=1,
+    page_length=20,
+    include_inactive=0,
+    feature_flag_override=0,
+):
+    if getattr(frappe.local, "request", None) and frappe.local.request.method not in ("POST", "GET"):
+        frappe.throw(_("AI product search only supports GET and POST requests."))
+
+    from igh_search.igh_search.product_search_v2 import ensure_query_access
+
+    ensure_query_access(feature_flag_override=feature_flag_override)
+    intent = resolve_ai_search_intent(message=message, page_context=page_context, mode="fast")
+    if not cstr(message).strip():
+        empty_filters = intent.get("filters", {})
+        empty_sort = intent.get("sort_by", "")
+        return {
+            "hits": [],
+            "found": 0,
+            "facet_counts": [],
+            "resolved_intent": intent.get("resolved_intent", {}),
+            "applied_filters": empty_filters,
+            "applied_sort": empty_sort,
+            "applied_relaxations": [],
+            "explanation": intent.get("explanation", ""),
+            "display_query": build_ai_display_query(message, intent, empty_filters, empty_sort),
+            "display_filters": build_ai_display_filters(empty_filters),
+            "query_debug": intent.get("query_debug", {}),
+        }
+
+    attempts = [copy.deepcopy(intent)]
+    applied_relaxations = []
+    response = execute_intent_search(
+        intent,
+        page=page,
+        page_length=page_length,
+        include_inactive=include_inactive,
+        feature_flag_override=feature_flag_override,
+    )
+    log_ai_product_search(
+        "search_attempt",
+        {
+            "intent": intent,
+            "found": response.get("found"),
+            "query_debug": response.get("query_debug"),
+        },
+    )
+
+    # Specs are now soft boosts, so a small result set is no longer a symptom of
+    # over-constraining — only a genuine ZERO needs relaxation (e.g. the category
+    # itself was empty or the query was too narrow). This avoids the extra serial
+    # Typesense round-trips that the old found<3 trigger fired on every query.
+    weak_results = cint(response.get("found")) == 0
+
+    if weak_results:
+        for stage in (1, 2):
+            if intent.get("resolved_intent", {}).get("hard_constraints", {}).get("item_code_hint"):
+                break
+            relaxed_intent, note = _make_relaxed_intent(attempts[-1], stage)
+            if not note:
+                continue
+            record_ai_metric("search_relaxations")
+            applied_relaxations.append(note)
+            attempts.append(relaxed_intent)
+            response = execute_intent_search(
+                relaxed_intent,
+                page=page,
+                page_length=page_length,
+                include_inactive=include_inactive,
+                feature_flag_override=feature_flag_override,
+            )
+            log_ai_product_search(
+                "relaxed_search_attempt",
+                {
+                    "stage": stage,
+                    "relaxation": note,
+                    "found": response.get("found"),
+                    "intent": relaxed_intent,
+                },
+            )
+            if cint(response.get("found")) > 0:
+                intent = relaxed_intent
+                break
+
+    # Final safety net: if we still have zero results but a category (or other
+    # hard array filter) is locked in, the free-text query is what's zeroing the
+    # set — an unmatched leftover token like "outdoor" searched inside the
+    # category. Retry once with an empty query so the category's products show,
+    # ranked by the soft spec/sellability boosts. SKU lookups are exempt.
+    if (
+        cint(response.get("found")) == 0
+        and cstr(intent.get("query") or "").strip()
+        and not intent.get("resolved_intent", {}).get("hard_constraints", {}).get("item_code_hint")
+    ):
+        hard_filters, _soft = _split_hard_soft_filters(intent.get("filters"))
+        has_hard_anchor = any(
+            isinstance(value, list) and value for value in hard_filters.values()
+        )
+        if has_hard_anchor:
+            query_dropped_intent = copy.deepcopy(intent)
+            query_dropped_intent["query"] = ""
+            response = execute_intent_search(
+                query_dropped_intent,
+                page=page,
+                page_length=page_length,
+                include_inactive=include_inactive,
+                feature_flag_override=feature_flag_override,
+            )
+            if cint(response.get("found")) > 0:
+                note = "Dropped unmatched free-text and kept the locked category."
+                applied_relaxations.append(note)
+                attempts.append(query_dropped_intent)
+                intent = query_dropped_intent
+
+    feedback_scores = {}
+    if cint(response.get("found")) > 0:
+        reranked_hits = rerank_hits_with_compatibility(response.get("hits", []), intent)
+        reranked_hits, feedback_scores = rerank_hits_with_feedback(
+            reranked_hits,
+            intent.get("query") or intent.get("item_code_hint") or message,
+            intent,
+        )
+        response["hits"] = reranked_hits
+
+    if cint(response.get("found")) == 0:
+        record_ai_metric("zero_results")
+    else:
+        record_ai_metric("final_results")
+
+    quality_signals = {
+        "result_quality": _compute_result_quality(response.get("found"), applied_relaxations, intent),
+        "retry_stage": len(applied_relaxations),
+        "deterministic_only": not intent.get("llm_used"),
+        "feedback_reranked": bool(feedback_scores),
+        "compatibility_reranked": intent.get("intent_class") in {"spec_match", "alternatives", "stock_priority", "discount_priority"},
+    }
+    top_item_codes = [
+        hit.get("document", {}).get("item_code")
+        for hit in response.get("hits", [])[:10]
+        if hit.get("document", {}).get("item_code")
+    ]
+    search_event_id = log_ai_search_event(
+        "search_issued",
+        {
+            "raw_message": message,
+            "normalized_query": normalize_text(intent.get("query") or intent.get("item_code_hint") or message),
+            "resolved_intent": {
+                "intent_class": intent.get("intent_class"),
+                "query_mode": intent.get("query_mode"),
+                "provider": intent.get("provider"),
+                "llm_used": intent.get("llm_used"),
+                "signals": intent.get("signals", []),
+                "confidence_map": intent.get("confidence_map", {}),
+                "hard_constraints": intent.get("hard_constraints", {}),
+                "derived_specs": intent.get("derived_specs", {}),
+            },
+            "deterministic_signals": intent.get("signals", []),
+            "provider": intent.get("provider"),
+            "llm_used": intent.get("llm_used"),
+            "applied_sort": intent.get("sort_by"),
+            "applied_filters": intent.get("filters", {}),
+            "applied_relaxations": applied_relaxations,
+            "result_count": response.get("found"),
+            "latency_ms": (response.get("query_debug") or {}).get("latency_ms", 0),
+            "top_item_codes": top_item_codes,
+            "page_context": page_context,
+            "outcome_status": quality_signals["result_quality"],
+            "quality_signals": quality_signals,
+        },
+    )
+
+    response["resolved_intent"] = {
+        "intent_class": intent.get("intent_class"),
+        "query_mode": intent.get("query_mode"),
+        "provider": intent.get("provider"),
+        "llm_used": intent.get("llm_used"),
+        "signals": intent.get("signals", []),
+        "confidence_map": intent.get("confidence_map", {}),
+        "hard_constraints": intent.get("hard_constraints", {}),
+        "derived_specs": intent.get("derived_specs", {}),
+    }
+    response["applied_filters"] = intent.get("filters", {})
+    response["applied_sort"] = intent.get("sort_by", "")
+    response["applied_relaxations"] = applied_relaxations
+    response["explanation"] = intent.get("explanation", "")
+    response["display_query"] = build_ai_display_query(
+        message,
+        intent,
+        response["applied_filters"],
+        response["applied_sort"],
+    )
+    response["display_filters"] = build_ai_display_filters(response["applied_filters"])
+    response["search_event_id"] = search_event_id
+    response["quality_signals"] = quality_signals
+    response["query_debug"] = {
+        **(response.get("query_debug") or {}),
+        "ai_provider": intent.get("provider"),
+        "ai_llm_used": intent.get("llm_used"),
+        "intent_class": intent.get("intent_class"),
+        "applied_relaxations": applied_relaxations,
+        "feedback_scores": feedback_scores,
+        "ai_metrics": get_ai_search_quality_report(),
+    }
+    return response

@@ -20,6 +20,7 @@ export default function RaiseQueryModal({ open, onClose, product, onCreated }) {
   const [submitting, setSubmitting] = useState(false);
 
   const productContext = useMemo(() => buildProductQueryContext(product), [product]);
+  const isGeneral = !productContext.item_code;
 
   useEffect(() => {
     if (!open) return undefined;
@@ -44,12 +45,10 @@ export default function RaiseQueryModal({ open, onClose, product, onCreated }) {
 
   const handleSubmit = async (event) => {
     event.preventDefault();
-    if (!productContext.item_code) {
-      toast.error("Product context is missing. Reopen this from a product.");
-      return;
-    }
     if (!form.message.trim()) {
-      toast.error("Please write your question for the product team.");
+      toast.error(
+        isGeneral ? "Please write your message for the team." : "Please write your question for the product team."
+      );
       return;
     }
 
@@ -61,18 +60,27 @@ export default function RaiseQueryModal({ open, onClose, product, onCreated }) {
         attachmentUrl = uploaded?.file_url || uploaded?.message?.file_url || "";
       }
 
-      const payload = {
-        item_code: productContext.item_code,
-        item_name_snapshot: productContext.item_name_snapshot,
-        brand: productContext.brand,
-        category_list: productContext.category_list,
-        website_image_url: productContext.website_image_url,
-        query_type: form.query_type,
-        severity: form.severity,
-        suggested_value: form.suggested_value,
-        message: form.message.trim(),
-        attachment: attachmentUrl,
-      };
+      const payload = isGeneral
+        ? {
+            // General "chat with the team" thread — no product attached.
+            query_type: "general_query",
+            severity: "medium",
+            subject: form.message.trim().slice(0, 80),
+            message: form.message.trim(),
+            attachment: attachmentUrl,
+          }
+        : {
+            item_code: productContext.item_code,
+            item_name_snapshot: productContext.item_name_snapshot,
+            brand: productContext.brand,
+            category_list: productContext.category_list,
+            website_image_url: productContext.website_image_url,
+            query_type: form.query_type,
+            severity: form.severity,
+            suggested_value: form.suggested_value,
+            message: form.message.trim(),
+            attachment: attachmentUrl,
+          };
 
       const detail = await createProductQuery(payload);
       const query = detail?.query;
@@ -105,11 +113,12 @@ export default function RaiseQueryModal({ open, onClose, product, onCreated }) {
                   Product Query Desk
                 </p>
                 <h2 className="mt-1 text-[22px] font-semibold tracking-[-0.03em] text-[#111827]">
-                  Ask the product team
+                  {isGeneral ? "Chat with the team" : "Ask the product team"}
                 </h2>
                 <p className="mt-2 text-[13px] text-[#6b7280]">
-                  Start a live chat about this product. An item manager will reply and, if needed,
-                  open a tracked ticket.
+                  {isGeneral
+                    ? "Start a live chat with the product team. An item manager will reply and, if needed, open a tracked ticket."
+                    : "Start a live chat about this product. An item manager will reply and, if needed, open a tracked ticket."}
                 </p>
               </div>
               <button
@@ -122,76 +131,86 @@ export default function RaiseQueryModal({ open, onClose, product, onCreated }) {
               </button>
             </div>
 
-            <div className="mt-4 rounded-2xl border border-[#edf0f3] bg-[#f8fafc] px-4 py-3">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[#94a3b8]">Product</p>
-              <div className="mt-1 flex flex-wrap items-center gap-2">
-                <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-semibold text-[#111827] shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
-                  {productContext.item_code || "Unknown SKU"}
-                </span>
-                {productContext.item_name_snapshot && (
-                  <span className="text-[13px] font-medium text-[#475467]">
-                    {productContext.item_name_snapshot}
+            {!isGeneral && (
+              <div className="mt-4 rounded-2xl border border-[#edf0f3] bg-[#f8fafc] px-4 py-3">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[#94a3b8]">Product</p>
+                <div className="mt-1 flex flex-wrap items-center gap-2">
+                  <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-semibold text-[#111827] shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
+                    {productContext.item_code || "Unknown SKU"}
                   </span>
-                )}
+                  {productContext.item_name_snapshot && (
+                    <span className="text-[13px] font-medium text-[#475467]">
+                      {productContext.item_name_snapshot}
+                    </span>
+                  )}
+                </div>
               </div>
-            </div>
+            )}
           </header>
 
           <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
             <div className="min-h-0 flex-1 overflow-y-auto bg-[#fbfcfe] px-6 py-5">
-              <div className="grid gap-4 md:grid-cols-2">
-                <Field label="Query type">
-                  <select
-                    value={form.query_type}
-                    onChange={(event) => updateField("query_type", event.target.value)}
-                    className={inputClassName}
-                  >
-                    {PRODUCT_QUERY_TYPES.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </Field>
+              {!isGeneral && (
+                <div className="grid gap-4 md:grid-cols-2">
+                  <Field label="Query type">
+                    <select
+                      value={form.query_type}
+                      onChange={(event) => updateField("query_type", event.target.value)}
+                      className={inputClassName}
+                    >
+                      {PRODUCT_QUERY_TYPES.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
 
-                <Field label="Severity">
-                  <select
-                    value={form.severity}
-                    onChange={(event) => updateField("severity", event.target.value)}
-                    className={inputClassName}
-                  >
-                    {PRODUCT_QUERY_SEVERITIES.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </Field>
-              </div>
+                  <Field label="Severity">
+                    <select
+                      value={form.severity}
+                      onChange={(event) => updateField("severity", event.target.value)}
+                      className={inputClassName}
+                    >
+                      {PRODUCT_QUERY_SEVERITIES.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+                </div>
+              )}
 
-              <div className="mt-4">
+              <div className={isGeneral ? "" : "mt-4"}>
                 <Field label="Your message" required>
                   <textarea
                     value={form.message}
                     onChange={(event) => updateField("message", event.target.value)}
                     rows={5}
-                    placeholder="Ask your question or describe what looks wrong with this product."
+                    placeholder={
+                      isGeneral
+                        ? "Type your message to the product team."
+                        : "Ask your question or describe what looks wrong with this product."
+                    }
                     className={`${inputClassName} min-h-[140px] resize-y py-3`}
                   />
                 </Field>
               </div>
 
-              <div className="mt-4">
-                <Field label="Suggested correction (optional)">
-                  <textarea
-                    value={form.suggested_value}
-                    onChange={(event) => updateField("suggested_value", event.target.value)}
-                    rows={2}
-                    placeholder="If you know the correct value, share it here."
-                    className={`${inputClassName} min-h-[72px] resize-y py-3`}
-                  />
-                </Field>
-              </div>
+              {!isGeneral && (
+                <div className="mt-4">
+                  <Field label="Suggested correction (optional)">
+                    <textarea
+                      value={form.suggested_value}
+                      onChange={(event) => updateField("suggested_value", event.target.value)}
+                      rows={2}
+                      placeholder="If you know the correct value, share it here."
+                      className={`${inputClassName} min-h-[72px] resize-y py-3`}
+                    />
+                  </Field>
+                </div>
+              )}
 
               <div className="mt-4">
                 <Field label="Attachment (optional)">

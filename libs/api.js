@@ -42,6 +42,7 @@ const MUTATION_METHOD_NAMES = [
     'resolve_product_query',
     'rate_product_query_solution',
     'reopen_product_query',
+    'notify_product_query_typing',
 ];
 
 export const PRODUCT_DATA_MANAGER_ROLES = ['System Manager', 'Product Data Manager'];
@@ -193,6 +194,12 @@ export function storeCustomerInfo(resp) {
     business_addr_info.business_zip = source.business_zip || '';
     business_addr_info.business_country = source.business_country || '';
     localStorage['Business_address'] = JSON.stringify(business_addr_info);
+    // Persist roles so the frontend admin checks (isProductTeamAdmin / isSuperAdmin)
+    // work on the email/password login path too — Frappe's /api/method/login does
+    // not return roles, so this is the only place the standard path can capture them.
+    if (Array.isArray(source.roles_list)) {
+        localStorage['roles'] = JSON.stringify(source.roles_list);
+    }
     localStorage.removeItem('guestRefId');
 }
 
@@ -1236,7 +1243,7 @@ function normalizeProductQueryRow(query) {
     };
 }
 
-function normalizeProductQueryMessage(message) {
+export function normalizeProductQueryMessage(message) {
     if (!message) return null;
 
     return {
@@ -1439,4 +1446,29 @@ export async function getProductQueryRankings(periodDays = 30) {
         period_days: Number(payload.period_days || periodDays),
         leaderboard: Array.isArray(payload.leaderboard) ? payload.leaderboard : [],
     };
+}
+
+/** Fire-and-forget typing indicator. Never throws — the chat must keep working
+ * even if the typing fan-out fails. */
+export async function notifyProductQueryTyping(queryId, isTyping = true) {
+    if (!queryId) return;
+    const api = methodUrl + 'igh_search.igh_search.api.notify_product_query_typing';
+    try {
+        await postMethod(api, { query_id: queryId, is_typing: isTyping ? 1 : 0 });
+    } catch (_) {
+        /* best effort */
+    }
+}
+
+/** Mint a short-lived realtime ticket for the optional socket gateway. Returns
+ * null if the backend method isn't deployed yet (so the poller stays the path). */
+export async function getSocketTicket() {
+    const api = methodUrl + 'igh_search.igh_search.api.get_socket_ticket';
+    try {
+        const response = await postMethod(api, {});
+        const payload = response?.message || response || {};
+        return payload?.ticket ? payload : null;
+    } catch (_) {
+        return null;
+    }
 }

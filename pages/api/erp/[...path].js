@@ -39,6 +39,7 @@ const POST_ONLY_MUTATION_METHODS = new Set([
   'resolve_product_query',
   'rate_product_query_solution',
   'reopen_product_query',
+  'notify_product_query_typing',
 ]);
 
 export const config = {

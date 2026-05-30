@@ -1,7 +1,7 @@
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { getProductQueryRankings, isSuperAdmin } from "@/libs/api";
+import { getProductQueryRankings, isProductTeamAdmin } from "@/libs/api";
 import { formatDuration } from "@/components/ProductQuery/shared";
 
 const RootLayout = dynamic(() => import("@/layouts/RootLayout"));
@@ -18,7 +18,7 @@ export default function ProductQueryRankingsPage() {
   const [period, setPeriod] = useState(30);
   const [state, setState] = useState({ loading: true, leaderboard: [], denied: false });
 
-  const allowed = useMemo(() => isSuperAdmin(), [hydrated]);
+  const allowed = useMemo(() => isProductTeamAdmin(), [hydrated]);
 
   useEffect(() => setHydrated(true), []);
 
@@ -86,7 +86,7 @@ export default function ProductQueryRankingsPage() {
 
         <section className="mt-6 overflow-hidden rounded-2xl border border-[#e7ecf3] bg-white">
           {state.denied ? (
-            <Empty title="Restricted" body="Only super admins (System Manager) can view rankings." />
+            <Empty title="Restricted" body="Only the product team (Item Manager / System Manager) can view rankings." />
           ) : state.loading ? (
             <Empty title="Loading…" body="Crunching the numbers." />
           ) : state.leaderboard.length === 0 ? (

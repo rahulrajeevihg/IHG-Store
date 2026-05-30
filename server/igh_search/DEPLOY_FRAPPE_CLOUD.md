@@ -72,6 +72,45 @@ rate_product_query_solution · reopen_product_query · get_product_query_ranking
 
 ---
 
+## v2 — Realtime + general chat + Item-Manager reporting (2026-05-30)
+
+Re-apply `product_query.py` and the doctype JSON, **append the two new wrappers**,
+and re-deploy. All changes are backward-compatible.
+
+**What changed**
+- `_append_message` now emits `frappe.publish_realtime("product_query_message", …, after_commit=True)`
+  to the reporter + all admins (`_thread_recipients` / `_admin_user_ids`, cached 60s).
+  Inert/no-cost when no socket client is connected — **safe to deploy to Frappe Cloud now**.
+- New whitelisted methods: **`notify_product_query_typing`** (ephemeral typing fan-out,
+  no DB write) and **`get_socket_ticket`** (short-lived redis ticket for the optional
+  socket gateway). Append their wrappers from `api_product_query_wrappers.py`.
+- `Product Query` doctype: **`item_code` is no longer `reqd`** → supports general
+  "chat with the team" threads (no product). `create_product_query` accepts a missing
+  `item_code` and falls back to `subject`/message for the title.
+- **Rankings opened to Item Manager**: `get_product_query_rankings` now gates on
+  `_is_admin()` (Item Manager + System Manager) instead of `_is_super_admin()`.
+
+**Steps**: copy `product_query.py` + `doctype/product_query/product_query.json`,
+append the 2 new wrappers to `api.py`, deploy (runs `bench migrate` to pick up the
+`item_code` field change). No new patch needed.
+
+**Verify** (guest curl — both must say `PermissionError`, NOT `has no attribute`):
+```
+for m in notify_product_query_typing get_socket_ticket; do
+  curl -s -X POST https://erp.ihgind.com/api/method/igh_search.igh_search.api.$m \
+    -H 'Content-Type: application/json' -d '{}' | head -c 120; echo;
+done
+```
+
+**Optional true push (later, not required for prod):** set the frontend env
+`NEXT_PUBLIC_ERP_SOCKET_URL` to an authenticated socket.io gateway and `npm i
+socket.io-client`. Until then the frontend uses adaptive polling + optimistic UI,
+and the realtime events above are simply dropped. The gateway must validate the
+`get_socket_ticket` value (in redis key `pq_socket_ticket:<ticket>`) and join the
+socket to the per-user room used by `publish_realtime(user=…)`.
+
+---
+
 ## Stock Freshness Pipeline (new)
 
 To keep `/list` stock near-real-time and avoid stale Typesense values:

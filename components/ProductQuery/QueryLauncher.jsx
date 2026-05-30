@@ -2,11 +2,9 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/router";
 import { useDispatch } from "react-redux";
-import { pollProductQueryUpdates } from "@/libs/api";
 import { hasAuthSession } from "@/libs/auth";
-import { setQueryBadge } from "@/redux/slice/productQuerySlice";
-
-const POLL_INTERVAL_MS = 20000;
+import { subscribeToBadge } from "@/libs/realtimeQuery";
+import { openRaiseQuery, setQueryBadge } from "@/redux/slice/productQuerySlice";
 
 export default function QueryLauncher() {
   const router = useRouter();
@@ -36,12 +34,9 @@ export default function QueryLauncher() {
   useEffect(() => {
     if (hidden || unavailable) return undefined;
     if (typeof window !== "undefined" && !hasAuthSession()) return undefined;
-    let active = true;
 
-    const load = async () => {
-      try {
-        const response = await pollProductQueryUpdates();
-        if (!active) return;
+    const unsubscribe = subscribeToBadge({
+      onBadge: (response) => {
         setState({
           loading: false,
           unread: Number(response?.unread_total || 0),
@@ -55,21 +50,16 @@ export default function QueryLauncher() {
             isAdmin: Boolean(response?.is_admin),
           })
         );
-      } catch (error) {
+      },
+      onError: (error) => {
         if (error?.code === "product_queries_unavailable") {
-          if (active) setUnavailable(true);
-          return;
+          setUnavailable(true);
+        } else {
+          setState((prev) => ({ ...prev, loading: false }));
         }
-        if (active) setState((prev) => ({ ...prev, loading: false }));
-      }
-    };
-
-    load();
-    const intervalId = window.setInterval(load, POLL_INTERVAL_MS);
-    return () => {
-      active = false;
-      window.clearInterval(intervalId);
-    };
+      },
+    });
+    return unsubscribe;
   }, [hidden, unavailable, dispatch]);
 
   if (hidden || unavailable) return null;
@@ -82,29 +72,41 @@ export default function QueryLauncher() {
     : `${badge} unread message${badge === 1 ? "" : "s"}`;
 
   return (
-    <Link
-      href="/product-queries"
-      className="fixed bottom-[92px] right-[18px] left-auto z-[120] inline-flex min-w-[56px] items-center gap-3 rounded-[18px] border border-[#dbe5ef] bg-white px-3 py-3 shadow-[0_18px_32px_rgba(15,23,42,0.14)] transition hover:-translate-y-0.5 hover:shadow-[0_24px_38px_rgba(15,23,42,0.18)] md:right-[20px] md:min-w-[190px] md:px-4"
-    >
-      <span className="relative grid h-11 w-11 shrink-0 place-items-center rounded-[14px] bg-[#edf4ff] text-[#1b6dff]">
-        <ChatIcon />
-        {badge > 0 && (
-          <span className="absolute -right-1 -top-1 inline-flex min-w-[20px] items-center justify-center rounded-full bg-[#dc2626] px-1.5 py-0.5 text-[10px] font-bold leading-none text-white">
-            {badge > 99 ? "99+" : badge}
-          </span>
-        )}
-      </span>
+    <div className="fixed bottom-[92px] right-[18px] left-auto z-[120] flex flex-col items-end gap-2 md:right-[20px]">
+      {/* Start a general chat with the team (no product attached). */}
+      <button
+        type="button"
+        onClick={() => dispatch(openRaiseQuery(null))}
+        className="inline-flex items-center gap-2 rounded-full border border-[#dbe5ef] bg-white px-3 py-2 text-[12px] font-semibold text-[#344054] shadow-[0_10px_22px_rgba(15,23,42,0.12)] transition hover:-translate-y-0.5 hover:text-[#111827]"
+      >
+        <span className="text-[15px] leading-none text-[#1b6dff]">＋</span>
+        Chat with team
+      </button>
 
-      <span className="hidden min-w-0 md:block">
-        <span className="block text-[12px] font-semibold uppercase tracking-[0.14em] text-[#98a2b3]">
-          {state.isAdmin ? "Product Queries" : "Product Team"}
+      <Link
+        href="/product-queries"
+        className="inline-flex min-w-[56px] items-center gap-3 rounded-[18px] border border-[#dbe5ef] bg-white px-3 py-3 shadow-[0_18px_32px_rgba(15,23,42,0.14)] transition hover:-translate-y-0.5 hover:shadow-[0_24px_38px_rgba(15,23,42,0.18)] md:min-w-[190px] md:px-4"
+      >
+        <span className="relative grid h-11 w-11 shrink-0 place-items-center rounded-[14px] bg-[#edf4ff] text-[#1b6dff]">
+          <ChatIcon />
+          {badge > 0 && (
+            <span className="absolute -right-1 -top-1 inline-flex min-w-[20px] items-center justify-center rounded-full bg-[#dc2626] px-1.5 py-0.5 text-[10px] font-bold leading-none text-white">
+              {badge > 99 ? "99+" : badge}
+            </span>
+          )}
         </span>
-        <span className="mt-1 block text-[14px] font-semibold text-[#111827]">
-          {state.isAdmin ? "Query desk" : "Ask the team"}
+
+        <span className="hidden min-w-0 md:block">
+          <span className="block text-[12px] font-semibold uppercase tracking-[0.14em] text-[#98a2b3]">
+            {state.isAdmin ? "Product Queries" : "Product Team"}
+          </span>
+          <span className="mt-1 block text-[14px] font-semibold text-[#111827]">
+            {state.isAdmin ? "Query desk" : "Ask the team"}
+          </span>
+          <span className="mt-0.5 block text-[12px] text-[#667085]">{subtitle}</span>
         </span>
-        <span className="mt-0.5 block text-[12px] text-[#667085]">{subtitle}</span>
-      </span>
-    </Link>
+      </Link>
+    </div>
   );
 }
 
