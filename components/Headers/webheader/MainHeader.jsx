@@ -485,7 +485,7 @@ export default function MainHeader({ header_template, theme_settings, website_se
                     <option value="All">All</option>
                     <option value="item_code">Item Code</option>
                   </select>
-                      <div className="p-[5px_10px_5px_20px] h-[35px] flex items-center w-[69.5%]  border_color rounded-[30px]">
+                      <div className="animated-search-glow p-[5px_10px_5px_20px] h-[35px] flex items-center w-[69.5%] border_color rounded-[30px]">
                         <input data-tour="header-search-input" value={searchValue} autoComplete='off' id='search' spellCheck="false" onKeyDown={handleKeyDown} ref={searchRef} onChange={(eve) => { getSearchTxt(eve) }} onFocus={() => { setActiveSearch(true) }} onBlur={() => { setActiveSearch(true) }} className='w-[95%] text-[14px]' placeholder='Search Products' />
                         {searchValue && <Image onClick={() => clearSearchValue()} style={{ objectFit: 'contain' }} className='h-[18px] w-[15px] cursor-pointer mr-2' height={25} width={25} alt='vantage' src={'/Navbar/cancel.svg'}></Image>}
                         <Image onClick={() => { searchValue == '' ? null : navigateToSearch('/list?search=' + searchValue) }} style={{ objectFit: 'contain' }} className='h-[18px] w-[15px] cursor-pointer' height={25} width={25} alt='vantage' src={'/search.svg'}></Image>

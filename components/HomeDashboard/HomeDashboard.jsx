@@ -259,9 +259,11 @@ function TopBar({ profile, salesPersonLabel, designation, query, setQuery, onSea
         </button>
 
         <form onSubmit={(e) => { e.preventDefault(); onSearch(query); }} className="relative mx-[2px] hidden flex-1 items-center md:flex">
-          <SearchIcon size={17} className="pointer-events-none absolute left-[12px] text-[#8190b7]" />
-          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search by product, SKU, category, brand…" aria-label="Search products"
-            className="h-[40px] w-full rounded-[12px] border border-white/70 bg-white/70 pl-[36px] pr-[12px] text-[13px] text-[#1d3159] outline-none placeholder:text-[#92a0c2] focus:border-[#b7c4ff] focus:bg-white" />
+          <div className="animated-search-glow relative flex w-full rounded-[12px]">
+            <SearchIcon size={17} className="pointer-events-none absolute left-[12px] top-1/2 z-[1] -translate-y-1/2 text-[#8190b7]" />
+            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search by product, SKU, category, brand…" aria-label="Search products"
+              className="h-[40px] w-full rounded-[12px] border border-transparent bg-transparent pl-[36px] pr-[12px] text-[13px] text-[#1d3159] outline-none placeholder:text-[#52607c]/70" />
+          </div>
         </form>
 
         <div className="ml-auto flex items-center gap-[7px] md:ml-0">
@@ -289,9 +291,11 @@ function TopBar({ profile, salesPersonLabel, designation, query, setQuery, onSea
       </div>
 
       <form onSubmit={(e) => { e.preventDefault(); onSearch(query); }} className="relative mx-auto flex w-full max-w-[1480px] items-center px-[14px] pb-[10px] md:hidden">
-        <SearchIcon size={17} className="pointer-events-none absolute left-[26px] text-[#8190b7]" />
-        <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search product, SKU, category…" aria-label="Search products"
-          className="h-[40px] w-full rounded-[12px] border border-white/70 bg-white/70 pl-[36px] pr-[12px] text-[13px] text-[#1d3159] outline-none placeholder:text-[#92a0c2] focus:border-[#b7c4ff] focus:bg-white" />
+        <div className="animated-search-glow relative flex w-full rounded-[12px]">
+          <SearchIcon size={17} className="pointer-events-none absolute left-[12px] top-1/2 z-[1] -translate-y-1/2 text-[#8190b7]" />
+          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search product, SKU, category…" aria-label="Search products"
+            className="h-[40px] w-full rounded-[12px] border border-transparent bg-transparent pl-[36px] pr-[12px] text-[13px] text-[#1d3159] outline-none placeholder:text-[#52607c]/70" />
+        </div>
       </form>
     </header>
   );

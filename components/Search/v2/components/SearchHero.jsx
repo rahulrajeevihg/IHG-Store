@@ -92,10 +92,8 @@ export default function SearchHero({
             >
               <div
                 data-tour="search-bar"
-                className={`group relative flex h-[56px] w-full items-stretch rounded-[16px] border bg-[#fcfdff] transition-all duration-200 ${
-                  aiInputMode
-                    ? "border-[#1b6dff] bg-white shadow-[0_0_0_4px_rgba(27,109,255,0.12)]"
-                    : "border-[#d8e1ea] focus-within:border-[#111827] focus-within:bg-white focus-within:shadow-[0_0_0_4px_rgba(15,23,42,0.06)]"
+                className={`liquid-search-glass group relative flex h-[56px] w-full items-stretch overflow-hidden rounded-[18px] transition-all duration-300 ${
+                  aiInputMode ? "is-ai-mode" : ""
                 }`}
               >
                 <span className="inline-flex shrink-0 items-center pl-[18px] text-[#64748b]">
@@ -290,9 +288,80 @@ export default function SearchHero({
         </div>
       </div>
       <style jsx>{`
+        .liquid-search-glass {
+          isolation: isolate;
+          border: 1px solid rgba(255, 255, 255, 0.48);
+          background:
+            linear-gradient(135deg, rgba(255, 255, 255, 0.64), rgba(255, 255, 255, 0.28)),
+            rgba(255, 255, 255, 0.34);
+          backdrop-filter: blur(14px) saturate(175%);
+          -webkit-backdrop-filter: blur(14px) saturate(175%);
+          box-shadow:
+            inset 0 1px 0 rgba(255, 255, 255, 0.88),
+            inset 0 -1px 0 rgba(255, 255, 255, 0.32),
+            0 0 0 1px rgba(255, 255, 255, 0.46),
+            0 8px 20px rgba(15, 23, 42, 0.06),
+            0 0 12px rgba(56, 189, 248, 0.28),
+            0 0 22px rgba(37, 99, 235, 0.14);
+          animation: liquid-glass-live-glow 4.8s ease-in-out infinite;
+        }
+
+        .liquid-search-glass:hover,
+        .liquid-search-glass:focus-within,
+        .liquid-search-glass.is-ai-mode {
+          border-color: rgba(255, 255, 255, 0.72);
+          background:
+            linear-gradient(135deg, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0.34)),
+            rgba(255, 255, 255, 0.38);
+          box-shadow:
+            inset 0 1px 0 rgba(255, 255, 255, 0.86),
+            inset 0 -1px 0 rgba(255, 255, 255, 0.3),
+            0 0 0 1px rgba(255, 255, 255, 0.42),
+            0 10px 24px rgba(15, 23, 42, 0.07),
+            0 0 16px rgba(56, 189, 248, 0.34),
+            0 0 30px rgba(37, 99, 235, 0.18);
+        }
+
+        .liquid-search-glass > * {
+          position: relative;
+          z-index: 1;
+        }
+
+        .liquid-search-glass::before,
+        .liquid-search-glass::after {
+          content: "";
+          position: absolute;
+          pointer-events: none;
+        }
+
+        .liquid-search-glass::before {
+          inset: 1px;
+          z-index: 0;
+          border-radius: 17px;
+          background:
+            radial-gradient(circle at 18% 0%, rgba(255, 255, 255, 0.86), transparent 30%),
+            radial-gradient(circle at 82% 100%, rgba(255, 255, 255, 0.34), transparent 34%),
+            linear-gradient(115deg, rgba(255, 255, 255, 0.42), transparent 42%);
+          opacity: 0.82;
+        }
+
+        .liquid-search-glass::after {
+          top: -45%;
+          bottom: -45%;
+          left: -28%;
+          z-index: 0;
+          width: 42%;
+          border-radius: 999px;
+          background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.72), transparent);
+          filter: blur(10px);
+          opacity: 0.56;
+          transform: rotate(14deg) translateX(-48%);
+          animation: liquid-glass-highlight 7s ease-in-out infinite;
+        }
+
         .ask-ai-btn {
           position: relative;
-          z-index: 0;
+          z-index: 1;
           overflow: visible;
           transition: transform 0.2s ease;
         }
@@ -304,22 +373,17 @@ export default function SearchHero({
           border-radius: 14px;
           padding: 2px;
           background: linear-gradient(
-            45deg,
-            #ff0000,
-            #ff7300,
-            #fffb00,
-            #48ff00,
-            #00ffd5,
-            #002bff,
-            #7a00ff,
-            #ff00c8,
-            #ff0000
+            120deg,
+            rgba(255, 255, 255, 0.88),
+            rgba(125, 211, 252, 0.84),
+            rgba(59, 130, 246, 0.46),
+            rgba(255, 255, 255, 0.72)
           );
-          background-size: 400%;
+          background-size: 220%;
           z-index: -1;
           opacity: 0;
           transition: opacity 0.3s ease-in-out;
-          animation: ask-ai-glow 20s linear infinite;
+          animation: ask-ai-glow 8s ease-in-out infinite;
           pointer-events: none;
           -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
           -webkit-mask-composite: xor;
@@ -358,13 +422,13 @@ export default function SearchHero({
 
         @keyframes ask-ai-glow {
           0% {
-            background-position: 0 0;
+            background-position: 0% 50%;
           }
           50% {
-            background-position: 400% 0;
+            background-position: 100% 50%;
           }
           100% {
-            background-position: 0 0;
+            background-position: 0% 50%;
           }
         }
 
@@ -374,6 +438,53 @@ export default function SearchHero({
           }
           to {
             transform: rotate(7deg) translateY(-1px) scale(1.15);
+          }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          .liquid-search-glass,
+          .liquid-search-glass::after {
+            animation: none;
+          }
+        }
+
+        @keyframes liquid-glass-live-glow {
+          0%,
+          100% {
+            box-shadow:
+              inset 0 1px 0 rgba(255, 255, 255, 0.88),
+              inset 0 -1px 0 rgba(255, 255, 255, 0.32),
+              0 0 0 1px rgba(255, 255, 255, 0.46),
+              0 8px 20px rgba(15, 23, 42, 0.06),
+              0 -5px 13px rgba(34, 211, 238, 0.28),
+              8px 0 18px rgba(59, 130, 246, 0.2),
+              -8px 0 18px rgba(14, 165, 233, 0.18);
+          }
+          50% {
+            box-shadow:
+              inset 0 1px 0 rgba(255, 255, 255, 0.92),
+              inset 0 -1px 0 rgba(255, 255, 255, 0.38),
+              0 0 0 1px rgba(219, 234, 254, 0.68),
+              0 9px 22px rgba(15, 23, 42, 0.065),
+              0 -6px 16px rgba(125, 211, 252, 0.36),
+              10px 0 24px rgba(37, 99, 235, 0.24),
+              -10px 0 22px rgba(6, 182, 212, 0.26);
+          }
+        }
+
+        @keyframes liquid-glass-highlight {
+          0%,
+          32% {
+            transform: rotate(14deg) translateX(-55%);
+            opacity: 0.18;
+          }
+          50% {
+            opacity: 0.62;
+          }
+          72%,
+          100% {
+            transform: rotate(14deg) translateX(260%);
+            opacity: 0.2;
           }
         }
       `}</style>
