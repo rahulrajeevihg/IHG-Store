@@ -1,5 +1,5 @@
 export default function AiStatusBanner({ aiSession, onClear }) {
-  if (!aiSession || aiSession.mode !== 'ai') return null;
+  if (!aiSession || (aiSession.mode !== 'ai' && aiSession.mode !== 'ai_banner')) return null;
 
   // Note: deterministic-only resolution is the intended fast path (the parser
   // mapped the intent without needing the LLM) — it is a success, not a

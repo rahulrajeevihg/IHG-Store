@@ -16,6 +16,7 @@ import {
   getIsSystemManager,
   isAuthRequiredError,
   isSearchV2DisabledError,
+  mapAppliedFiltersToV2Filters,
   normalizeSearchHit,
   queryFromState,
   reportSearchV2DisabledOnce,
@@ -1426,61 +1427,60 @@ export default function V2SearchPage({
     }
   };
 
-  // Commit the held interpretation to the product grid. Pure client-side swap
-  // of already-fetched results, then collapse the inline panel. The applied AI
-  // filters surface as read-only chips in ActiveFiltersSummary (via aiSession).
+  // Commit the held interpretation by folding the AI's resolved filters into the
+  // REAL searchState (not a frozen aiSession snapshot). This makes AI search a
+  // first-class filtered state: the grid renders via the normal pipeline, the
+  // chips are normal removable chips, and manual filter/sort changes MODIFY the
+  // AI result instead of wiping it. aiSession is kept only for the explanation
+  // banner — it is no longer the filter/grid source of truth.
   const applyAiPreview = () => {
     const response = aiPreview;
     if (!response) return;
     const message = response.message;
     setAiExplanation(response?.explanation || "");
+
+    // Banner-only metadata. Crucially NOT mode:"ai" — so executeSearch runs the
+    // normal filtered search (same hard filters => count and grid always agree),
+    // and touching a filter/sort no longer needs to clear it.
     setAiSession({
-      mode: "ai",
+      mode: "ai_banner",
       message,
       display_query: response.display_query,
-      display_filters: response.display_filters,
-      search_event_id: response?.search_event_id || "",
-      resolved_intent: response?.resolved_intent || null,
-      applied_filters: response?.applied_filters || {},
-      applied_sort: response?.applied_sort || "",
+      explanation: response?.explanation || "",
       applied_relaxations: Array.isArray(response?.applied_relaxations)
         ? response.applied_relaxations
         : [],
-      quality_signals: response?.quality_signals || null,
-      explanation: response?.explanation || "",
       found: Number(response?.found) || 0,
     });
-    // Keep the bar empty so it matches the reset searchState.q ("") below —
-    // otherwise the live-search effect sees searchInput !== searchState.q and
-    // fires a keyword search that wipes the AI session. The prompt is preserved
-    // in aiPrompt (for re-entry) and shown via the applied AI filter chips.
-    setSearchInput("");
-    const rawHits = Array.isArray(response?.hits) ? response.hits : [];
-    const sortedHits = applyInventoryValueSortFallback(rawHits, searchState.sort_by);
-    setResults(sortedHits);
-    void reconcileHitsWithLiveStock(sortedHits);
-    setFound(Number(response?.found) || 0);
-    setFacetMap(adaptFacetCounts(response?.facet_counts));
-    setQueryDebug(response?.query_debug || null);
-    setError("");
-    setLoading(false);
-    skipNextSearchRef.current = true;
+
+    // Map the AI's resolved filters into real V2 filter state.
+    const aiFilters = mapAppliedFiltersToV2Filters(response?.applied_filters || {});
+    const aiSort = response?.applied_sort || "";
+    const aiQuery = response?.display_query || "";
+
+    setSearchInput(aiQuery);
+    setAiInputMode(false);
+    setAiPreview(null);
     syncUrlRef.current = true;
-    setSearchState((current) => ({
+    // Drive the grid through the normal search pipeline so there is a single
+    // source of truth; the effect on searchState fires executeSearch().
+    updateState((current) => ({
       ...DEFAULT_V2_STATE,
       search_v2: current.search_v2,
       page: 1,
       page_length: current.page_length,
       include_inactive: current.include_inactive,
+      q: aiQuery,
+      sort_by: aiSort,
+      filters: aiFilters,
     }));
-    setAiInputMode(false);
-    setAiPreview(null);
+
     toast.success("AI search applied.");
     logV2Event("ai_search_applied", {
       prompt: message,
       search_event_id: response?.search_event_id || "",
       found: Number(response?.found) || 0,
-      applied_sort: response?.applied_sort || "",
+      applied_sort: aiSort,
       display_query: response.display_query,
       display_filters: response.display_filters,
     });
