@@ -491,7 +491,7 @@ Frontend must:
 - use normalized sort values
 - use normalized filter keys
 - keep list rendering lean
-- show correct `RRP` / `Promo` pricing logic
+- show correct `MRP` / `Promo` pricing logic
 - use `document.image`
 - preserve `search_event_id`
 - call tracking APIs after AI search outcomes
@@ -502,13 +502,13 @@ Frontend must:
 ### 15.1 Pricing
 Current pricing contract:
 
-- `rate` = `RRP`
+- `rate` = `MRP`
 - `offer_rate` = `Promo`
 
 Frontend display rule:
 
-- if promo is valid, show promo + struck-through RRP
-- otherwise show RRP only
+- if promo is valid, show promo + struck-through MRP
+- otherwise show MRP only
 
 ### 15.2 Stock
 Stock sorting should mean quantity sorting.

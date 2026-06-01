@@ -298,7 +298,7 @@ export default function V2QuickViewDrawer({
                                   value={summary.category_list || summary.item_group || "-"}
                                 />
                                 <Info
-                                  label="RRP"
+                                  label="MRP"
                                   value={formatPrice(summary.rate)}
                                 />
                                 <Info

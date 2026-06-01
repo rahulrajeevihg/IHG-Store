@@ -57,7 +57,7 @@ function App({ Component, pageProps }) {
       return;
     }
 
-    const publicRoutes = ["/login", "/seller/[login]"];
+    const publicRoutes = ["/login", "/seller/[login]", "/maintenance"];
     const isPublicRoute = publicRoutes.includes(router.pathname);
     const authenticated = hasAuthSession();
 
@@ -419,6 +419,11 @@ function App({ Component, pageProps }) {
   }
 
   // console.log(detailVisible);
+
+  // Maintenance page renders standalone — no header/footer/auth/providers.
+  if (router.pathname === "/maintenance") {
+    return <Component {...pageProps} />;
+  }
 
   if (!authChecked) {
     return (

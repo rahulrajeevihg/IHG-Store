@@ -358,9 +358,9 @@ Do not assume the full indexed Typesense document is returned in every hit.
 ## 4.2 Pricing rules
 Backend pricing logic:
 
-- `rate` = `Item Price` from price list `RRP`
+- `rate` = `Item Price` from price list `MRP`
 - `offer_rate` = `Item Price` from price list `Promo` if present
-- `discount_percentage` is computed from `RRP` vs `Promo`
+- `discount_percentage` is computed from `MRP` vs `Promo`
 
 Frontend rendering rule:
 
@@ -765,7 +765,7 @@ The frontend implementation is complete when:
 - quotation tracking is wired
 - reformulation tracking is wired
 - result rows still use lean payloads
-- price rendering follows `RRP` / `Promo` rules
+- price rendering follows `MRP` / `Promo` rules
 - image rendering uses `document.image`
 - debug/QA information is available for internal testing
 

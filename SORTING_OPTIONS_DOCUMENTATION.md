@@ -140,7 +140,7 @@ This section explains what data each sorting option uses and shows practical exa
 
 #### 🏷️ Price Low to High (`rate:asc`)
 - **What it does:** Shows cheapest products first
-- **Data field used:** Standard Price (RRP/rate)
+- **Data field used:** Standard Price (MRP/rate)
 - **How it works:** Arranges products from lowest price to highest price
 - **Use case:** Budget-conscious buyers want to see cheapest options first
 - **Example:**
@@ -157,7 +157,7 @@ This section explains what data each sorting option uses and shows practical exa
 
 #### 🏷️ Price High to Low (`rate:desc`)
 - **What it does:** Shows most expensive products first
-- **Data field used:** Standard Price (RRP/rate)
+- **Data field used:** Standard Price (MRP/rate)
 - **How it works:** Arranges products from highest price to lowest price
 - **Use case:** Buyers interested in premium, high-end products
 - **Example:**
@@ -546,7 +546,7 @@ export const V2_SORT_OPTIONS = [
 | **Relevance** | Shows products in order of how well they match your search. The best matches appear first. Most relevant = closest match to what you searched for. | Matching score based on search terms | Search "LED 100W" → Shows LED 100W products first, then LED products, then 100W products |
 | **Created date** | Shows newest products first (recently added to catalog). | Product creation/addition date | A bulb added today appears before a bulb added last month |
 | **Created date (oldest first)** | Shows oldest products first (earliest added to catalog). | Product creation/addition date | A bulb added 2 years ago appears first |
-| **Price low to high** | Shows cheapest products first. Takes the standard/RRP price (rate) and displays lowest to highest. | Standard Price (rate field) | ₹100 bulb → ₹500 bulb → ₹2000 bulb |
+| **Price low to high** | Shows cheapest products first. Takes the standard/MRP price (rate) and displays lowest to highest. | Standard Price (rate field) | ₹100 bulb → ₹500 bulb → ₹2000 bulb |
 | **Price high to low** | Shows most expensive products first. Takes the standard price and displays highest to lowest. | Standard Price (rate field) | ₹2000 bulb → ₹500 bulb → ₹100 bulb |
 | **Offer price low to high** | Shows cheapest products first using the discounted/offer price instead of standard price. | Offer/Discounted Price (offer_rate field) | Product with ₹80 offer price appears before product with ₹1000 offer price |
 | **Offer price high to low** | Shows most expensive products first using the discounted/offer price. | Offer/Discounted Price (offer_rate field) | Product with ₹1000 offer price appears before product with ₹80 offer price |
