@@ -6,6 +6,7 @@ import { get_cart_items, check_Image, search_opportunities, create_quotation_fro
 import { setCartItems, resetCart } from '@/redux/slice/cartSettings';
 import { toast } from 'react-toastify';
 import CardButton from './CardButton';
+import Dirham from '@/components/Common/Dirham';
 
 const CartView = () => {
     const dispatch = useDispatch();
@@ -203,7 +204,7 @@ const CartView = () => {
                                         <p className="text-sm text-gray-500">{item.item_code}</p>
                                         <div className="mt-1 flex items-center gap-2">
                                             <span className="text-lg font-bold primary_color">
-                                                AED {parseFloat(item.amount).toFixed(2)}
+                                                <Dirham /> {parseFloat(item.amount).toFixed(2)}
                                             </span>
                                             {item.rate > item.amount && (
                                                 <span className="text-sm text-gray-400 line-through">
@@ -306,11 +307,11 @@ const CartView = () => {
                         <div className="space-y-4 mb-8">
                             <div className="flex justify-between text-gray-600">
                                 <span>Subtotal</span>
-                                <span>AED {parseFloat(cartValue?.total || 0).toFixed(2)}</span>
+                                <span><Dirham /> {parseFloat(cartValue?.total || 0).toFixed(2)}</span>
                             </div>
                             <div className="border-t pt-4 flex justify-between font-bold text-lg">
                                 <span>Est. Total</span>
-                                <span className="primary_color">AED {parseFloat(cartValue?.grand_total || 0).toFixed(2)}</span>
+                                <span className="primary_color"><Dirham /> {parseFloat(cartValue?.grand_total || 0).toFixed(2)}</span>
                             </div>
                         </div>
 

@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { getErpDeskQuotationUrl } from '@/libs/api';
+import Dirham from '@/components/Common/Dirham';
 
 export default function QuotationHistoryDrawer({ open, onClose, quotations, loading, onRefresh }) {
   // Close on Escape key
@@ -93,7 +94,7 @@ export default function QuotationHistoryDrawer({ open, onClose, quotations, load
                     </div>
                     <div className="shrink-0 text-right">
                       <p className="text-[13px] font-bold text-[#111]">
-                        AED {parseFloat(q.grand_total || 0).toFixed(2)}
+                        <Dirham /> {parseFloat(q.grand_total || 0).toFixed(2)}
                       </p>
                       <svg className="h-[12px] w-[12px] text-[#d1d5db] mt-[6px] ml-auto group-hover:text-[#111] transition-colors" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                         <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14 21 3" strokeLinecap="round" strokeLinejoin="round" />

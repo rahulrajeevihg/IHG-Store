@@ -8,6 +8,7 @@ import { check_Image, checkMobile } from '@/libs/api';
 import { useRouter } from 'next/router';
 const ProductDetail = dynamic(()=> import('../Detail/ProductDetail'))
 import CardButton from './CardButton';
+import Dirham from '@/components/Common/Dirham';
 // import ProductDetail from '../Detail/ProductDetail';
 
 export default function ProductBox({ productList, size, rowCount, leftHorizontalImage, scroll_button, scroll_id, productBoxView, home, remove_bg, openFilter, tabView, pagination,openDetail }) {
@@ -120,7 +121,7 @@ export default function ProductBox({ productList, size, rowCount, leftHorizontal
                 <div className={`${remove_bg ? '' : 'product_images'} product_images_container  flex cursor-pointer items-center justify-center lg:h-[160px] 2xl:h-[185px] ${(productBoxView && productBoxView == 'List View') ? 'md:h-[140] md:w-[140px] lg:w-[25%] lg:!h-[120px]' : 'md:h-[170px] md:w-[100%] '} your-element `}>
                   <div onClick={() => navigateDetail(item)} className={` ${productBoxView && productBoxView == 'List View' ? 'lg:!h-[120px]' : 'lg:h-[160px] 2xl:h-[185px]'}  md:h-[125px] md:w-[125px] lg:w-full your-element`}><ImageLoader height={(productBoxView && productBoxView == 'List View') ? (isMobile ? 120 : 120) : isMobile ? 125 : viewportWidth >= 1400 ? 185 : 160} width={'100'} style={`${productBoxView && productBoxView == 'List View' ? 'lg:!h-[120px] lg:rounded-[5px]' : 'lg:h-[160px] 2xl:h-[185px]'}  lg:w-full md:h-[125px] md:w-[125px] object-cover your-element`} src={item.document.website_image_url} title={item.item ? item.item : ''} /></div>
                   {/* <Link onClick={() => navigateDetail(item)} href={'/pr/' + item.document.item_code} className={` ${productBoxView && productBoxView == 'List View' ? 'lg:!h-[120px]' : 'lg:h-[160px] 2xl:h-[185px]'}  md:h-[125px] md:w-[125px] lg:w-full your-element`}><ImageLoader height={(productBoxView && productBoxView == 'List View') ? (isMobile ? 120 : 120) : isMobile ? 125 : window.innerWidth >= 1400 ? 185 : 160} width={'100'} style={`${productBoxView && productBoxView == 'List View' ? 'lg:!h-[120px] lg:rounded-[5px]' : 'lg:h-[160px] 2xl:h-[185px]'}  lg:w-full md:h-[125px] md:w-[125px] object-cover your-element`} src={item.document.website_image_url} title={item.item ? item.item : ''} /></Link> */}
-                  {(item.document.offer_rate && (item.document.offer_rate < item.document.rate)) ? <h6 className={`bg-[#009f58]  text-[#fff] p-[1px_5px] absolute top-0 ${productBoxView && productBoxView == 'List View' ? 'right-0 left-auto rounded-[0_5px_0_5px]' : 'left-0 rounded-[0_0_5px_0]'} left-0 text-[12px]`}>{parseInt(((item.document.rate - item.document.offer_rate) / item.document.rate) * 100)}<span className='px-[0px] text-[#fff] text-[12px]'>% (AED {parseFloat(item.document.rate - item.document.offer_rate).toFixed(2)}) off</span> </h6> : <></>}
+                  {(item.document.offer_rate && (item.document.offer_rate < item.document.rate)) ? <h6 className={`bg-[#009f58]  text-[#fff] p-[1px_5px] absolute top-0 ${productBoxView && productBoxView == 'List View' ? 'right-0 left-auto rounded-[0_5px_0_5px]' : 'left-0 rounded-[0_0_5px_0]'} left-0 text-[12px]`}>{parseInt(((item.document.rate - item.document.offer_rate) / item.document.rate) * 100)}<span className='px-[0px] text-[#fff] text-[12px]'>% (<Dirham light /> {parseFloat(item.document.rate - item.document.offer_rate).toFixed(2)}) off</span> </h6> : <></>}
 
                 </div>
 
@@ -145,7 +146,7 @@ export default function ProductBox({ productList, size, rowCount, leftHorizontal
 
                   {/* {item.document.brand && <p onClick={() => navigateDetail(item)} className={`line-clamp-2 cursor-pointer text-[15px] md:text-[12px] font-semibold md:leading-[2.1] lg:leading-[25px] openSens gray_color`}>Brand : <span className='text-[14px]'>{item.document.brand}</span></p>} */}
                   <div className={`flex items-center gap-5 justify-between mt-2 ${(productBoxView && productBoxView == 'List View') ? 'lg:m-0' : ''}`}>
-                    {(webSettings && webSettings.currency) && <h3 className={`text-[14px] primary_color inline-flex gap-[6px] float-left font-semibold openSens `}>AED {item.document.offer_rate > 0 ? (<p className='text-green-600 font-semibold'>{parseFloat(item.document.offer_rate).toFixed(2)} <span className=' line-through font-medium text-gray-700 ml-[2px]'>{parseFloat(item.document.rate).toFixed(2)}</span></p>) : (<p className='font-semibold'>{parseFloat(item.document.rate).toFixed(2)}</p>)}</h3>}
+                    {(webSettings && webSettings.currency) && <h3 className={`text-[14px] primary_color inline-flex gap-[6px] float-left font-semibold openSens `}><Dirham /> {item.document.offer_rate > 0 ? (<p className='text-green-600 font-semibold'>{parseFloat(item.document.offer_rate).toFixed(2)} <span className=' line-through font-medium text-gray-700 ml-[2px]'>AED {parseFloat(item.document.rate).toFixed(2)}</span></p>) : (<p className='font-semibold'>{parseFloat(item.document.rate).toFixed(2)}</p>)}</h3>}
 
                   </div>
 

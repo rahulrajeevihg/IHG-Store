@@ -2,6 +2,7 @@ import { Fragment, useEffect, useMemo, useState } from "react";
 import { Dialog, Transition } from "@headlessui/react";
 import { VISIBLE_FILTERS } from "../constants";
 import FilterOptionsModal from "./FilterOptionsModal";
+import Dirham from "@/components/Common/Dirham";
 import { formatRangeValue, isMeaningfulRange } from "../utils/format";
 
 /* ─── icons (refined) ─────────────────────────────────────────── */
@@ -241,7 +242,7 @@ export default function FilterPanel({
           >
             <div className="flex items-center gap-2 mt-1">
               <div className="relative flex-1 group">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[10px] font-bold text-gray-400 group-focus-within:text-red-600 transition-colors">AED</span>
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 flex items-center text-gray-400 group-focus-within:text-red-600 transition-colors"><Dirham style={{ height: "10px" }} /></span>
                 <input
                   type="number"
                   placeholder="Min"
@@ -252,7 +253,7 @@ export default function FilterPanel({
               </div>
               <div className="h-[1px] w-3 bg-gray-200" />
               <div className="relative flex-1 group">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[10px] font-bold text-gray-400 group-focus-within:text-red-600 transition-colors">AED</span>
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 flex items-center text-gray-400 group-focus-within:text-red-600 transition-colors"><Dirham style={{ height: "10px" }} /></span>
                 <input
                   type="number"
                   placeholder="Max"

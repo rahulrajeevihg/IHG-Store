@@ -6,7 +6,7 @@ import { NextResponse } from "next/server";
 // │  >>> To turn the site back on after the resync: set this to false         │
 // │      (or delete this middleware.js file) and redeploy. <<<                │
 // └─────────────────────────────────────────────────────────────────────────┘
-const MAINTENANCE_ON = true;
+const MAINTENANCE_ON = false;
 
 export function middleware(request) {
   if (!MAINTENANCE_ON) {

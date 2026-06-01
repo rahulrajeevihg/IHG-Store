@@ -1,4 +1,5 @@
 import { Fragment } from "react";
+import Dirham from "@/components/Common/Dirham";
 import { FILTER_LABEL_MAP } from "../constants";
 import { DEFAULT_V2_STATE, V2_FILTER_KEYS } from "@/libs/ighSearchV2";
 
@@ -51,7 +52,11 @@ export function formatPrice(value) {
   if (!Number.isFinite(numeric) || numeric <= 0) {
     return "-";
   }
-  return `AED ${numeric.toFixed(2)}`;
+  return (
+    <Fragment>
+      <Dirham /> {numeric.toFixed(2)}
+    </Fragment>
+  );
 }
 
 export function prettifyLabel(value) {

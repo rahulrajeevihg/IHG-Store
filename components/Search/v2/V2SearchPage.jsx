@@ -69,6 +69,7 @@ import DiagnosticsDialog from "./components/DiagnosticsDialog";
 import AiStatusBanner from "@/components/Sales/AiStatusBanner";
 import SalesAddToCartModal from "@/components/Sales/SalesAddToCartModal";
 import CartModal from "@/components/Sales/CartModal";
+import AssistantDrawer from "@/components/Assistant/AssistantDrawer";
 import { openRaiseQuery } from "@/redux/slice/productQuerySlice";
 
 const DENSITY_STORAGE_KEY = "v2:density";
@@ -176,6 +177,7 @@ export default function V2SearchPage({
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
   const [density, setDensity] = useState("comfortable");
   const [aiSession, setAiSession] = useState(null);
+  const [assistantOpen, setAssistantOpen] = useState(false);
   const [addModalProduct, setAddModalProduct] = useState(null);
   const [cartModalOpen, setCartModalOpen] = useState(false);
   const [detailModalOpen, setDetailModalOpen] = useState(false);
@@ -1932,6 +1934,23 @@ export default function V2SearchPage({
           }}
         />
       )}
+
+      {/* Floating Product Assistant launcher + drawer */}
+      <button
+        type="button"
+        onClick={() => setAssistantOpen(true)}
+        title="Ask the Product Assistant"
+        className="group fixed bottom-[88px] right-[18px] z-[9000] flex h-[52px] items-center gap-2 rounded-full bg-gradient-to-r from-[#155fe0] to-[#3f86ff] px-4 pr-5 text-[13px] font-semibold text-white shadow-[0_10px_28px_rgba(27,109,255,0.4)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_14px_34px_rgba(27,109,255,0.5)] lg:bottom-[28px]"
+      >
+        <span className="flex h-7 w-7 items-center justify-center rounded-full bg-white/20 ring-1 ring-white/30">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
+            <path d="M12 2.5l1.9 4.6 4.6 1.9-4.6 1.9L12 15.5l-1.9-4.6L5.5 9l4.6-1.9L12 2.5z" fill="currentColor" />
+            <circle cx="18.5" cy="17.5" r="2.2" fill="currentColor" opacity="0.7" />
+          </svg>
+        </span>
+        <span className="hidden sm:inline">Ask AI</span>
+      </button>
+      <AssistantDrawer open={assistantOpen} onClose={() => setAssistantOpen(false)} />
     </div>
   );
 }

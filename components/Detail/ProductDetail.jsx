@@ -2,8 +2,10 @@ import { check_Image, get_product_details, get_product_related_context, typesens
 import { useEffect, useRef, useState } from 'react';
 import Image from 'next/image';
 import CardButton from '../Product/CardButton';
+import Dirham from '../Common/Dirham';
 import Tabs from '../Common/Tabs';
 import RelatedIntelligenceSections from './RelatedIntelligenceSections';
+import DriverCompatibilitySection from './DriverCompatibilitySection';
 import {
     formatHappyCustomers,
     formatLifetimeSoldQty,
@@ -375,11 +377,11 @@ const ProductDetail = ({ hide, visible, productData }) => {
                                                 {data.offer_rate > 0 ? (
                                                     <div className="flex flex-wrap items-baseline gap-3">
                                                         <span className="text-[34px] font-extrabold text-[#0b0c0e] tracking-[-0.03em] leading-none">
-                                                            <span className="text-[16px] font-bold align-top mr-1 text-[#6b7280]">AED</span>
+                                                            <Dirham className="align-top mr-1" style={{ height: "16px" }} />
                                                             {parseFloat(data.offer_rate).toFixed(2)}
                                                         </span>
                                                         <span className="text-[17px] text-[#9ca3af] line-through">
-                                                            {parseFloat(data.rate).toFixed(2)}
+                                                            AED {parseFloat(data.rate).toFixed(2)}
                                                         </span>
                                                         {discountPct > 0 && (
                                                             <span className="rounded-full bg-[#111] text-white text-[11px] font-bold px-2.5 py-1 tracking-[0.04em]">
@@ -389,7 +391,7 @@ const ProductDetail = ({ hide, visible, productData }) => {
                                                     </div>
                                                 ) : data.rate > 0 ? (
                                                     <span className="text-[34px] font-extrabold text-[#0b0c0e] tracking-[-0.03em] leading-none">
-                                                        <span className="text-[16px] font-bold align-top mr-1 text-[#6b7280]">AED</span>
+                                                        <Dirham className="align-top mr-1" style={{ height: "16px" }} />
                                                         {parseFloat(data.rate).toFixed(2)}
                                                     </span>
                                                 ) : (
@@ -443,6 +445,9 @@ const ProductDetail = ({ hide, visible, productData }) => {
                                         </div>
                                     </div>
                                 </div>
+                                <div className="px-5 lg:px-9">
+                                    <DriverCompatibilitySection itemCode={data.item_code} />
+                                </div>
                                 <RelatedIntelligenceSections
                                     itemCode={data.item_code}
                                     relatedContext={relatedContext}
@@ -462,7 +467,7 @@ const ProductDetail = ({ hide, visible, productData }) => {
                             <div className="min-w-0 flex-1">
                                 <p className="truncate text-[12px] font-medium text-[#6b7280] capitalize">{data.item_name}</p>
                                 <p className="text-[17px] font-extrabold text-[#0b0c0e] tracking-[-0.02em]">
-                                    AED {parseFloat(data.offer_rate > 0 ? data.offer_rate : data.rate).toFixed(2)}
+                                    <Dirham /> {parseFloat(data.offer_rate > 0 ? data.offer_rate : data.rate).toFixed(2)}
                                 </p>
                             </div>
                             <div className="shrink-0 w-[170px]">

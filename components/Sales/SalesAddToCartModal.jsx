@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { check_Image, get_product_details } from '@/libs/api';
+import Dirham from '@/components/Common/Dirham';
 
 export default function SalesAddToCartModal({ product, onClose, onConfirm }) {
   const [qty, setQty] = useState(1);
@@ -147,7 +148,7 @@ export default function SalesAddToCartModal({ product, onClose, onConfirm }) {
           {/* Price */}
           <div className="mt-[12px] flex flex-wrap items-baseline gap-[8px]">
             <span className="text-[24px] font-extrabold leading-none text-[#111]">
-              {price > 0 ? `AED ${price.toFixed(2)}` : '—'}
+              {price > 0 ? <><Dirham /> {price.toFixed(2)}</> : '—'}
             </span>
             {discounted && (
               <>
@@ -240,7 +241,7 @@ export default function SalesAddToCartModal({ product, onClose, onConfirm }) {
                 Line total
               </p>
               <p className="text-[18px] font-bold text-[#111]">
-                AED {(Math.max(1, clamp(qty)) * (price > 0 ? price : 0)).toFixed(2)}
+                <Dirham /> {(Math.max(1, clamp(qty)) * (price > 0 ? price : 0)).toFixed(2)}
               </p>
             </div>
           </div>

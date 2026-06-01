@@ -1168,6 +1168,65 @@ export async function get_product_manufacture_items(itemCode, page = 1, pageLeng
     };
 }
 
+// ── AI product-relationship helpers (driver / alternatives / assistant) ──────
+
+export async function get_driver_suggestions(itemCode) {
+    const api = `/api/erp/api/method/igh_search.igh_search.api.find_suitable_drivers`;
+    const response = await fetch(api, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify({ item_code: itemCode || "", limit: 8 }),
+        credentials: 'include',
+    });
+    const payload = await parseJsonResponseSafe(response, 'get_driver_suggestions');
+    const message = payload?.message || payload || {};
+    return {
+        item_code: message?.item_code || itemCode || "",
+        driver_required: message?.driver_required, // true | false | "unknown"
+        reason: message?.reason || "",
+        load: message?.load || null,
+        drivers: Array.isArray(message?.drivers) ? message.drivers : [],
+    };
+}
+
+export async function get_product_alternatives(itemCode, mode = "alternatives", limit = 8) {
+    const api = `/api/erp/api/method/igh_search.igh_search.api.get_product_alternatives_v2`;
+    const response = await fetch(api, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify({ item_code: itemCode || "", mode, limit: Number(limit || 8) }),
+        credentials: 'include',
+    });
+    const payload = await parseJsonResponseSafe(response, 'get_product_alternatives');
+    const message = payload?.message || payload || {};
+    return {
+        item_code: message?.item_code || itemCode || "",
+        mode: message?.mode || mode,
+        results: Array.isArray(message?.results) ? message.results : [],
+    };
+}
+
+export async function product_assistant_chat(message, history = []) {
+    const api = `/api/erp/api/method/igh_search.igh_search.api.product_assistant_chat`;
+    const response = await fetch(api, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify({
+            message: message || "",
+            history: JSON.stringify(Array.isArray(history) ? history : []),
+        }),
+        credentials: 'include',
+    });
+    const payload = await parseJsonResponseSafe(response, 'product_assistant_chat');
+    const msg = payload?.message || payload || {};
+    return {
+        reply: msg?.reply || "",
+        products: Array.isArray(msg?.products) ? msg.products : [],
+        tool_trace: Array.isArray(msg?.tool_trace) ? msg.tool_trace : [],
+        cart_added: Array.isArray(msg?.cart_added) ? msg.cart_added : [],
+    };
+}
+
 export async function get_brands_list(keys, data) {
     const api = `/api/erp/api/method/get_brands`;
     const response = await fetch(api, {

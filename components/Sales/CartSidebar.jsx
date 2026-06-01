@@ -13,6 +13,7 @@ import {
   extractFrappeErrorMessage,
   getErpDeskQuotationUrl,
 } from '@/libs/api';
+import Dirham from '@/components/Common/Dirham';
 import {
   setCartItems,
   resetCart,
@@ -277,11 +278,11 @@ export default function CartSidebar({ onClose, onQuotationCreated }) {
           <div data-tour="cart-modal-total" className="px-[14px] pt-[10px] pb-[6px] border-t border-[#f3f4f6]">
             <div className="flex justify-between text-[11px] text-[#6b7280] mb-[4px]">
               <span>Subtotal</span>
-              <span>AED {subtotal.toFixed(2)}</span>
+              <span><Dirham /> {subtotal.toFixed(2)}</span>
             </div>
             <div className="flex justify-between text-[13px] font-bold text-[#111]">
               <span>Est. Total</span>
-              <span>AED {grandTotal.toFixed(2)}</span>
+              <span><Dirham /> {grandTotal.toFixed(2)}</span>
             </div>
           </div>
         )}
@@ -497,7 +498,7 @@ function CartItemRow({ item, note, onSync }) {
           <p className="font-mono text-[9px] text-[#9ca3af] truncate leading-none">{item.item_code}</p>
           <p className="text-[11px] font-medium text-[#111] leading-tight mt-[1px] line-clamp-2">{item.item_name}</p>
           <div className="flex items-center gap-[6px] mt-[2px]">
-            <p className="text-[11px] font-bold text-[#111]">AED {lineTotal.toFixed(2)}</p>
+            <p className="text-[11px] font-bold text-[#111]"><Dirham /> {lineTotal.toFixed(2)}</p>
             <button
               onClick={() => setNoteOpen((o) => !o)}
               className="text-[9px] text-[#9ca3af] hover:text-[#111] underline-offset-1 hover:underline"
@@ -589,8 +590,8 @@ function QuotationPreviewModal({ cartItems, itemNotes, opportunity, grandTotal, 
                       {note && <p className="text-[9px] text-[#9ca3af] italic mt-[2px]">{note}</p>}
                     </td>
                     <td className="text-right py-[6px] font-bold">{qty}</td>
-                    <td className="text-right py-[6px]">AED {rate.toFixed(2)}</td>
-                    <td className="text-right py-[6px] font-bold">AED {(qty * rate).toFixed(2)}</td>
+                    <td className="text-right py-[6px]"><Dirham /> {rate.toFixed(2)}</td>
+                    <td className="text-right py-[6px] font-bold"><Dirham /> {(qty * rate).toFixed(2)}</td>
                   </tr>
                 );
               })}
@@ -601,7 +602,7 @@ function QuotationPreviewModal({ cartItems, itemNotes, opportunity, grandTotal, 
         <div className="px-[20px] py-[12px] border-t border-[#e5e7eb]">
           <div className="flex justify-between text-[13px] font-bold mb-[12px]">
             <span>Grand Total</span>
-            <span>AED {grandTotal.toFixed(2)}</span>
+            <span><Dirham /> {grandTotal.toFixed(2)}</span>
           </div>
           <div className="flex gap-[8px]">
             <button onClick={onClose} className="flex-1 py-[10px] text-[11px] font-bold uppercase tracking-[0.1em] border border-[#e5e7eb] text-[#6b7280] hover:border-[#111] hover:text-[#111] transition-colors">

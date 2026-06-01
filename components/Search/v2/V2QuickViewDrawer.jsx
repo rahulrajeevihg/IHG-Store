@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { Dialog, Transition } from "@headlessui/react";
+import Dirham from "@/components/Common/Dirham";
 import {
   getSimilarProductsV2,
   isSearchV2DisabledError,
@@ -267,7 +268,7 @@ export default function V2QuickViewDrawer({
                                   {promoActive(summary) && (
                                     <div className="mt-[4px] flex items-center gap-[8px]">
                                       <span className="text-[13px] text-[#91867a] line-through">
-                                        {formatPrice(summary.rate)}
+                                        AED {Number(summary.rate).toFixed(2)}
                                       </span>
                                       <span className="rounded-full bg-[#111] px-[7px] py-[2px] text-[10px] font-semibold text-white">
                                         -{discountPct(summary)}%
@@ -552,7 +553,11 @@ function formatPrice(value) {
   if (!Number.isFinite(numeric) || numeric <= 0) {
     return "-";
   }
-  return `AED ${numeric.toFixed(2)}`;
+  return (
+    <>
+      <Dirham /> {numeric.toFixed(2)}
+    </>
+  );
 }
 
 function stripHtml(value) {

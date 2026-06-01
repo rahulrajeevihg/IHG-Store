@@ -14,6 +14,7 @@ import {
 } from "@/libs/api";
 import Image from "next/image";
 import dynamic from "next/dynamic";
+import Dirham from "@/components/Common/Dirham";
 const ProductBox = dynamic(() => import("@/components/Product/ProductBox"));
 const ImageSlider = dynamic(() => import("@/components/Detail/ImageSlider"));
 const MobileHeader = dynamic(() =>
@@ -881,7 +882,7 @@ const DetailPage = ({ productDetail, toast, details, relatedContext, relatedLoad
                                                 </div>
                                             )}
                                         </div>
-                                        {(data.offer_rate) ? <h6 className='bg-[#009f58] text-[#fff] p-[3px_13px] absolute top-0 left-0 rounded-br-md  text-[12px]'>{parseInt(((data.rate - data.offer_rate) / data.rate) * 100)}<span className='px-[0px] text-[#fff] text-[12px]'>% (AED {parseFloat(data.rate - data.offer_rate).toFixed(2)}) off</span> </h6> : <></>}
+                                        {(data.offer_rate) ? <h6 className='bg-[#009f58] text-[#fff] p-[3px_13px] absolute top-0 left-0 rounded-br-md  text-[12px]'>{parseInt(((data.rate - data.offer_rate) / data.rate) * 100)}<span className='px-[0px] text-[#fff] text-[12px]'>% (<Dirham light /> {parseFloat(data.rate - data.offer_rate).toFixed(2)}) off</span> </h6> : <></>}
                                         {/* {(data.discount_percentage != 0 && !isMobile) && <h6 className='absolute md:hidden right-[8px] top-[8px] additional_bg text-[#fff] p-[2px_8px] rounded-[10px] text-[12px]'>{data.discount_percentage}<span className='px-[0px] text-[#fff] text-[12px]'>% Off</span> </h6>} */}
                                         {false && (
                                             <div className="md:hidden absolute top-4 right-[-3px] flex">
@@ -920,7 +921,7 @@ const DetailPage = ({ productDetail, toast, details, relatedContext, relatedLoad
                                                     <div
                                                         className={`py-[5px]`}
                                                     >
-                                                        <h3 className={`text-[16px] primary_color inline-flex gap-[6px] items-center font-semibold openSens `}>AED {data.offer_rate > 0 ? (<p className='text-green-600 font-semibold text-[16px]'>{parseFloat(data.offer_rate).toFixed(2)} <span className=' line-through font-medium text-gray-700 ml-[2px] text-[16px]'>{parseFloat(data.rate).toFixed(2)}</span></p>) : (<p className='font-semibold text-[16px]'>{parseFloat(data.rate).toFixed(2)}</p>)}</h3>
+                                                        <h3 className={`text-[16px] primary_color inline-flex gap-[6px] items-center font-semibold openSens `}><Dirham /> {data.offer_rate > 0 ? (<p className='text-green-600 font-semibold text-[16px]'>{parseFloat(data.offer_rate).toFixed(2)} <span className=' line-through font-medium text-gray-700 ml-[2px] text-[16px]'>AED {parseFloat(data.rate).toFixed(2)}</span></p>) : (<p className='font-semibold text-[16px]'>{parseFloat(data.rate).toFixed(2)}</p>)}</h3>
 
                                                     </div>
                                                 </div>
@@ -984,11 +985,11 @@ const DetailPage = ({ productDetail, toast, details, relatedContext, relatedLoad
                                                     }}
                                                 />
                                                 <div className="flex flex-row mt-[4px] items-center justify-between gap-3">
-                                                    {(data.offer_rate) ? <h6 className='bg-[#009f58] text-[#fff] p-[3px_10px] text-[10px]'>{parseInt((data.rate - data.offer_rate) / data.rate * 100)}<span className='px-[0px] text-[#fff] text-[10px]'>% (AED {parseFloat(data.rate - data.offer_rate).toFixed(2)}) off</span> </h6> : <></>}
+                                                    {(data.offer_rate) ? <h6 className='bg-[#009f58] text-[#fff] p-[3px_10px] text-[10px]'>{parseInt((data.rate - data.offer_rate) / data.rate * 100)}<span className='px-[0px] text-[#fff] text-[10px]'>% (<Dirham light /> {parseFloat(data.rate - data.offer_rate).toFixed(2)}) off</span> </h6> : <></>}
                                                     <div
                                                         className={` font-semibold  openSens`}
                                                     >
-                                                        <h3 className={` primary_color inline-flex items-center gap-[6px] float-left font-semibold openSens `}>AED {data.offer_rate > 0 ? (<p className='text-green-600 font-semibold'>{parseFloat(data.offer_rate).toFixed(2)} <span className=' line-through font-medium text-gray-700 ml-[2px]'>{parseFloat(data.rate).toFixed(2)}</span></p>) : (<p className='font-semibold text-[14px]'>{parseFloat(data.rate).toFixed(2)}</p>)}</h3>
+                                                        <h3 className={` primary_color inline-flex items-center gap-[6px] float-left font-semibold openSens `}><Dirham /> {data.offer_rate > 0 ? (<p className='text-green-600 font-semibold'>{parseFloat(data.offer_rate).toFixed(2)} <span className=' line-through font-medium text-gray-700 ml-[2px]'>AED {parseFloat(data.rate).toFixed(2)}</span></p>) : (<p className='font-semibold text-[14px]'>{parseFloat(data.rate).toFixed(2)}</p>)}</h3>
                                                     </div>
                                                 </div>
                                             </>

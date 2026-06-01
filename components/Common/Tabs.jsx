@@ -2,6 +2,7 @@ import Image from "next/image";
 import React, { useState, useRef, useEffect, Fragment } from "react";
 import { check_Image } from "@/libs/api";
 import CardButton from "../Product/CardButton";
+import Dirham from "./Dirham";
 
 const SPEC_FIELDS = [
   { label: "Product Type",    key: "product_type" },
@@ -274,7 +275,14 @@ export default function Tabs({ stockDetails, productDetails, bundles, onOpenProd
   );
 }
 
-const formatAed = (value) => `AED ${Number(value || 0).toFixed(2)}`;
+const formatAed = (value) => (
+  <>
+    <Dirham /> {Number(value || 0).toFixed(2)}
+  </>
+);
+// Plain-text variant (no symbol) for secondary prices like struck-through
+// totals and "Save" amounts, so a card shows the symbol only once.
+const formatAedText = (value) => `AED ${Number(value || 0).toFixed(2)}`;
 
 function BundleComponentChip({ component, onOpenProduct }) {
   const image = check_Image(component?.website_image_url || component?.image || "");
@@ -341,7 +349,7 @@ function BundleCard({ bundle, onOpenProduct }) {
         <div className="flex w-[150px] flex-none flex-col justify-center rounded-[12px] border border-[#111] bg-[#fafafa] p-3">
           <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-[#6b7280]">Bundle</p>
           {hasDiscount && (
-            <p className="text-[12px] text-[#9ca3af] line-through">{formatAed(originalTotal)}</p>
+            <p className="text-[12px] text-[#9ca3af] line-through">{formatAedText(originalTotal)}</p>
           )}
           <p className="text-[18px] font-extrabold text-[#0b0c0e] tracking-[-0.02em] leading-tight">
             {formatAed(bundlePrice > 0 ? bundlePrice : originalTotal)}
@@ -353,14 +361,14 @@ function BundleCard({ bundle, onOpenProduct }) {
       <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-[#f0f2f5] pt-3">
         <div className="flex items-baseline gap-2">
           {hasDiscount && (
-            <span className="text-[14px] text-[#9ca3af] line-through">{formatAed(originalTotal)}</span>
+            <span className="text-[14px] text-[#9ca3af] line-through">{formatAedText(originalTotal)}</span>
           )}
           <span className="text-[22px] font-extrabold text-[#0b0c0e] tracking-[-0.02em]">
             {formatAed(bundlePrice > 0 ? bundlePrice : originalTotal)}
           </span>
           {savings > 0 && (
             <span className="rounded-full bg-[#dcfce7] px-2 py-0.5 text-[11px] font-bold text-[#15803d]">
-              Save {formatAed(savings)}
+              Save {formatAedText(savings)}
             </span>
           )}
         </div>

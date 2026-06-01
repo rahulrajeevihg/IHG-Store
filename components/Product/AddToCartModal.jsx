@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { check_Image } from '@/libs/api';
+import Dirham from '@/components/Common/Dirham';
 
 export default function AddToCartModal({ item, onClose, onAdd }) {
   const defaultQty = item?.minimum_order_qty > 0 ? Number(item.minimum_order_qty) : 1;
@@ -143,7 +144,7 @@ export default function AddToCartModal({ item, onClose, onAdd }) {
             {/* Price */}
             <div style={{ display: 'flex', alignItems: 'baseline', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
               <span className="primary_color" style={{ fontSize: 28, fontWeight: 800, lineHeight: 1 }}>
-                AED {price ? parseFloat(price).toFixed(2) : '—'}
+                {price ? <><Dirham /> {parseFloat(price).toFixed(2)}</> : '—'}
               </span>
               {hasDiscount && (
                 <>

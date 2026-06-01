@@ -176,7 +176,7 @@ export default function ProductCard({
                 </span>
                 {discounted && (
                   <span className="text-[10px] leading-none text-[#b0b7c3] line-through">
-                    {formatPrice(rate)}
+                    AED {Number(rate).toFixed(2)}
                   </span>
                 )}
               </div>
@@ -186,7 +186,7 @@ export default function ProductCard({
                     {discountPct}%
                   </span>
                   <span className="text-[9px] text-[#9ca3af]">
-                    Save {formatPrice(Math.round(discountAmount))}
+                    Save AED {Math.round(discountAmount).toFixed(2)}
                   </span>
                 </div>
               )}
