@@ -846,10 +846,18 @@ export default function V2SearchPage({
         return;
       }
     } finally {
+      // Only the CURRENTLY-active request may flip global loading off. An
+      // aborted predecessor's finally otherwise clobbers `loading=false`
+      // while the new request is still in flight — which surfaces as
+      // "no results until refresh" because the spinner disappears and stale
+      // / empty hits stay onscreen until the new response arrives.
+      const isCurrent = activeSearchController.current === controller;
       if (activeSearchFingerprintRef.current === requestFingerprint) {
         activeSearchFingerprintRef.current = "";
       }
-      setLoading(false);
+      if (isCurrent) {
+        setLoading(false);
+      }
     }
   };
 
