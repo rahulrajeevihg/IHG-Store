@@ -830,8 +830,8 @@ export default function V2SearchPage({
       }
       setError(message);
       liveStockReconcileRunRef.current += 1;
-      setResults([]);
-      setFound(0);
+      // Keep prior hits + count visible on error/timeout so the user sees the
+      // message alongside the last successful view, not an empty grid flash.
       setSearchLatencyMs(Math.round(performance.now() - startedAt));
       logV2Event(isAiSearch ? "ai_search_results_failed" : "search_results_failed", {
         query:

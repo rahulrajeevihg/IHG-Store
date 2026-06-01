@@ -437,13 +437,13 @@ export const searchProductsV2 = async (payload, options = {}) => {
   };
 
   try {
-    return await runAttempt(1, 25000);
+    return await runAttempt(1, 40000);
   } catch (firstError) {
     if (!firstError?.retrying) {
       throw firstError;
     }
   }
-  return runAttempt(2, 35000);
+  return runAttempt(2, 50000);
 };
 
 export const suggestProductsV2 = async (payload, options = {}) =>
