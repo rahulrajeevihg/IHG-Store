@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/router";
 import Image from "next/image";
@@ -37,7 +37,78 @@ const SUGGESTIONS = [
   { icon: "🔁", text: "Alternative of LB2100.W.830.WBK.36" },
   { icon: "💡", text: "Cheapest 3000K IP65 spotlight in stock" },
 ];
-const QUICK_REPLIES = ["In stock only", "Show cheaper", "Find a driver for the first one", "Add the first to my quote"];
+const DRIVER_RE = /driver|\bdim\b|constant current|constant voltage|\bcc\b|\bcv\b/i;
+const ALT_RE = /alternative|\balt\b|similar|equivalent|replace|cross[- ]?sell/i;
+const SPEC_RE = /\d|watt|\bw\b|kelvin|\bk\b|ip\d|lumen|beam|°|volt|\bvdc\b|\bma\b/i;
+
+// Context-aware "reasoning" steps shown while the assistant works — narrates what
+// it's doing based on the pending question (it reads as thinking, not just waiting).
+function thinkingSteps(q) {
+  const t = (q || "").toLowerCase();
+  const steps = ["Understanding your request"];
+  if (DRIVER_RE.test(t)) steps.push("Checking driver compatibility");
+  if (ALT_RE.test(t)) steps.push("Finding alternatives");
+  steps.push("Searching the live catalog");
+  if (SPEC_RE.test(t)) steps.push("Matching your specs");
+  steps.push("Ranking the best options");
+  return steps;
+}
+
+// Friendly labels for the "what I did" trace, derived from the returned tool_trace.
+const TOOL_LABELS = {
+  search_products: { icon: "🔍", label: "searched catalog" },
+  get_product: { icon: "📦", label: "looked up product" },
+  find_alternatives: { icon: "🔁", label: "found alternatives" },
+  check_driver_requirement: { icon: "🔌", label: "checked driver need" },
+  find_driver: { icon: "⚡", label: "matched a driver" },
+  add_to_cart: { icon: "🛒", label: "added to quote" },
+};
+function traceSteps(trace) {
+  if (!Array.isArray(trace) || !trace.length) return [];
+  const out = [];
+  trace.forEach((t) => {
+    const key = t?.tool;
+    if (TOOL_LABELS[key] && !out.find((s) => s.key === key)) out.push({ key, ...TOOL_LABELS[key] });
+  });
+  return out;
+}
+
+// Context-aware follow-up chips generated from the last results + question.
+function dynamicQuickReplies(messages) {
+  const rev = [...messages].reverse();
+  const lastA = rev.find((m) => m.role === "assistant");
+  const lastU = rev.find((m) => m.role === "user");
+  const products = (lastA && lastA.products) || [];
+  if (!products.length) return [];
+  const ut = (lastU?.content || "").toLowerCase();
+  const prices = products.map((p) => Number(p.rate || 0)).filter((n) => n > 0);
+  const varied = prices.length > 1 && Math.max(...prices) > Math.min(...prices) * 1.15;
+  const chips = [];
+  if (!/in stock/.test(ut)) chips.push("In stock only");
+  if (varied) chips.push("Show the cheapest");
+  if (products.length >= 3) chips.push("Compare the top 3");
+  if (DRIVER_RE.test(ut)) chips.push("Constant-current only");
+  else chips.push("Find a driver for the first one");
+  chips.push("Add the first to my quote");
+  return chips.slice(0, 5);
+}
+
+// Spec pills extracted from a product doc; a pill glows green when its value also
+// appears in the user's query (i.e. that spec was an explicit match).
+function specPills(item, query) {
+  const q = (query || "").toLowerCase();
+  const pills = [];
+  const push = (raw, normalized) => {
+    if (!raw) return;
+    const matched = normalized.some((n) => n && q.includes(String(n).toLowerCase()));
+    pills.push({ text: raw, matched });
+  };
+  if (item?.power) push(String(item.power).replace(/\s+/g, ""), [String(item.power).replace(/[^\d.]/g, "")]);
+  if (item?.color_temp) push(String(item.color_temp).replace(/\s+/g, ""), [String(item.color_temp).replace(/[^\d]/g, "")]);
+  if (item?.ip_rate) push(String(item.ip_rate).toUpperCase().replace(/\s+/g, ""), [String(item.ip_rate).replace(/[^\d]/g, "")]);
+  if (item?.beam_angle) push(`${item.beam_angle}°`, [String(item.beam_angle).replace(/[^\d]/g, "")]);
+  return pills.slice(0, 4);
+}
 
 /* ── Minimal, safe Markdown -> React (no deps, no dangerouslySetInnerHTML) ── */
 function renderInline(text, kp) {
@@ -114,9 +185,10 @@ function AiGlyph({ size = 18 }) {
   );
 }
 
-function ProductChip({ item, onOpen, onAddToCart, onFindDriver, onAlternatives }) {
+function ProductChip({ item, query, onOpen, onAddToCart, onFindDriver, onAlternatives }) {
   const image = check_Image(item?.website_image_url || item?.image || "");
   const inStock = Number(item?.stock || 0) > 0;
+  const pills = specPills(item, query);
   return (
     <div className="group flex w-[186px] min-w-[186px] flex-none snap-start flex-col rounded-[14px] border border-[#e8ecf3] bg-white p-2 transition-all duration-200 hover:border-[#1b6dff] hover:shadow-[0_10px_28px_rgba(27,109,255,0.16)]">
       <button type="button" onClick={() => onOpen(item)} className="text-left">
@@ -125,6 +197,13 @@ function ProductChip({ item, onOpen, onAddToCart, onFindDriver, onAlternatives }
         </div>
         <p className="line-clamp-1 font-mono text-[10px] font-semibold text-[#0f172a]">{item?.item_code || "-"}</p>
         <p className="line-clamp-2 min-h-[28px] text-[10px] leading-[1.3] text-[#64748b]">{item?.item_name || "-"}</p>
+        {pills.length > 0 && (
+          <div className="mt-1 flex flex-wrap gap-1">
+            {pills.map((p, idx) => (
+              <span key={idx} className={`rounded-[5px] px-1.5 py-0.5 text-[8.5px] font-bold ${p.matched ? "bg-[#dcfce7] text-[#15803d] ring-1 ring-[#86efac]" : "bg-[#f1f5f9] text-[#64748b]"}`}>{p.text}</span>
+            ))}
+          </div>
+        )}
         {item?.match_reason ? <p className="mt-0.5 line-clamp-1 rounded-[5px] bg-[#eef5ff] px-1.5 py-0.5 text-[9px] font-medium text-[#1b6dff]">✓ {item.match_reason}</p> : null}
         <div className="mt-1.5 flex items-center justify-between">
           <span className={`inline-flex items-center gap-1 text-[9px] font-semibold ${inStock ? "text-[#15803d]" : "text-[#b91c1c]"}`}>
@@ -151,6 +230,24 @@ function TypingDots() {
   );
 }
 
+// Live "reasoning" indicator — advances through context-aware steps while the
+// backend works, then holds on the last step (no fake completion claims).
+function ThinkingStatus({ query }) {
+  const steps = useMemo(() => thinkingSteps(query), [query]);
+  const [i, setI] = useState(0);
+  useEffect(() => {
+    setI(0);
+    const id = setInterval(() => setI((p) => Math.min(p + 1, steps.length - 1)), 850);
+    return () => clearInterval(id);
+  }, [steps]);
+  return (
+    <div className="flex items-center gap-2 px-1 py-1">
+      <TypingDots />
+      <span key={i} className="text-[11.5px] font-medium text-[#475569]" style={{ animation: "aiFade .45s ease-out both" }}>{steps[i]}…</span>
+    </div>
+  );
+}
+
 export default function AssistantDrawer({ open, onClose, seedMessage = "" }) {
   const router = useRouter();
   const [messages, setMessages] = useState([]); // {role, content, products?, displayed?, cited?}
@@ -161,6 +258,7 @@ export default function AssistantDrawer({ open, onClose, seedMessage = "" }) {
   const [modalProduct, setModalProduct] = useState(null);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
+  const [pendingQuery, setPendingQuery] = useState("");
   const [mounted, setMounted] = useState(false);
   const [listening, setListening] = useState(false);
   const scrollRef = useRef(null);
@@ -289,10 +387,12 @@ export default function AssistantDrawer({ open, onClose, seedMessage = "" }) {
     const next = [...messages, { role: "user", content: msg, displayed: msg }];
     setMessages(next);
     setSending(true);
+    setPendingQuery(msg);
     try {
       const res = await product_assistant_chat(msg, history);
-      const cited = (res.tool_trace || []).some((t) => ["search_products", "get_product", "find_alternatives", "find_driver", "check_driver_requirement"].includes(t.tool));
-      setMessages([...next, { role: "assistant", content: res.reply || "(no response)", displayed: "", products: res.products || [], cited }]);
+      const trace = Array.isArray(res.tool_trace) ? res.tool_trace : [];
+      const cited = trace.some((t) => ["search_products", "get_product", "find_alternatives", "find_driver", "check_driver_requirement"].includes(t.tool));
+      setMessages([...next, { role: "assistant", content: res.reply || "(no response)", displayed: "", products: res.products || [], cited, trace, query: msg }]);
       if (Array.isArray(res.cart_added) && res.cart_added.length) {
         toast.success(`Added ${res.cart_added.length} item(s) to your quote`);
         window.dispatchEvent(new Event("cart-updated"));
@@ -301,6 +401,7 @@ export default function AssistantDrawer({ open, onClose, seedMessage = "" }) {
       setMessages([...next, { role: "assistant", content: "Sorry — I couldn't reach the assistant. Please try again.", displayed: "", products: [], error: true }]);
     } finally {
       setSending(false);
+      setPendingQuery("");
     }
   };
 
@@ -394,7 +495,7 @@ export default function AssistantDrawer({ open, onClose, seedMessage = "" }) {
   };
 
   if (!open || typeof document === "undefined") return null;
-  const lastAssistantHasProducts = (() => { const a = [...messages].reverse().find((m) => m.role === "assistant"); return a && a.products && a.products.length > 0; })();
+  const quickReplies = dynamicQuickReplies(messages);
 
   return createPortal(
     <div className="fixed inset-0 z-[10001]">
@@ -405,6 +506,7 @@ export default function AssistantDrawer({ open, onClose, seedMessage = "" }) {
         .ai-msg{animation:aiMsgIn .22s ease-out both}
         .ai-panel{transition:transform .28s cubic-bezier(.22,1,.36,1)}
         @keyframes micPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.12)}}
+        @keyframes aiFade{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:translateY(0)}}
       `}</style>
 
       <div className={`absolute inset-0 bg-[#0b1220]/45 backdrop-blur-[2px] transition-opacity duration-300 ${mounted ? "opacity-100" : "opacity-0"}`} onClick={() => onClose?.()} />
@@ -515,6 +617,18 @@ export default function AssistantDrawer({ open, onClose, seedMessage = "" }) {
                       </button>
                     )}
                   </div>
+                  {!isUser && body === m.content && Array.isArray(m.trace) && traceSteps(m.trace).length > 0 && (
+                    <div className="mt-1.5 flex flex-wrap items-center gap-1 pl-1">
+                      {traceSteps(m.trace).map((s, si) => (
+                        <span key={s.key} className="inline-flex items-center gap-0.5 text-[9.5px] text-[#94a3b8]">
+                          {si > 0 && <span className="mr-0.5 text-[#cbd5e1]">·</span>}<span>{s.icon}</span> {s.label}
+                        </span>
+                      ))}
+                      {Array.isArray(m.products) && m.products.length > 0 && (
+                        <span className="inline-flex items-center gap-0.5 text-[9.5px] font-semibold text-[#1b6dff]"><span className="mr-0.5 text-[#cbd5e1]">·</span>{m.products.length} match{m.products.length === 1 ? "" : "es"}</span>
+                      )}
+                    </div>
+                  )}
                   {!isUser && body === m.content && (
                     <div className="mt-1 flex items-center gap-2 pl-1">
                       {m.cited && <p className="flex items-center gap-1 text-[9.5px] text-[#94a3b8]"><span className="h-1 w-1 rounded-full bg-[#22c55e]" /> from live catalog · stock &amp; price at query time</p>}
@@ -530,7 +644,7 @@ export default function AssistantDrawer({ open, onClose, seedMessage = "" }) {
                   )}
                   {!isUser && Array.isArray(m.products) && m.products.length > 0 && (
                     <div className="mt-2.5 flex snap-x gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                      {m.products.map((p, j) => <ProductChip key={`${p.item_code}-${j}`} item={p} onOpen={openProduct} onAddToCart={addToCart} onFindDriver={findDriver} onAlternatives={alternatives} />)}
+                      {m.products.map((p, j) => <ProductChip key={`${p.item_code}-${j}`} item={p} query={m.query} onOpen={openProduct} onAddToCart={addToCart} onFindDriver={findDriver} onAlternatives={alternatives} />)}
                     </div>
                   )}
                 </div>
@@ -541,7 +655,7 @@ export default function AssistantDrawer({ open, onClose, seedMessage = "" }) {
           {sending && (
             <div className="ai-msg flex gap-2.5">
               <div className="mt-0.5 flex h-7 w-7 flex-none items-center justify-center rounded-full bg-gradient-to-br from-[#1b6dff] to-[#3f86ff] text-white"><AiGlyph size={14} /></div>
-              <div className="rounded-[14px] rounded-tl-[4px] border border-[#e8ecf3] bg-white px-2 py-1.5 shadow-[0_1px_2px_rgba(15,23,42,0.05)]"><TypingDots /></div>
+              <div className="rounded-[14px] rounded-tl-[4px] border border-[#e8ecf3] bg-white px-2.5 py-1 shadow-[0_1px_2px_rgba(15,23,42,0.05)]"><ThinkingStatus query={pendingQuery} /></div>
             </div>
           )}
         </div>
@@ -566,10 +680,10 @@ export default function AssistantDrawer({ open, onClose, seedMessage = "" }) {
           )
         )}
 
-        {/* Quick replies */}
-        {!sending && lastAssistantHasProducts && (
+        {/* Quick replies — context-aware, generated from the last results + question */}
+        {!sending && quickReplies.length > 0 && (
           <div className="flex flex-wrap gap-1.5 px-4 pb-1.5">
-            {QUICK_REPLIES.map((q) => (
+            {quickReplies.map((q) => (
               <button key={q} type="button" onClick={() => send(q)} className="rounded-full border border-[#e2e8f0] bg-white px-2.5 py-1 text-[11px] font-medium text-[#475569] transition hover:border-[#1b6dff] hover:text-[#1b6dff]">{q}</button>
             ))}
           </div>
