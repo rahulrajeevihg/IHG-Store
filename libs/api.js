@@ -1227,6 +1227,86 @@ export async function product_assistant_chat(message, history = []) {
     };
 }
 
+/* ── AI Assistant conversation history (server-side, per-user, in ERPNext) ── */
+export async function save_assistant_conversation({ conversation_id, title, messages, route }) {
+    const api = `/api/erp/api/method/igh_search.igh_search.api.save_assistant_conversation`;
+    const response = await fetch(api, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify({
+            conversation_id: conversation_id || "",
+            title: title || "",
+            messages: JSON.stringify(Array.isArray(messages) ? messages : []),
+            route: route || "",
+        }),
+        credentials: 'include',
+    });
+    const payload = await parseJsonResponseSafe(response, 'save_assistant_conversation');
+    return payload?.message || payload || {};
+}
+
+export async function list_assistant_conversations(limit = 30, offset = 0) {
+    const api = `/api/erp/api/method/igh_search.igh_search.api.list_assistant_conversations`;
+    const response = await fetch(api, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify({ limit: Number(limit || 30), offset: Number(offset || 0) }),
+        credentials: 'include',
+    });
+    const payload = await parseJsonResponseSafe(response, 'list_assistant_conversations');
+    const msg = payload?.message || payload || {};
+    return Array.isArray(msg?.conversations) ? msg.conversations : [];
+}
+
+export async function get_assistant_conversation(conversationId) {
+    const api = `/api/erp/api/method/igh_search.igh_search.api.get_assistant_conversation`;
+    const response = await fetch(api, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify({ conversation_id: conversationId || "" }),
+        credentials: 'include',
+    });
+    const payload = await parseJsonResponseSafe(response, 'get_assistant_conversation');
+    const msg = payload?.message || payload || {};
+    return {
+        conversation_id: msg?.conversation_id || conversationId || "",
+        title: msg?.title || "",
+        messages: Array.isArray(msg?.messages) ? msg.messages : [],
+        satisfaction: msg?.satisfaction || "",
+        found_required_data: msg?.found_required_data || "",
+        feedback_comment: msg?.feedback_comment || "",
+    };
+}
+
+export async function delete_assistant_conversation(conversationId) {
+    const api = `/api/erp/api/method/igh_search.igh_search.api.delete_assistant_conversation`;
+    const response = await fetch(api, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify({ conversation_id: conversationId || "" }),
+        credentials: 'include',
+    });
+    const payload = await parseJsonResponseSafe(response, 'delete_assistant_conversation');
+    return payload?.message || payload || {};
+}
+
+export async function submit_assistant_feedback({ conversation_id, satisfaction, found_required_data, comment, message_ratings }) {
+    const api = `/api/erp/api/method/igh_search.igh_search.api.submit_assistant_feedback`;
+    const body = { conversation_id: conversation_id || "" };
+    if (satisfaction !== undefined) body.satisfaction = satisfaction;
+    if (found_required_data !== undefined) body.found_required_data = found_required_data;
+    if (comment !== undefined) body.comment = comment;
+    if (message_ratings !== undefined) body.message_ratings = JSON.stringify(message_ratings || {});
+    const response = await fetch(api, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify(body),
+        credentials: 'include',
+    });
+    const payload = await parseJsonResponseSafe(response, 'submit_assistant_feedback');
+    return payload?.message || payload || {};
+}
+
 export async function get_brands_list(keys, data) {
     const api = `/api/erp/api/method/get_brands`;
     const response = await fetch(api, {

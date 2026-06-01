@@ -1,3 +1,32 @@
+# AI Assistant — server-side conversation history + feedback (2026-06-01)
+
+Goal: move the assistant chat history out of the browser (localStorage) into
+ERPNext, so the team gets a durable, per-user record of **every question reps
+ask**, **what the AI returned**, **whether they found the data they needed**, and
+**satisfaction** — i.e. a corpus for retraining / gap analysis. Verified on the
+dev bench (save/list/get/feedback/delete round-trip + ownership scoping).
+
+**New backend files (in `igh_search/igh_search/igh_search/`):**
+- `assistant_history.py` — `save_assistant_conversation`, `list_assistant_conversations`, `get_assistant_conversation`, `delete_assistant_conversation`, `submit_assistant_feedback`. All scoped to `frappe.session.user`; a user can't read/overwrite another's conversation (uses `ignore_permissions` after an explicit ownership check). Conversation is stored once per settled turn; messages capped at 60, JSON capped at 800k chars.
+- `doctype/ai_assistant_conversation/` — new DocType **AI Assistant Conversation** (`autoname: field:conversation_id`, module IGH Search). Queryable fields: `assistant_user`, `title`, `message_count`, `first_query`, `user_queries` (newline-joined), `product_codes` (surfaced SKUs), `satisfaction` (Satisfied/Partially/Not Satisfied), `found_required_data` (Yes/Partially/No), `feedback_comment`, `started_on`, `last_activity`, `route`, plus `messages_json` (full body for faithful UI reload; per-reply thumbs live inside it as `rating`). Permissions: System Manager.
+
+**API wrappers** appended to the inner `api.py` (`igh_search.igh_search.api`) — 5 thin `@frappe.whitelist()` wrappers mirroring the existing pattern (see `api_assistant_history_wrappers.py`). The outer `igh_search.api` auto-proxies via `__getattr__`.
+
+**Frontend (this repo):**
+- `libs/api.js` — `save_assistant_conversation` / `list_assistant_conversations` / `get_assistant_conversation` / `delete_assistant_conversation` / `submit_assistant_feedback`.
+- `components/Assistant/AssistantDrawer.jsx` — ERP is now the source of truth (localStorage kept as offline cache + instant paint). On open: list from ERP and merge; load a chat lazily fetches its body; debounced write-through save per settled turn; delete hits ERP too. Added per-reply 👍/👎 thumbs and a "Did you find what you needed?" satisfaction prompt → `submit_assistant_feedback`. History panel shows a satisfaction dot.
+
+**Deploy:**
+1. Backend: ship `assistant_history.py`, the `ai_assistant_conversation` doctype dir, and the 5 api wrappers (in the big inner `api.py`) to prod via GitHub → Frappe Cloud.
+2. **Run a migration on prod** (`bench --site <prodsite> migrate`, or Frappe Cloud's auto-migrate) — this creates the `tabAI Assistant Conversation` table. On the dev bench it was created with `bench --site site1.local reload-doc igh_search doctype ai_assistant_conversation`.
+3. `bench restart` (so the api workers pick up the new wrappers).
+4. Frontend: Vercel deploy. Degrades gracefully — if the ERP calls fail, the chat still works off localStorage.
+5. Smoke test as a logged-in rep: send a couple of messages → reopen chat (history persists across browsers) → thumbs + "found it?" prompt write to the DocType. Check the **AI Assistant Conversation** list in Desk to see queries + satisfaction.
+
+**Retraining/analytics:** export the DocType (or report on `satisfaction` / `found_required_data` / `user_queries`). Complements the existing **AI Product Search Event** table (per-search telemetry).
+
+---
+
 # AI Search Rebuild — Phase 0 + 1 + 2 + 3 (2026-05-30)
 
 > Updated for **Phase 3** (hybrid keyword + semantic vector search). The unified

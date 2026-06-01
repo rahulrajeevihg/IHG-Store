@@ -3,15 +3,34 @@ import { createPortal } from "react-dom";
 import { useRouter } from "next/router";
 import Image from "next/image";
 import { toast } from "react-toastify";
-import { check_Image, product_assistant_chat, insert_cart_items } from "@/libs/api";
+import {
+  check_Image, product_assistant_chat, insert_cart_items,
+  save_assistant_conversation, list_assistant_conversations,
+  get_assistant_conversation, delete_assistant_conversation, submit_assistant_feedback,
+} from "@/libs/api";
+import AssistantProductModal from "./AssistantProductModal";
 
 // Polished slide-over chat for the grounded Product Assistant. Brand AI accent is
 // the app's blue gradient (#1b6dff -> #3f86ff). Sends running history to
 // product_assistant_chat; renders reply (markdown) + grounded product cards with
 // inline actions. Features: typewriter reveal, voice input, copy, quick replies,
-// session persistence, citations, action buttons.
+// multi-conversation history, in-place product modal, citations, action buttons.
 
-const HISTORY_KEY = "ihg_assistant_history_v1";
+const CONV_KEY = "ihg_assistant_conversations_v1"; // [{id,title,messages,updatedAt}]
+const LEGACY_KEY = "ihg_assistant_history_v1"; // pre-multi-conversation single session
+const newId = () => `c${Date.now()}${Math.random().toString(36).slice(2, 6)}`;
+const titleFrom = (msgs) => {
+  const u = (msgs || []).find((m) => m.role === "user");
+  const t = (u?.content || "New chat").trim();
+  return t.length > 42 ? `${t.slice(0, 42)}…` : t;
+};
+const relTime = (ts) => {
+  const s = Math.max(0, Math.round((Date.now() - (ts || 0)) / 1000));
+  if (s < 60) return "just now";
+  const mn = Math.round(s / 60); if (mn < 60) return `${mn}m ago`;
+  const h = Math.round(mn / 60); if (h < 24) return `${h}h ago`;
+  const d = Math.round(h / 24); return d < 7 ? `${d}d ago` : new Date(ts).toLocaleDateString();
+};
 const SUGGESTIONS = [
   { icon: "🔌", text: "Is a driver required for LB2111.W.830.WWH.36?" },
   { icon: "⚡", text: "Find a suitable driver for LB2100.W.830.WBK.36" },
@@ -135,6 +154,11 @@ function TypingDots() {
 export default function AssistantDrawer({ open, onClose, seedMessage = "" }) {
   const router = useRouter();
   const [messages, setMessages] = useState([]); // {role, content, products?, displayed?, cited?}
+  const [conversations, setConversations] = useState([]); // saved sessions (ERP-backed, localStorage cached)
+  const [activeId, setActiveId] = useState(null);
+  const [showHistory, setShowHistory] = useState(false);
+  const [convFeedback, setConvFeedback] = useState({ satisfaction: "", found_required_data: "" });
+  const [modalProduct, setModalProduct] = useState(null);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [mounted, setMounted] = useState(false);
@@ -143,6 +167,21 @@ export default function AssistantDrawer({ open, onClose, seedMessage = "" }) {
   const taRef = useRef(null);
   const seededRef = useRef(false);
   const recognitionRef = useRef(null);
+  const activeIdRef = useRef(null);
+  const erpSaveTimer = useRef(null);
+
+  useEffect(() => { activeIdRef.current = activeId; }, [activeId]);
+
+  /* Debounced write-through to ERPNext (server is source of truth; localStorage is cache) */
+  const queueErpSave = (id, msgs) => {
+    if (typeof window === "undefined" || !id || !msgs || !msgs.length) return;
+    const slim = msgs.map(({ role, content, products, rating }) => ({ role, content, products: products || [], ...(rating ? { rating } : {}) }));
+    const title = titleFrom(slim);
+    if (erpSaveTimer.current) clearTimeout(erpSaveTimer.current);
+    erpSaveTimer.current = setTimeout(() => {
+      save_assistant_conversation({ conversation_id: id, title, messages: slim, route: typeof window !== "undefined" ? window.location.pathname : "" }).catch(() => {});
+    }, 600);
+  };
 
   /* Scroll-lock while open */
   useEffect(() => {
@@ -153,23 +192,65 @@ export default function AssistantDrawer({ open, onClose, seedMessage = "" }) {
     return () => { document.body.style.overflow = prev; setMounted(false); cancelAnimationFrame(id); };
   }, [open]);
 
-  /* Restore last session on open */
+  /* Load saved conversations + most-recent session on open */
   useEffect(() => {
     if (!open || typeof window === "undefined") return;
-    try {
-      const saved = JSON.parse(localStorage.getItem(HISTORY_KEY) || "[]");
-      if (Array.isArray(saved) && saved.length) setMessages(saved.map((m) => ({ ...m, displayed: m.content })));
-    } catch (_) {}
+    let convs = [];
+    try { convs = JSON.parse(localStorage.getItem(CONV_KEY) || "[]"); } catch (_) {}
+    if (!Array.isArray(convs)) convs = [];
+    if (!convs.length) {
+      // one-time migration of the old single-session history
+      try {
+        const legacy = JSON.parse(localStorage.getItem(LEGACY_KEY) || "[]");
+        if (Array.isArray(legacy) && legacy.length) convs = [{ id: newId(), title: titleFrom(legacy), messages: legacy, updatedAt: Date.now() }];
+      } catch (_) {}
+    }
+    setConversations(convs);
+    if (convs.length) {
+      const top = convs[0];
+      setActiveId(top.id); activeIdRef.current = top.id;
+      setMessages((top.messages || []).map((m) => ({ ...m, displayed: m.content })));
+      setConvFeedback({ satisfaction: top.satisfaction || "", found_required_data: top.found_required_data || "" });
+    } else {
+      setActiveId(null); activeIdRef.current = null; setMessages([]);
+      setConvFeedback({ satisfaction: "", found_required_data: "" });
+    }
+
+    // Pull the authoritative list from ERPNext and merge (keep any locally-cached messages by id).
+    list_assistant_conversations(30, 0).then((rows) => {
+      if (!Array.isArray(rows) || !rows.length) return;
+      setConversations((prev) => {
+        const cachedById = Object.fromEntries(prev.map((c) => [c.id, c]));
+        return rows.map((r) => ({
+          id: r.conversation_id,
+          title: r.title || "New chat",
+          message_count: Number(r.message_count || 0),
+          satisfaction: r.satisfaction || "",
+          found_required_data: r.found_required_data || "",
+          updatedAt: r.last_activity ? new Date(r.last_activity).getTime() : Date.now(),
+          messages: cachedById[r.conversation_id]?.messages, // lazy-loaded on open if absent
+        }));
+      });
+    }).catch(() => {});
   }, [open]);
 
-  /* Persist session */
+  /* Persist the active conversation when messages settle (skip mid-typewriter) */
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    try {
-      const slim = messages.slice(-20).map(({ role, content, products }) => ({ role, content, products: products || [] }));
-      localStorage.setItem(HISTORY_KEY, JSON.stringify(slim));
-    } catch (_) {}
-  }, [messages]);
+    if (typeof window === "undefined" || !open || !messages.length) return;
+    const last = messages[messages.length - 1];
+    if (last && last.role === "assistant" && last.displayed !== undefined && last.displayed !== last.content) return;
+    let id = activeIdRef.current;
+    if (!id) { id = newId(); activeIdRef.current = id; setActiveId(id); }
+    const slim = messages.map(({ role, content, products }) => ({ role, content, products: products || [] }));
+    const entry = { id, title: titleFrom(slim), messages: slim, updatedAt: Date.now() };
+    setConversations((prev) => {
+      const next = [entry, ...prev.filter((c) => c.id !== id)].slice(0, 30);
+      try { localStorage.setItem(CONV_KEY, JSON.stringify(next)); } catch (_) {}
+      return next;
+    });
+    queueErpSave(id, messages);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [messages, open]);
 
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -246,11 +327,12 @@ export default function AssistantDrawer({ open, onClose, seedMessage = "" }) {
     recognitionRef.current = rec; setListening(true); rec.start();
   };
 
-  const openProduct = (item) => { if (item?.item_code) { router.push(`/pr/${encodeURIComponent(item.item_code)}`); onClose?.(); } };
-  const addToCart = async (item) => {
+  const openProduct = (item) => { if (item?.item_code) setModalProduct(item); };
+  const openProductPage = (item) => { if (item?.item_code) { router.push(`/pr/${encodeURIComponent(item.item_code)}`); onClose?.(); } };
+  const addToCart = async (item, qty = 1) => {
     try {
-      const r = await insert_cart_items({ item_code: item.item_code, qty: 1 });
-      if ((r || {}).status === "success") { toast.success(`Added ${item.item_code} to quote`); window.dispatchEvent(new Event("cart-updated")); }
+      const r = await insert_cart_items({ item_code: item.item_code, qty });
+      if ((r || {}).status === "success") { toast.success(`Added ${qty} × ${item.item_code} to quote`); window.dispatchEvent(new Event("cart-updated")); }
       else toast.error((r || {}).message || "Could not add to cart");
     } catch (_) { toast.error("Could not add to cart"); }
   };
@@ -258,7 +340,58 @@ export default function AssistantDrawer({ open, onClose, seedMessage = "" }) {
   const alternatives = (item) => send(`Show alternatives for ${item.item_code}`);
 
   const copyMessage = (text) => { try { navigator.clipboard.writeText(text); toast.success("Copied"); } catch (_) {} };
-  const resetChat = () => { setMessages([]); setInput(""); try { localStorage.removeItem(HISTORY_KEY); } catch (_) {} };
+
+  /* ── Conversation management ── */
+  const newChat = () => {
+    setActiveId(null); activeIdRef.current = null; setMessages([]); setInput("");
+    setConvFeedback({ satisfaction: "", found_required_data: "" }); setShowHistory(false);
+  };
+  const loadConversation = async (c) => {
+    setActiveId(c.id); activeIdRef.current = c.id; setShowHistory(false);
+    setConvFeedback({ satisfaction: c.satisfaction || "", found_required_data: c.found_required_data || "" });
+    if (Array.isArray(c.messages) && c.messages.length) {
+      setMessages(c.messages.map((m) => ({ ...m, displayed: m.content })));
+      return;
+    }
+    // Came from the ERP list without a cached body — fetch the full conversation.
+    setMessages([]);
+    try {
+      const full = await get_assistant_conversation(c.id);
+      if (activeIdRef.current !== c.id) return;
+      setMessages((full.messages || []).map((m) => ({ ...m, displayed: m.content })));
+      setConvFeedback({ satisfaction: full.satisfaction || "", found_required_data: full.found_required_data || "" });
+    } catch (_) {}
+  };
+  const deleteConversation = (id, e) => {
+    e?.stopPropagation();
+    setConversations((prev) => {
+      const next = prev.filter((c) => c.id !== id);
+      try { localStorage.setItem(CONV_KEY, JSON.stringify(next)); } catch (_) {}
+      return next;
+    });
+    delete_assistant_conversation(id).catch(() => {});
+    if (activeIdRef.current === id) { setActiveId(null); activeIdRef.current = null; setMessages([]); setConvFeedback({ satisfaction: "", found_required_data: "" }); }
+  };
+
+  /* ── Feedback (satisfaction + per-reply thumbs) — server-side for retraining ── */
+  const rateMessage = (index, rating) => {
+    setMessages((prev) => {
+      const copy = [...prev];
+      if (copy[index]) copy[index] = { ...copy[index], rating: copy[index].rating === rating ? "" : rating };
+      return copy;
+    });
+    const id = activeIdRef.current;
+    if (id) {
+      const applied = (messages[index] && messages[index].rating === rating) ? "" : rating;
+      submit_assistant_feedback({ conversation_id: id, message_ratings: { [index]: applied } }).catch(() => {});
+    }
+  };
+  const setConversationFeedback = (satisfaction, found_required_data) => {
+    setConvFeedback({ satisfaction, found_required_data });
+    const id = activeIdRef.current;
+    if (id) submit_assistant_feedback({ conversation_id: id, satisfaction, found_required_data }).catch(() => {});
+    setConversations((prev) => prev.map((c) => (c.id === id ? { ...c, satisfaction, found_required_data } : c)));
+  };
 
   if (!open || typeof document === "undefined") return null;
   const lastAssistantHasProducts = (() => { const a = [...messages].reverse().find((m) => m.role === "assistant"); return a && a.products && a.products.length > 0; })();
@@ -289,8 +422,12 @@ export default function AssistantDrawer({ open, onClose, seedMessage = "" }) {
               </div>
             </div>
             <div className="flex items-center gap-1">
+              <button type="button" onClick={() => setShowHistory((s) => !s)} title="Chat history" className={`relative rounded-lg p-2 transition hover:bg-white/15 hover:text-white ${showHistory ? "bg-white/15 text-white" : "text-white/80"}`}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 3v5h5" /><path d="M3.05 13A9 9 0 106 5.3L3 8" /><path d="M12 7v5l3 2" /></svg>
+                {conversations.length > 0 && <span className="absolute right-1 top-1 flex h-3.5 min-w-[14px] items-center justify-center rounded-full bg-white px-1 text-[8px] font-bold text-[#1b6dff]">{conversations.length}</span>}
+              </button>
               {messages.length > 0 && (
-                <button type="button" onClick={resetChat} title="New chat" className="rounded-lg p-2 text-white/80 transition hover:bg-white/15 hover:text-white">
+                <button type="button" onClick={newChat} title="New chat" className="rounded-lg p-2 text-white/80 transition hover:bg-white/15 hover:text-white">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
                 </button>
               )}
@@ -300,6 +437,49 @@ export default function AssistantDrawer({ open, onClose, seedMessage = "" }) {
             </div>
           </div>
         </div>
+
+        {/* History panel */}
+        {showHistory && (
+          <div className="absolute inset-x-0 top-[64px] bottom-0 z-20 flex flex-col bg-[#f7f9fc]" style={{ animation: "aiMsgIn .2s ease-out both" }}>
+            <div className="flex items-center justify-between border-b border-[#e8ecf3] bg-white px-4 py-2.5">
+              <p className="text-[12.5px] font-semibold text-[#0f172a]">Chat history</p>
+              <div className="flex items-center gap-1.5">
+                <button type="button" onClick={newChat} className="rounded-[8px] bg-[#0f172a] px-2.5 py-1 text-[11px] font-semibold text-white transition hover:bg-[#1e293b]">+ New chat</button>
+                <button type="button" onClick={() => setShowHistory(false)} title="Back" className="rounded-lg p-1.5 text-[#94a3b8] transition hover:bg-[#eef2f7] hover:text-[#475569]">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
+                </button>
+              </div>
+            </div>
+            <div className="flex-1 space-y-1.5 overflow-y-auto px-3 py-3">
+              {conversations.length === 0 ? (
+                <div className="mt-10 text-center text-[12px] text-[#94a3b8]">No saved chats yet.</div>
+              ) : (
+                conversations.map((c) => {
+                  const isActive = c.id === activeId;
+                  const preview = (c.messages || []).filter((m) => m.role === "assistant").slice(-1)[0]?.content || "";
+                  const count = (c.messages || []).length || Number(c.message_count || 0);
+                  const sat = c.satisfaction || "";
+                  const satTone = sat === "Satisfied" ? "bg-[#22c55e]" : sat === "Partially" ? "bg-[#f59e0b]" : sat === "Not Satisfied" ? "bg-[#ef4444]" : "";
+                  return (
+                    <div key={c.id} onClick={() => loadConversation(c)} className={`group/conv cursor-pointer rounded-[12px] border px-3 py-2.5 transition ${isActive ? "border-[#1b6dff] bg-[#eef5ff]" : "border-[#e8ecf3] bg-white hover:border-[#1b6dff]"}`}>
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="line-clamp-1 flex-1 text-[12.5px] font-semibold text-[#0f172a]">{c.title}</p>
+                        <button type="button" onClick={(e) => deleteConversation(c.id, e)} title="Delete" className="rounded-md p-1 text-[#cbd5e1] opacity-0 transition group-hover/conv:opacity-100 hover:bg-[#fee2e2] hover:text-[#dc2626]">
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m2 0v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6" /></svg>
+                        </button>
+                      </div>
+                      {preview && <p className="mt-0.5 line-clamp-1 text-[11px] text-[#94a3b8]">{preview.replace(/[*`#]/g, "")}</p>}
+                      <p className="mt-1 flex items-center gap-1.5 text-[10px] text-[#cbd5e1]">
+                        {satTone && <span className={`h-1.5 w-1.5 rounded-full ${satTone}`} title={sat} />}
+                        {relTime(c.updatedAt)}{count ? ` · ${count} messages` : ""}
+                      </p>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Messages */}
         <div ref={scrollRef} className="flex-1 space-y-4 overflow-y-auto px-4 py-5">
@@ -335,8 +515,18 @@ export default function AssistantDrawer({ open, onClose, seedMessage = "" }) {
                       </button>
                     )}
                   </div>
-                  {!isUser && m.cited && body === m.content && (
-                    <p className="mt-1 flex items-center gap-1 pl-1 text-[9.5px] text-[#94a3b8]"><span className="h-1 w-1 rounded-full bg-[#22c55e]" /> from live catalog · stock &amp; price at query time</p>
+                  {!isUser && body === m.content && (
+                    <div className="mt-1 flex items-center gap-2 pl-1">
+                      {m.cited && <p className="flex items-center gap-1 text-[9.5px] text-[#94a3b8]"><span className="h-1 w-1 rounded-full bg-[#22c55e]" /> from live catalog · stock &amp; price at query time</p>}
+                      <div className="ml-auto flex items-center gap-0.5">
+                        <button type="button" onClick={() => rateMessage(i, "up")} title="Helpful" className={`rounded-md p-1 transition ${m.rating === "up" ? "bg-[#dcfce7] text-[#15803d]" : "text-[#cbd5e1] hover:bg-[#f1f5f9] hover:text-[#475569]"}`}>
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M7 10v12" /><path d="M15 5.88L14 10h5.83a2 2 0 011.92 2.56l-2.33 8A2 2 0 0117.5 22H4a2 2 0 01-2-2v-8a2 2 0 012-2h2.76a2 2 0 001.79-1.11L12 2a3.13 3.13 0 013 3.88z" /></svg>
+                        </button>
+                        <button type="button" onClick={() => rateMessage(i, "down")} title="Not helpful" className={`rounded-md p-1 transition ${m.rating === "down" ? "bg-[#fee2e2] text-[#b91c1c]" : "text-[#cbd5e1] hover:bg-[#f1f5f9] hover:text-[#475569]"}`}>
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 14V2" /><path d="M9 18.12L10 14H4.17a2 2 0 01-1.92-2.56l2.33-8A2 2 0 016.5 2H20a2 2 0 012 2v8a2 2 0 01-2 2h-2.76a2 2 0 00-1.79 1.11L12 22a3.13 3.13 0 01-3-3.88z" /></svg>
+                        </button>
+                      </div>
+                    </div>
                   )}
                   {!isUser && Array.isArray(m.products) && m.products.length > 0 && (
                     <div className="mt-2.5 flex snap-x gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
@@ -355,6 +545,26 @@ export default function AssistantDrawer({ open, onClose, seedMessage = "" }) {
             </div>
           )}
         </div>
+
+        {/* Conversation satisfaction — captured server-side for retraining/gap analysis */}
+        {!sending && messages.filter((m) => m.role === "assistant" && !m.error).length >= 2 && (
+          convFeedback.satisfaction ? (
+            <div className="mx-4 mb-1.5 flex items-center gap-1.5 rounded-[12px] border border-[#dcfce7] bg-[#f0fdf4] px-3 py-1.5 text-[11px] font-medium text-[#15803d]">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg>
+              Thanks — feedback saved ({convFeedback.satisfaction})
+              <button type="button" onClick={() => setConvFeedback({ satisfaction: "", found_required_data: "" })} className="ml-auto text-[10px] font-semibold text-[#15803d]/70 underline hover:text-[#15803d]">change</button>
+            </div>
+          ) : (
+            <div className="mx-4 mb-1.5 flex items-center gap-2 rounded-[12px] border border-[#e8ecf3] bg-white px-3 py-2">
+              <span className="text-[11.5px] font-medium text-[#475569]">Did you find what you needed?</span>
+              <div className="ml-auto flex items-center gap-1">
+                <button type="button" onClick={() => setConversationFeedback("Satisfied", "Yes")} className="rounded-full bg-[#f0fdf4] px-2.5 py-1 text-[11px] font-semibold text-[#15803d] transition hover:bg-[#dcfce7]">Yes</button>
+                <button type="button" onClick={() => setConversationFeedback("Partially", "Partially")} className="rounded-full bg-[#fff7ed] px-2.5 py-1 text-[11px] font-semibold text-[#c2410c] transition hover:bg-[#fed7aa]">Partly</button>
+                <button type="button" onClick={() => setConversationFeedback("Not Satisfied", "No")} className="rounded-full bg-[#fef2f2] px-2.5 py-1 text-[11px] font-semibold text-[#b91c1c] transition hover:bg-[#fee2e2]">No</button>
+              </div>
+            </div>
+          )
+        )}
 
         {/* Quick replies */}
         {!sending && lastAssistantHasProducts && (
@@ -382,6 +592,17 @@ export default function AssistantDrawer({ open, onClose, seedMessage = "" }) {
           <p className="mt-1.5 text-center text-[10px] text-[#94a3b8]">AI can make mistakes — verify specs before quoting.</p>
         </div>
       </div>
+
+      {modalProduct && (
+        <AssistantProductModal
+          product={modalProduct}
+          onClose={() => setModalProduct(null)}
+          onAddToCart={addToCart}
+          onFindDriver={findDriver}
+          onAlternatives={alternatives}
+          onOpenFull={openProductPage}
+        />
+      )}
     </div>,
     document.body
   );
