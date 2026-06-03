@@ -1,3 +1,24 @@
+# AI Chat — performance + recall fix (2026-06-01)
+
+`product_assistant.py` only. The `search_products` tool used to call the full
+`ai_search_products_v2` pipeline on every turn — a **second nested intent LLM
+call** + the **3-stage relaxation loop** + a **stock reconcile per search** — so a
+single chat turn made ~3 OpenAI calls and up to 4 Typesense+reconcile passes
+(11–16s). It also defaulted `in_stock_only=true`, hiding good out-of-stock matches
+(→ 0 results on conceptual queries).
+
+Fix: new `_lean_search()` — deterministic intent (no LLM) → one hybrid search →
+tier-2 (demote hard specs) → tier-3 (pure semantic, no filters) fallbacks that
+early-exit; `in_stock_only` is opt-in + prefer-don't-exclude. Verified on dev:
+~3–7s (was 11–16s); conceptual queries that returned 0 now ground correctly.
+
+**Deploy:** push `product_assistant.py` (no migration). **IMPORTANT:** the tier-3
+conceptual-recall fallback only helps if hybrid is on in prod — set
+`igh_search_hybrid_enabled: 1` in the prod `site_config.json` (Phase 3 go-live).
+The speed fix and the in-stock fix work regardless.
+
+---
+
 # AI Assistant — server-side conversation history + feedback (2026-06-01)
 
 Goal: move the assistant chat history out of the browser (localStorage) into
