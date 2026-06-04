@@ -178,6 +178,12 @@ export default function V2SearchPage({
   const [density, setDensity] = useState("comfortable");
   const [aiSession, setAiSession] = useState(null);
   const [assistantOpen, setAssistantOpen] = useState(false);
+  const [assistantSeed, setAssistantSeed] = useState("");
+  const handleSimilar = (doc) => {
+    if (!doc?.item_code) return;
+    setAssistantSeed(`Show products similar to ${doc.item_code}`);
+    setAssistantOpen(true);
+  };
   const [addModalProduct, setAddModalProduct] = useState(null);
   const [cartModalOpen, setCartModalOpen] = useState(false);
   const [detailModalOpen, setDetailModalOpen] = useState(false);
@@ -1834,6 +1840,7 @@ export default function V2SearchPage({
                         onShortlist={addToShortlist}
                         onWishlist={addToWishlist}
                         onReportIssue={handleOpenIssueModal}
+                        onSimilar={handleSimilar}
                         isWishlisted={isWishlisted(document)}
                         isShortlisted={isShortlisted(document)}
                         includeInactive={searchState.include_inactive}
@@ -1950,7 +1957,7 @@ export default function V2SearchPage({
         </span>
         <span className="hidden sm:inline">Ask AI</span>
       </button>
-      <AssistantDrawer open={assistantOpen} onClose={() => setAssistantOpen(false)} />
+      <AssistantDrawer open={assistantOpen} onClose={() => setAssistantOpen(false)} seedMessage={assistantSeed} />
     </div>
   );
 }

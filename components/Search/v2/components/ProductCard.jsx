@@ -116,6 +116,11 @@ export default function ProductCard({
           <IconBtn data-tour={isTourAnchor ? "product-card-hover-report" : undefined} label="Report issue" onClick={(e) => { e.stopPropagation(); onReportIssue && onReportIssue(document); }}>
             <FlagIcon />
           </IconBtn>
+          {onSimilar && (
+            <IconBtn label="Find similar" onClick={(e) => { e.stopPropagation(); onSimilar(document); }}>
+              <SparkIcon />
+            </IconBtn>
+          )}
         </div>
       </div>
 
@@ -382,6 +387,13 @@ function FlagIcon() {
     <svg className="h-[10px] w-[10px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
       <path d="M5 3v18" strokeLinecap="round" />
       <path d="M5 4h10l-1.8 4L15 12H5" strokeLinejoin="round" />
+    </svg>
+  );
+}
+function SparkIcon() {
+  return (
+    <svg className="h-[10px] w-[10px]" viewBox="0 0 24 24" fill="currentColor">
+      <path d="M12 2.5l1.7 4.1 4.1 1.7-4.1 1.7L12 14.1l-1.7-4.1L6.2 8.3l4.1-1.7L12 2.5z" />
     </svg>
   );
 }
