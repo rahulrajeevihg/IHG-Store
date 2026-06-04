@@ -1307,6 +1307,57 @@ export async function submit_assistant_feedback({ conversation_id, satisfaction,
     return payload?.message || payload || {};
 }
 
+/* ── Ambient recommendation engine (Part B): find-similar, rails, promotion ── */
+export async function get_recommendations(surface, itemCode = "", limit = 6) {
+    const api = `/api/erp/api/method/igh_search.igh_search.api.recommend`;
+    const response = await fetch(api, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify({ surface: surface || "product", item_code: itemCode || "", limit: Number(limit || 6) }),
+        credentials: 'include',
+    });
+    const payload = await parseJsonResponseSafe(response, 'get_recommendations');
+    const msg = payload?.message || payload || {};
+    return { surface: msg?.surface || surface, item_code: msg?.item_code || itemCode, blocks: msg?.blocks || {} };
+}
+
+export async function find_similar_products(itemCode, limit = 8) {
+    const api = `/api/erp/api/method/igh_search.igh_search.api.find_similar_products`;
+    const response = await fetch(api, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify({ item_code: itemCode || "", limit: Number(limit || 8) }),
+        credentials: 'include',
+    });
+    const payload = await parseJsonResponseSafe(response, 'find_similar_products');
+    const msg = payload?.message || payload || {};
+    return Array.isArray(msg?.results) ? msg.results : [];
+}
+
+export async function get_promotion_picks(limit = 8) {
+    const api = `/api/erp/api/method/igh_search.igh_search.api.get_promotion_picks`;
+    const response = await fetch(api, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify({ limit: Number(limit || 8) }),
+        credentials: 'include',
+    });
+    const payload = await parseJsonResponseSafe(response, 'get_promotion_picks');
+    const msg = payload?.message || payload || {};
+    return Array.isArray(msg?.picks) ? msg.picks : [];
+}
+
+export async function log_suggestion({ surface, block_type, item_code, action, query }) {
+    try {
+        await fetch(`/api/erp/api/method/igh_search.igh_search.api.log_suggestion`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+            body: JSON.stringify({ surface, block_type, item_code: item_code || "", action, query: query || "" }),
+            credentials: 'include',
+        });
+    } catch (_) { /* fire-and-forget telemetry */ }
+}
+
 export async function get_brands_list(keys, data) {
     const api = `/api/erp/api/method/get_brands`;
     const response = await fetch(api, {

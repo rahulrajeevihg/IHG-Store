@@ -6,6 +6,7 @@ import Dirham from '../Common/Dirham';
 import Tabs from '../Common/Tabs';
 import RelatedIntelligenceSections from './RelatedIntelligenceSections';
 import DriverCompatibilitySection from './DriverCompatibilitySection';
+import AiRecommendationRail from '../Ai/AiRecommendationRail';
 import {
     formatHappyCustomers,
     formatLifetimeSoldQty,
@@ -447,6 +448,7 @@ const ProductDetail = ({ hide, visible, productData }) => {
                                 </div>
                                 <div className="px-5 lg:px-9">
                                     <DriverCompatibilitySection itemCode={data.item_code} />
+                                    <AiRecommendationRail mode="similar" itemCode={data.item_code} surface="product" subtitle="Closest matches by spec & design" />
                                 </div>
                                 <RelatedIntelligenceSections
                                     itemCode={data.item_code}
