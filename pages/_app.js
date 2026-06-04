@@ -26,6 +26,7 @@ import settig from '@/libs/websiteSettings'
 import ScrollToTopButton from '@/components/Common/ScrollToTop';
 import Image from 'next/image';
 const ProductDetail = dynamic(() => import('@/components/Detail/ProductDetail'))
+const GlobalAssistant = dynamic(() => import('@/components/Ai/GlobalAssistant'))
 import { enforceSessionTimeout, hasAuthSession, touchSessionActivity } from '@/libs/auth';
 // console.log('setting', settig.message)
 
@@ -470,6 +471,9 @@ function App({ Component, pageProps }) {
                   <Image height={25} width={25} className='size-[25px]' src={'/scanner-fixed.svg'} alt="Scanner" ></Image>
                 </div>
               </div>}
+
+              {/* App-wide AI colleague — every page except /list (own launcher), login, maintenance */}
+              {router.pathname != "/login" && router.pathname != "/maintenance" && router.pathname != "/list" && <GlobalAssistant />}
 
 
               <div id='footer'>

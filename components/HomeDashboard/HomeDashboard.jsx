@@ -9,6 +9,7 @@ import {
   QuickActionIcon, CategoryIcon, InsightIcon,
 } from "./icons";
 import styles from "./HomeDashboard.module.scss";
+import AiRecommendationRail from "../Ai/AiRecommendationRail";
 
 const AED = new Intl.NumberFormat("en-AE", {
   style: "currency", currency: "AED", minimumFractionDigits: 0, maximumFractionDigits: 0,
@@ -475,6 +476,8 @@ export default function HomeDashboard() {
           </Panel>
 
           <ProductShowcase lists={productLists} loading={loading} error={error} onRetry={refreshAll} onNavigate={go} productRoute={productRoute} onSeeAll={() => go("/search")} />
+
+          <AiRecommendationRail mode="promotion" surface="home" subtitle="Overstock & featured stock to move today" />
         </div>
 
         {/* ══════════ ZONE: MY PERFORMANCE ══════════ */}
