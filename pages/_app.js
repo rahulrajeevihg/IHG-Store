@@ -28,6 +28,7 @@ import Image from 'next/image';
 const ProductDetail = dynamic(() => import('@/components/Detail/ProductDetail'))
 const GlobalAssistant = dynamic(() => import('@/components/Ai/GlobalAssistant'))
 const NudgeManager = dynamic(() => import('@/components/Ai/NudgeManager'), { ssr: false })
+const PromotionSpotlight = dynamic(() => import('@/components/Ai/PromotionSpotlight'), { ssr: false })
 import { enforceSessionTimeout, hasAuthSession, touchSessionActivity } from '@/libs/auth';
 // console.log('setting', settig.message)
 
@@ -477,6 +478,8 @@ function App({ Component, pageProps }) {
               {router.pathname != "/login" && router.pathname != "/maintenance" && router.pathname != "/list" && <GlobalAssistant />}
               {/* Governed proactive nudges (one at a time, frequency-capped) */}
               {router.pathname != "/login" && router.pathname != "/maintenance" && !hideGlobalChrome && <NudgeManager />}
+              {/* Recurring "picks to push" merchandising spotlight (promotion engine surface) */}
+              {router.pathname != "/login" && router.pathname != "/maintenance" && router.pathname != "/seller/[login]" && <PromotionSpotlight />}
 
 
               <div id='footer'>

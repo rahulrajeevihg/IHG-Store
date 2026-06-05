@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/router";
-import { get_promotion_picks, log_suggestion } from "@/libs/api";
+import { log_suggestion } from "@/libs/api";
 
 // Governed proactive nudges (Part B / B4c). Deliberately restrained so reps don't
 // abandon the tool: at most ONE nudge per app load, a hard frequency cap, per-rep
@@ -20,20 +20,11 @@ function readJSON(key) {
 }
 
 // Each source: async () => nudge | null. Keep cheap (cached Typesense / rep data).
-const NUDGE_SOURCES = [
-  async (router) => {
-    const picks = await get_promotion_picks(3).catch(() => []);
-    if (!picks || picks.length < 2) return null;
-    return {
-      key: "clearance",
-      icon: "🏷️",
-      title: `${picks.length} items to move today`,
-      body: "Overstock & featured stock worth putting in front of customers.",
-      cta: "Show picks",
-      onCta: () => router.push("/"),
-    };
-  },
-];
+// NOTE: promotion/clearance now has its own dedicated surface (PromotionSpotlight, the
+// recurring picks gallery), so it's intentionally NOT a nudge source here — otherwise
+// reps would get the same overstock push twice. Add future high-value, NON-promotion
+// sources here (e.g. "this fixture needs a driver", "follow up on last week's quote").
+const NUDGE_SOURCES = [];
 
 export default function NudgeManager() {
   const router = useRouter();
