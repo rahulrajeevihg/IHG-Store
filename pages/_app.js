@@ -27,6 +27,7 @@ import ScrollToTopButton from '@/components/Common/ScrollToTop';
 import Image from 'next/image';
 const ProductDetail = dynamic(() => import('@/components/Detail/ProductDetail'))
 const GlobalAssistant = dynamic(() => import('@/components/Ai/GlobalAssistant'))
+const NudgeManager = dynamic(() => import('@/components/Ai/NudgeManager'), { ssr: false })
 import { enforceSessionTimeout, hasAuthSession, touchSessionActivity } from '@/libs/auth';
 // console.log('setting', settig.message)
 
@@ -474,6 +475,8 @@ function App({ Component, pageProps }) {
 
               {/* App-wide AI colleague — every page except /list (own launcher), login, maintenance */}
               {router.pathname != "/login" && router.pathname != "/maintenance" && router.pathname != "/list" && <GlobalAssistant />}
+              {/* Governed proactive nudges (one at a time, frequency-capped) */}
+              {router.pathname != "/login" && router.pathname != "/maintenance" && !hideGlobalChrome && <NudgeManager />}
 
 
               <div id='footer'>
