@@ -193,7 +193,7 @@ export default function PromotionSpotlight() {
           <p className="font-mono text-[11px] font-semibold text-[#0f172a]">{item?.item_code || "-"}</p>
           <p className="mt-0.5 line-clamp-2 min-h-[30px] text-[12px] leading-[1.35] text-[#475569]">{item?.item_name || "-"}</p>
           <div className="mt-2 flex items-center gap-3">
-            {rate > 0 ? <span className="text-[15px] font-bold text-[#0f172a]">₹{rate.toFixed(2)}</span> : null}
+            {rate > 0 ? <span className="text-[15px] font-bold text-[#0f172a]">AED{rate.toFixed(2)}</span> : null}
             {item?.stock != null ? <span className="text-[10.5px] font-medium text-[#94a3b8]">{Number(item.stock)} in stock</span> : null}
             <div className="ml-auto flex items-center gap-2">
               <button type="button" onClick={() => viewProduct(item)} className="rounded-[9px] border border-[#e2e8f0] px-3 py-1.5 text-[11.5px] font-semibold text-[#0f172a] transition hover:bg-[#f8fafc]">View product</button>

@@ -7720,8 +7720,8 @@
         },
         "cancel_order_days": 5,
         "collecting_the_bank_details": 0,
-        "currency": "INR",
-        "currency_symbol": "₹",
+        "currency": "AED",
+        "currency_symbol": "AED",
         "customers_who_bought": 1,
         "default_country": "India",
         "default_footer": {
