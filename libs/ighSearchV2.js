@@ -1178,9 +1178,11 @@ export const queryFromState = (state, isSystemManager = false) => {
     });
   });
 
-  if (safeState.filters?.in_stock) {
-    params.set("in_stock", "1");
-  }
+  // in_stock defaults to TRUE in DEFAULT_V2_STATE, and stateFromQuery falls back
+  // to that default when the param is absent. So omitting it when false makes the
+  // round-trip read it back as "on" — silently re-checking the box after the user
+  // turns it off. Always serialize it so the "off" state survives a refresh.
+  params.set("in_stock", safeState.filters?.in_stock ? "1" : "0");
   if (safeState.filters?.show_promotion) {
     params.set("show_promotion", "1");
   }

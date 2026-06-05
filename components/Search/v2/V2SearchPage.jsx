@@ -29,6 +29,7 @@ import {
   trackAiSearchShortlist,
 } from "@/libs/ighSearchV2";
 import { getV2Events, logV2Event } from "@/libs/ighSearchV2Metrics";
+import { holdRealtimePolling } from "@/libs/realtimeQuery";
 import {
   delete_cart_items,
   continueGuidedAiSearch,
@@ -76,6 +77,17 @@ const DENSITY_STORAGE_KEY = "v2:density";
 const DEV_MODE = process.env.NODE_ENV !== "production";
 const LIVE_SEARCH_DEBOUNCE_MS = 320;
 const SEARCH_EXECUTE_DEBOUNCE_MS = 220;
+// Client-side result cache. The upstream search (erp.ihgind.com) has multi-second,
+// high-variance latency, so every *new* filter combo is a slow cache-miss. Caching
+// responses by request fingerprint makes revisiting a combo (toggling a filter
+// off/on, paginating back, clearing a chip) instant instead of re-hitting upstream.
+// Bounded by a short TTL so stock/price stay reasonably fresh.
+const SEARCH_RESPONSE_CACHE_TTL_MS = 120 * 1000;
+const SEARCH_RESPONSE_CACHE_MAX = 60;
+// While a search is hitting the (slow) upstream, pause the product-query chat
+// pollers so they don't compete for the same Frappe workers. Self-expiring;
+// covers a typical search round-trip and is re-extended on each new search.
+const SEARCH_POLL_HOLD_MS = 12 * 1000;
 const LIVE_STOCK_CACHE_TTL_MS = 5 * 60 * 1000;
 const LIVE_STOCK_RECONCILE_LIMIT = 20;
 const AI_DISPLAY_CONTRACT_ERROR =
@@ -196,6 +208,8 @@ export default function V2SearchPage({
   const activeSearchController = useRef(null);
   const activeSuggestController = useRef(null);
   const activeSearchFingerprintRef = useRef("");
+  // fingerprint -> { response, fetchedAt }. See SEARCH_RESPONSE_CACHE_TTL_MS.
+  const searchResponseCacheRef = useRef(new Map());
   const searchDebounceTimerRef = useRef(null);
   const detailCacheRef = useRef({});
   const liveStockCacheRef = useRef({});
@@ -699,6 +713,39 @@ export default function V2SearchPage({
       payload: requestPayload,
     });
 
+    // Serve from the client-side cache when this exact request was fetched
+    // recently. Skips the slow upstream round-trip entirely, so toggling a
+    // filter off/on or paging back is instant instead of re-showing the
+    // skeleton/spinner. AI requests are never cached (they carry session state).
+    if (!isAiSearch) {
+      const cached = searchResponseCacheRef.current.get(requestFingerprint);
+      if (cached && Date.now() - cached.fetchedAt < SEARCH_RESPONSE_CACHE_TTL_MS) {
+        // A still-in-flight request for a different fingerprint is now stale.
+        if (activeSearchController.current) activeSearchController.current.abort();
+        activeSearchController.current = null;
+        activeSearchFingerprintRef.current = "";
+
+        const response = cached.response;
+        const rawHits = Array.isArray(response?.hits) ? response.hits : [];
+        const hits = applyInventoryValueSortFallback(rawHits, activeState.sort_by);
+        setResults(hits);
+        void reconcileHitsWithLiveStock(hits);
+        setFound(Number(response?.found) || 0);
+        setFacetMap(adaptFacetCounts(response?.facet_counts));
+        setQueryDebug(response?.query_debug || null);
+        setError("");
+        setSearchLatencyMs(Math.round(performance.now() - startedAt));
+        setLoading(false);
+        logV2Event("search_results_cache_hit", {
+          query: requestPayload.query || requestPayload.item_code_hint || "*",
+          found: Number(response?.found) || 0,
+          page: activeState.page,
+          page_length: activeState.page_length,
+        });
+        return;
+      }
+    }
+
     if (
       activeSearchController.current &&
       activeSearchFingerprintRef.current === requestFingerprint
@@ -713,6 +760,9 @@ export default function V2SearchPage({
 
     setLoading(true);
     setError("");
+    // This request is about to hit the slow upstream — stand the chat pollers
+    // down so they don't queue ahead of it on the shared Frappe workers.
+    holdRealtimePolling(SEARCH_POLL_HOLD_MS);
 
     try {
       if (DEV_MODE) {
@@ -740,6 +790,16 @@ export default function V2SearchPage({
       setFound(Number(response?.found) || 0);
       setFacetMap(adaptFacetCounts(response?.facet_counts));
       setQueryDebug(response?.query_debug || null);
+      // Cache the raw response so a revisit of this exact filter combo is served
+      // locally (see the cache-hit branch above). Keep the map size bounded.
+      if (!isAiSearch) {
+        const cacheMap = searchResponseCacheRef.current;
+        cacheMap.delete(requestFingerprint); // re-insert to mark as most-recent
+        cacheMap.set(requestFingerprint, { response, fetchedAt: Date.now() });
+        while (cacheMap.size > SEARCH_RESPONSE_CACHE_MAX) {
+          cacheMap.delete(cacheMap.keys().next().value);
+        }
+      }
       if (isAiSearch) {
         setAiExplanation(response?.explanation || "");
         setAiSession((current) =>

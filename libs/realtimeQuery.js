@@ -31,6 +31,22 @@ const IDLE_AFTER_MS = 30000;
 const BADGE_INTERVAL_MS = 15000;
 const RECONCILE_INTERVAL_MS = 35000; // safety poll even when the socket is healthy
 
+// Cooperative hold. While a heavy foreground request (e.g. a /list product search)
+// is in flight, callers invoke holdRealtimePolling(ms) so these pollers stand down
+// and stop competing for the upstream's scarce Frappe workers. Self-expiring, so a
+// missed clear can never strand the pollers; a no-op if never called.
+let pollHoldUntil = 0;
+export function holdRealtimePolling(ms = 0) {
+  const until = Date.now() + Math.max(0, Number(ms) || 0);
+  if (until > pollHoldUntil) pollHoldUntil = until;
+}
+// ms remaining on the hold, capped so a held poller still re-checks within ~2s of
+// the hold expiring (rather than sleeping for the whole window).
+const pollHoldDelay = () => {
+  const remaining = pollHoldUntil - Date.now();
+  return remaining > 0 ? Math.max(500, Math.min(remaining, 2000)) : 0;
+};
+
 const SOCKET_URL =
   (typeof process !== "undefined" && process.env && process.env.NEXT_PUBLIC_ERP_SOCKET_URL) || "";
 
@@ -142,6 +158,8 @@ export function subscribeToQuery(queryId, { onMessage, onThread, onTyping, since
     if (stopped) return;
     if (isHidden()) { schedule(SLOW_INTERVAL_MS); return; }
     if (inFlight) { schedule(FAST_INTERVAL_MS); return; }
+    const held = pollHoldDelay();
+    if (held) { schedule(held); return; }
 
     inFlight = true;
     try {
@@ -218,6 +236,8 @@ export function subscribeToBadge({ onBadge, onError } = {}) {
     if (stopped) return;
     if (isHidden()) { schedule(BADGE_INTERVAL_MS); return; }
     if (inFlight) { schedule(BADGE_INTERVAL_MS); return; }
+    const held = pollHoldDelay();
+    if (held) { schedule(held); return; }
     inFlight = true;
     try {
       const payload = await pollProductQueryUpdates();

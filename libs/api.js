@@ -933,7 +933,26 @@ export async function typesense_search_items(queryParams) {
     return await parseJsonResponseSafe(response, 'typesense_search_items')
 }
 
+const MASTERS_CACHE_KEY = "v2:masters:v1";
+const MASTERS_CACHE_TTL_MS = 30 * 60 * 1000; // filter option lists change rarely
+
 export async function get_all_masters(router) {
+    // Serve from a per-tab sessionStorage cache. get_all_masters is a ~6s upstream
+    // call that fires on every /list mount and competes with the product search for
+    // the same scarce Frappe Cloud workers. The option lists change rarely, so
+    // caching them removes that contention on repeat visits within a session.
+    if (typeof window !== "undefined") {
+        try {
+            const raw = window.sessionStorage.getItem(MASTERS_CACHE_KEY);
+            if (raw) {
+                const cached = JSON.parse(raw);
+                if (cached?.v?.message && Date.now() - cached.t < MASTERS_CACHE_TTL_MS) {
+                    return cached.v;
+                }
+            }
+        } catch (_) { /* ignore unreadable cache */ }
+    }
+
     const api = `/api/erp/api/method/igh_search.igh_search.api.get_all_masters`;
     const response = await fetch(api, {
         method: 'GET',
@@ -943,7 +962,16 @@ export async function get_all_masters(router) {
     if (handleUnauthorizedResponse(response)) {
         return;
     }
-    return await parseJsonResponseSafe(response, 'get_all_masters');
+    const parsed = await parseJsonResponseSafe(response, 'get_all_masters');
+    if (typeof window !== "undefined" && parsed?.message) {
+        try {
+            window.sessionStorage.setItem(
+                MASTERS_CACHE_KEY,
+                JSON.stringify({ t: Date.now(), v: parsed })
+            );
+        } catch (_) { /* quota/serialization — skip caching */ }
+    }
+    return parsed;
 }
 
 
