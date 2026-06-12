@@ -488,6 +488,25 @@ function isBrokenSessionPayload(payloadOrText) {
     return /Authentication required/i.test(text) || /User None is disabled/i.test(text);
 }
 
+function normalizeAssistantErrorMessage(message, fallback = 'AI assistant request failed') {
+    const text = String(message || fallback).trim();
+    if (!text) return fallback;
+
+    if (/not whitelisted/i.test(text)) {
+        return 'AI assistant backend is not deployed or whitelisted on the ERP server.';
+    }
+
+    if (/OpenAI API key is not configured/i.test(text)) {
+        return 'AI assistant backend is missing its OpenAI API key.';
+    }
+
+    if (/Authentication required/i.test(text) || /Login to access/i.test(text) || /User None is disabled/i.test(text)) {
+        return 'Your ERP session has expired. Please log in again.';
+    }
+
+    return text.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
 
 
 export async function HomePage(data) {
@@ -1246,6 +1265,18 @@ export async function product_assistant_chat(message, history = []) {
         credentials: 'include',
     });
     const payload = await parseJsonResponseSafe(response, 'product_assistant_chat');
+    const extractedError = extractFrappeErrorMessage(payload, '');
+    if (!response.ok || payload?.exc_type || payload?.exception || isBrokenSessionPayload(payload)) {
+        const error = new Error(
+            normalizeAssistantErrorMessage(
+                extractedError,
+                response.ok ? 'AI assistant returned an invalid response.' : `AI assistant request failed (${response.status}).`
+            )
+        );
+        error.status = response.status;
+        error.payload = payload;
+        throw error;
+    }
     const msg = payload?.message || payload || {};
     return {
         reply: msg?.reply || "",

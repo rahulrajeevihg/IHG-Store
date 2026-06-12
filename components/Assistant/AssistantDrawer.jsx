@@ -398,7 +398,9 @@ export default function AssistantDrawer({ open, onClose, seedMessage = "" }) {
         window.dispatchEvent(new Event("cart-updated"));
       }
     } catch (e) {
-      setMessages([...next, { role: "assistant", content: "Sorry — I couldn't reach the assistant. Please try again.", displayed: "", products: [], error: true }]);
+      const errorMessage = e?.message || "Sorry — I couldn't reach the assistant. Please try again.";
+      toast.error(errorMessage);
+      setMessages([...next, { role: "assistant", content: errorMessage, displayed: "", products: [], error: true }]);
     } finally {
       setSending(false);
       setPendingQuery("");
