@@ -19,6 +19,15 @@ import { resetSetFilters } from '@/redux/slice/ProductListFilters';
 import { startTour } from '@/redux/slice/tourSlice';
 import { LMSHeaderBadge } from '@/components/LMS';
 import dynamic from 'next/dynamic';
+import { searchProductsV2, getIsSystemManager } from '@/libs/ighSearchV2';
+import {
+  PRINT_PRODUCT_LIMIT,
+  applyPrintableLimit,
+  buildPrintableHtml,
+  buildPrintableSearchRequest,
+  formatPrintPrice,
+  getEffectivePrintPrice,
+} from '@/libs/listPrint.mjs';
 
 export default function MainHeader({ header_template, theme_settings, website_settings, all_categories, navigateDetail }) {
 
@@ -74,6 +83,9 @@ export default function MainHeader({ header_template, theme_settings, website_se
 
   const [tabs, setTabs] = useState(tabsValue)
   let [localValue, setLocalValue] = useState(undefined);
+  const [printing, setPrinting] = useState(false);
+  const isListPage = router.pathname === '/list';
+  const isSystemManager = useMemo(() => getIsSystemManager(), []);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -449,6 +461,73 @@ export default function MainHeader({ header_template, theme_settings, website_se
 
   }
 
+  const handlePrintList = async () => {
+    if (!isListPage || printing) return;
+
+    setPrinting(true);
+    try {
+      const { payload } = buildPrintableSearchRequest(router.query, {
+        isSystemManager,
+        pageLength: PRINT_PRODUCT_LIMIT,
+        featureFlagOverride: 1,
+      });
+
+      const response = await searchProductsV2(payload);
+      const rawHits = Array.isArray(response?.hits) ? response.hits : [];
+      const normalizedProducts = rawHits
+        .map((hit) => hit?.document || hit || {})
+        .filter((item) => item && (item.item_code || item.item_name));
+      const limited = applyPrintableLimit(
+        normalizedProducts,
+        Number(response?.found) || normalizedProducts.length,
+        PRINT_PRODUCT_LIMIT
+      );
+
+      if (!limited.items.length) {
+        toast.info('No products to print.');
+        return;
+      }
+
+      if (limited.isLimited) {
+        toast.warning(`Only ${PRINT_PRODUCT_LIMIT} items can be printed. Printing the first ${PRINT_PRODUCT_LIMIT} products.`);
+      }
+
+      const printWindow = window.open('', '_blank', 'noopener,noreferrer,width=1200,height=900');
+      if (!printWindow) {
+        toast.error('Allow pop-ups to print the product list.');
+        return;
+      }
+
+      const printableProducts = limited.items.map((item) => ({
+        item_code: item.item_code || item.name || '',
+        item_name: item.item_name || item.item_code || 'Unnamed product',
+        image_url: check_Image(item.website_image_url || item.image),
+        price_label: formatPrintPrice(getEffectivePrintPrice(item)),
+      }));
+      const activeQuery = typeof router.query.q === 'string' ? router.query.q.trim() : '';
+      const generatedAt = new Date().toLocaleString('en-GB', {
+        dateStyle: 'medium',
+        timeStyle: 'short',
+      });
+      const html = buildPrintableHtml({
+        products: printableProducts,
+        totalCount: limited.totalCount,
+        printCount: limited.printCount,
+        queryLabel: activeQuery,
+        generatedAt,
+        title: 'IHG Product List',
+      });
+
+      printWindow.document.open();
+      printWindow.document.write(html);
+      printWindow.document.close();
+    } catch (error) {
+      toast.error(error?.message || 'Unable to prepare the printable product list.');
+    } finally {
+      setPrinting(false);
+    }
+  };
+
 
 
   return (
@@ -533,6 +612,18 @@ export default function MainHeader({ header_template, theme_settings, website_se
 
                     <LMSHeaderBadge />
 
+                    {isListPage && (
+                      <button
+                        type="button"
+                        onClick={handlePrintList}
+                        disabled={printing}
+                        title="Print product list"
+                        className={`relative headerBtbs text-[#111827] transition-opacity ${printing ? 'cursor-wait opacity-60' : 'hover:opacity-80'}`}
+                      >
+                        <PrintIcon className='h-[24px] w-[24px]' />
+                      </button>
+                    )}
+
                     {/* <div onClick={() => { checkUser() }} onMouseEnter={() => customerName ? setCustomerMenu(true) : null} onMouseLeave={() => customerName ? setCustomerMenu(false) : null} class="relative  cursor-pointer flex flex-row-reverse items-center">
                       <div className='headerBtbs'>
                         <Image style={{ objectFit: 'contain' }} className='h-[25px] w-[23px]' height={25} width={25} alt='vantage' src={'/profile.svg'}></Image>
@@ -605,6 +696,26 @@ function CartIcon({ className = '' }) {
       <circle cx="9" cy="20" r="1.5" />
       <circle cx="18" cy="20" r="1.5" />
       <path d="M3 4h2l2.4 10.2a2 2 0 0 0 2 1.6h7.8a2 2 0 0 0 2-1.6L21 7H7" />
+    </svg>
+  );
+}
+
+function PrintIcon({ className = '' }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M7 9V4h10v5" />
+      <rect x="5" y="9" width="14" height="8" rx="2" />
+      <path d="M8 17h8v3H8z" />
+      <path d="M17 13h.01" />
     </svg>
   );
 }
