@@ -440,6 +440,8 @@ export default function V2SearchPage({
 
   useEffect(() => {
     let active = true;
+    let timerId;
+
     const loadMasters = async () => {
       try {
         const response = await get_all_masters();
@@ -449,9 +451,15 @@ export default function V2SearchPage({
         if (active) toast.error(err?.message || "Unable to load filter options.");
       }
     };
-    loadMasters();
+
+    // get_all_masters has 30-min sessionStorage cache, so it's instant on repeat visits.
+    // On first visit it's a ~6s upstream call that competes with the search request for
+    // the same scarce Frappe workers. Delay it 2s so the search gets a worker first.
+    timerId = setTimeout(loadMasters, 2000);
+
     return () => {
       active = false;
+      clearTimeout(timerId);
     };
   }, []);
 
@@ -1205,7 +1213,8 @@ export default function V2SearchPage({
     updateState((current) => ({
       ...current,
       page: 1,
-      filters: { ...current.filters, in_stock: checked },
+      // false means "out of stock only" at the backend — use null to mean "no filter (all items)"
+      filters: { ...current.filters, in_stock: checked ? true : null },
     }));
   };
 
@@ -1262,7 +1271,7 @@ export default function V2SearchPage({
       updateState((current) => ({
         ...current,
         page: 1,
-        filters: { ...current.filters, in_stock: false },
+        filters: { ...current.filters, in_stock: null },
       }));
       return;
     }

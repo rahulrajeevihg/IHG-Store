@@ -347,7 +347,8 @@ export function mapIntentResponseToState(response, isSystemManager) {
       : [];
   });
 
-  nextState.filters.in_stock = Boolean(intent?.filters?.in_stock);
+  nextState.filters.in_stock =
+    intent?.filters?.in_stock == null ? null : Boolean(intent.filters.in_stock);
   nextState.filters.show_promotion = Boolean(intent?.filters?.show_promotion);
   nextState.filters.rate_range = {
     min:

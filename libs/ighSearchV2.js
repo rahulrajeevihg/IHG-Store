@@ -999,7 +999,8 @@ export const mapAiIntentToV2State = (intent, sourcePrompt = "") => {
       : [];
   });
 
-  nextState.filters.in_stock = Boolean(safeFilters.in_stock);
+  // null = no stock filter (show all); true = in-stock only; false = out-of-stock only
+  nextState.filters.in_stock = safeFilters.in_stock === null ? null : Boolean(safeFilters.in_stock);
   nextState.filters.show_promotion = Boolean(safeFilters.show_promotion);
   nextState.filters.rate_range = normalizeRange(safeFilters.price_range);
   nextState.filters.stock_range = normalizeRange(safeFilters.stock_range);
@@ -1065,7 +1066,7 @@ export const mapAppliedFiltersToV2Filters = (appliedFilters) => {
       : [];
   });
 
-  nextFilters.in_stock = Boolean(safeFilters.in_stock);
+  nextFilters.in_stock = safeFilters.in_stock === null ? null : Boolean(safeFilters.in_stock);
   nextFilters.show_promotion = Boolean(safeFilters.show_promotion);
 
   V2_RANGE_KEYS.forEach((key) => {
@@ -1109,7 +1110,8 @@ export const stateFromQuery = (query, isSystemManager = false) => {
   });
 
   if (query.in_stock !== undefined) {
-    nextState.filters.in_stock = parseBooleanFlag(query.in_stock);
+    nextState.filters.in_stock =
+      query.in_stock === "all" ? null : parseBooleanFlag(query.in_stock);
   }
   if (query.show_promotion !== undefined) {
     nextState.filters.show_promotion = parseBooleanFlag(query.show_promotion);
@@ -1178,11 +1180,10 @@ export const queryFromState = (state, isSystemManager = false) => {
     });
   });
 
-  // in_stock defaults to TRUE in DEFAULT_V2_STATE, and stateFromQuery falls back
-  // to that default when the param is absent. So omitting it when false makes the
-  // round-trip read it back as "on" — silently re-checking the box after the user
-  // turns it off. Always serialize it so the "off" state survives a refresh.
-  params.set("in_stock", safeState.filters?.in_stock ? "1" : "0");
+  // Three-state: "1"=in-stock only (default), "0"=out-of-stock only, "all"=no filter.
+  // Always serialize so the state survives a page refresh.
+  const inStockVal = safeState.filters?.in_stock;
+  params.set("in_stock", inStockVal === null ? "all" : inStockVal ? "1" : "0");
   if (safeState.filters?.show_promotion) {
     params.set("show_promotion", "1");
   }
