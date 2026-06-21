@@ -166,7 +166,7 @@ export const DEFAULT_V2_STATE = {
     warranty: [],
     variant_of: [],
     is_manufactured_item: [],
-    in_stock: true,
+    in_stock: null,
     show_promotion: false,
     rate_range: { min: "", max: "" },
     offer_rate_range: { min: "", max: "" },
@@ -1180,7 +1180,7 @@ export const queryFromState = (state, isSystemManager = false) => {
     });
   });
 
-  // Three-state: "1"=in-stock only (default), "0"=out-of-stock only, "all"=no filter.
+  // Three-state: "1"=in-stock only, "0"=out-of-stock only, "all"=no filter (default).
   // Always serialize so the state survives a page refresh.
   const inStockVal = safeState.filters?.in_stock;
   params.set("in_stock", inStockVal === null ? "all" : inStockVal ? "1" : "0");

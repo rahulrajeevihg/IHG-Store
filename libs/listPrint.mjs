@@ -68,7 +68,7 @@ export const DEFAULT_PRINT_STATE = {
     warranty: [],
     variant_of: [],
     is_manufactured_item: [],
-    in_stock: true,
+    in_stock: null,
     show_promotion: false,
     rate_range: { min: "", max: "" },
     offer_rate_range: { min: "", max: "" },
@@ -136,7 +136,8 @@ export function stateFromPrintableQuery(query = {}, isSystemManager = false) {
   });
 
   if (query.in_stock !== undefined) {
-    nextState.filters.in_stock = parseBooleanFlag(query.in_stock);
+    nextState.filters.in_stock =
+      query.in_stock === "all" ? null : parseBooleanFlag(query.in_stock);
   }
 
   if (query.show_promotion !== undefined) {

@@ -77,7 +77,7 @@ test("buildPrintableSearchRequest: defaults safely when query params are missing
   assert.equal(state.page, 1);
   assert.equal(state.page_length, 20);
   assert.equal(state.search_v2, false);
-  assert.equal(state.filters.in_stock, true);
+  assert.equal(state.filters.in_stock, null);
   assert.equal(state.filters.show_promotion, false);
 
   assert.equal(payload.page, 1);
