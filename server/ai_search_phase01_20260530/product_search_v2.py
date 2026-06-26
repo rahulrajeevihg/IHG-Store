@@ -839,6 +839,7 @@ def search_products_v2(
     if sku_like:
         search_parameters["prefix"] = "true,true,false,false,false,false,false,false,false,false"
         search_parameters["num_typos"] = "0,0,1,1,1,1,1,1,1,1"
+        search_parameters["max_candidates"] = 10000
 
     # Phase 3 — hybrid (keyword + semantic vector) search. Only for real free-text
     # queries (not "*"/SKU browse) and only when the flag + caller opt-in are on.
@@ -1470,7 +1471,17 @@ def resolve_sort_by(sort_by, sku_like=False, strict_sort=False):
 
 def is_sku_like(value):
     normalized = normalize_item_code(value)
-    return bool(normalized) and len(normalized) >= 3 and any(char.isdigit() for char in normalized)
+    raw_value = cstr(value or "").strip()
+    is_compact_code = bool(re.match(r"^[A-Za-z0-9._/-]+$", raw_value))
+    is_uppercase_alpha_code = bool(re.match(r"^[A-Z._/-]*[A-Z][A-Z._/-]*$", raw_value))
+    return (
+        bool(normalized)
+        and len(normalized) >= 3
+        and (
+            any(char.isdigit() for char in normalized)
+            or (is_compact_code and is_uppercase_alpha_code)
+        )
+    )
 
 
 def calculate_similarity_score(source_document, candidate_document):

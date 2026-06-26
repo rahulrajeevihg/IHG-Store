@@ -44,7 +44,18 @@ export function looksLikeSku(value) {
     return false;
   }
 
-  return /^[A-Za-z0-9._/-]+$/.test(value.trim()) && /\d/.test(value.trim());
+  const trimmedValue = value.trim();
+  const compactCodePattern = /^[A-Za-z0-9._/-]+$/;
+  const uppercaseAlphaCodePattern = /^[A-Z._/-]*[A-Z][A-Z._/-]*$/;
+
+  if (!compactCodePattern.test(trimmedValue)) {
+    return false;
+  }
+
+  return (
+    /\d/.test(trimmedValue) ||
+    (trimmedValue.length >= 3 && uppercaseAlphaCodePattern.test(trimmedValue))
+  );
 }
 
 export function formatPrice(value) {
